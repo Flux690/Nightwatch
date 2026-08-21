@@ -35,6 +35,32 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
+/* The citation handle, put where the model reads it. The provider's own call id
+   lives in the message's tool_calls plumbing and never appears as content, which
+   is why a run asked to cite one invented 21 ids rather than copy a real one.
+
+   A field on the object rather than a prefix on the text: most results are JSON
+   and the console parses them, so a header line would break every tool card and
+   the report's evidence renderers. A plain-string result takes the prefix, since
+   nothing parses those. */
+function withEvidenceId(
+  content: unknown,
+  evidenceId: string | undefined,
+): string {
+  if (evidenceId === undefined) {
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+  if (typeof content === "string") return `[${evidenceId}] ${content}`;
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    !Array.isArray(content)
+  ) {
+    return JSON.stringify({ evidenceId, ...content });
+  }
+  return JSON.stringify({ evidenceId, result: content });
+}
+
 // Refused whole rather than shortened: a sliced JSON result parses as a smaller
 // truth, which is how an agent reports no errors in logs it never saw.
 function tooLarge(name: string, chars: number): string {
@@ -61,10 +87,7 @@ export async function executeTool(
     tool.on === "api"
       ? await tool.execute(input, effectiveCtx)
       : await executeRunnerTool(tool, input, effectiveCtx);
-  const content =
-    typeof result.content === "string"
-      ? result.content
-      : JSON.stringify(result.content);
+  const content = withEvidenceId(result.content, ctx.evidenceId);
   if (content.length > MAX_TOOL_RESULT_CHARS) {
     return {
       content: tooLarge(tool.schema.name, content.length),

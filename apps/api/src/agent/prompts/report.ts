@@ -5,7 +5,7 @@ import type { ToolSchema } from "../../llm/types.js";
 // The one thing a citation can be. The id of the call is the only handle that
 // exists, so the user's view and the model's context name the same string.
 const CITATION_DESCRIPTION =
-  "The ids of the tool calls whose results support this claim, copied exactly as they appear on your own calls. Cite only calls you actually made. The user sees each cited result shown underneath the claim it backs, so cite the call whose output actually shows what you are asserting.";
+  "The evidence ids of the tool calls whose results support this claim. Every tool result carries its own id, written e1, e2, e3 and so on in the order you called them, so copy one from the result you mean. Cite only calls you actually made. The user sees each cited result shown underneath the claim it backs, so cite the call whose output actually shows what you are asserting.";
 
 // Draft-07-safe under Anthropic tool-schema constraints: additionalProperties
 // false everywhere, every field required, primitive enums, no length/pattern.
@@ -112,7 +112,7 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
             evidenceId: {
               type: "string",
               description:
-                "The id of the tool call that shows this happened, or an empty string when no single call does.",
+                "The evidence id of the tool call that shows this happened, written e1, e2, e3 as it appears on that result, or an empty string when no single call does.",
             },
           },
         },
@@ -181,10 +181,11 @@ export function completionRequest(gaps: ReportGap[]): string {
   ].join(" ");
 }
 
-function findingLine(h: Hypothesis): string {
+function findingLine(h: Hypothesis, evidenceIds: Map<string, string>): string {
+  // Repeated back in the vocabulary it was given, not in the provider's ids.
   const cites =
     h.evidenceIds.length > 0
-      ? h.evidenceIds.join(", ")
+      ? h.evidenceIds.map((id) => evidenceIds.get(id) ?? id).join(", ")
       : "nothing that resolved";
   return `${h.id} [${h.verdict}] ${h.statement}\n    ${h.finding}\n    cites: ${cites}`;
 }
@@ -200,13 +201,16 @@ export function reportRequest(
   hypotheses: Hypothesis[],
   writes: GatedCall[],
   unrecovered: boolean,
+  evidenceIds: Map<string, string> = new Map(),
 ): string {
   // A run that reached here with nothing recorded exhausted the gate's requests.
   // Saying so beats printing an empty heading it might write around.
   const findings =
     hypotheses.length === 0
       ? "RECORDED FINDINGS\nnone. Say plainly that no cause was established."
-      : `RECORDED FINDINGS\n${hypotheses.map(findingLine).join("\n")}`;
+      : `RECORDED FINDINGS\n${hypotheses
+          .map((h) => findingLine(h, evidenceIds))
+          .join("\n")}`;
   const sections = [
     "Your investigation is over. Write it up for the user who will read it in the morning.",
     findings,

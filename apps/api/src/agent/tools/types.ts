@@ -35,6 +35,10 @@ interface ToolCallIdentity {
 // being the user's ceiling already clamped by what remains of the run.
 export interface ToolDispatchContext extends ToolCallIdentity {
   toolCallCeilingMs: number;
+  /* The handle this call is cited by, rendered into its own result so the model
+     can copy it. Assigned by position in the transcript, so it is arithmetic
+     rather than stored state. */
+  evidenceId?: string;
 }
 
 // What a tool is handed: the limit resolved for this one call. Distinct from

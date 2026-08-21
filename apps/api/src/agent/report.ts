@@ -18,6 +18,7 @@ import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
 import { findTool } from "./tools/toolset.js";
 import { evidenceSource } from "./evidence-source.js";
+import { evidenceIdsByToolUseId } from "./evidence-id.js";
 
 // The report domain service: the only place the record is written, and the owner
 // of the two rules that keep it honest - a citation is the id of the tool call
@@ -32,6 +33,9 @@ export interface RecordOutcome {
 
 interface LedgerEntry {
   toolUseId: string;
+  // e1, e2, e3 in call order. Derived by this walk rather than stored, so the
+  // side that shows it to the model and the side that resolves it agree.
+  evidenceId?: string;
   toolName: string;
   input: Record<string, unknown>;
   result: string | null;
@@ -47,13 +51,17 @@ interface LedgerEntry {
 // One walk of the durable transcript, which is the ledger. The provider's own
 // call id is the citation handle, so nothing here numbers or renames anything.
 function ledgerIn(sessionId: string): LedgerEntry[] {
+  const rows = getTranscriptRows(sessionId);
+  const evidenceIds = evidenceIdsByToolUseId(rows);
   const entries: LedgerEntry[] = [];
   const byToolUseId = new Map<string, LedgerEntry>();
-  for (const message of getTranscriptRows(sessionId)) {
+  for (const message of rows) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
+        const evidenceId = evidenceIds.get(part.id);
         const entry: LedgerEntry = {
           toolUseId: part.id,
+          ...(evidenceId !== undefined && { evidenceId }),
           toolName: part.name,
           input: part.input,
           result: null,
@@ -80,9 +88,41 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
 // Citations kept only where they name a call this session made, so a fabricated
 // one stays unrenderable. Existence, not completion: the model may cite a call
 // from the same turn, whose result is persisted only once the turn ends.
-function knownCitations(sessionId: string, ids: string[]): string[] {
-  const known = new Set(ledgerIn(sessionId).map((e) => e.toolUseId));
-  return [...new Set(ids)].filter((id) => known.has(id));
+function knownCitations(
+  sessionId: string,
+  ids: string[],
+): { kept: string[]; invented: string[] } {
+  const entries = ledgerIn(sessionId);
+  const byEvidenceId = new Map(
+    entries.flatMap((e) =>
+      e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
+    ),
+  );
+  const known = new Set(entries.map((e) => e.toolUseId));
+  const kept: string[] = [];
+  const invented: string[] = [];
+  for (const id of new Set(ids)) {
+    // Cited as e3, or as the provider's own id by a model that found it.
+    const resolved = byEvidenceId.get(id.trim()) ?? id;
+    if (known.has(resolved)) kept.push(resolved);
+    else invented.push(id);
+  }
+  return { kept, invented };
+}
+
+// What the model cited that names no call, said back in the vocabulary it was
+// given, with the range it could have picked from.
+function citationRefusal(sessionId: string, invented: string[]): string {
+  const total = ledgerIn(sessionId).length;
+  const available =
+    total === 0
+      ? "You have made no tool calls yet, so there is nothing to cite."
+      : total === 1
+        ? "This investigation has e1."
+        : `This investigation has e1 through e${total}.`;
+  return `Not recorded: ${invented.join(", ")} ${
+    invented.length === 1 ? "names" : "name"
+  } no call you made. ${available} Each tool result begins with its own id in brackets; copy one of those and record this again.`;
 }
 
 // Everything the record points at, from either author: the ledger's claims and
@@ -261,7 +301,17 @@ export function recordHypothesis(
   sessionId: string,
   input: RecordHypothesisInput,
 ): RecordOutcome {
-  const evidenceIds = knownCitations(sessionId, input.evidenceIds);
+  const { kept, invented } = knownCitations(sessionId, input.evidenceIds);
+  /* Refused rather than recorded with what survives. The schema requires a
+     citation, the filter ran after that check, and nothing looked again, so a
+     claim citing two invented ids was stored citing nothing - three identical
+     uncited root causes in one observed run, because "recorded" and "your
+     citations were dropped" in one breath leaves recording again as the only
+     sensible move. */
+  if (kept.length === 0) {
+    return { recorded: false, message: citationRefusal(sessionId, invented) };
+  }
+  const evidenceIds = kept;
   const id = appendToReport(sessionId, (report) => {
     const hypothesis: Hypothesis = {
       id: `h${report.hypotheses.length + 1}`,
@@ -277,13 +327,12 @@ export function recordHypothesis(
     };
   });
   publishReportUpdated(sessionId);
-  const dropped = new Set(input.evidenceIds).size - evidenceIds.length;
   return {
     recorded: true,
     message:
-      dropped === 0
+      invented.length === 0
         ? `Recorded ${id} as "${input.verdict}".`
-        : `Recorded ${id} as "${input.verdict}". ${dropped} of the ids you cited name no call you made and were dropped; cite the ids exactly as they appear on your own tool calls.`,
+        : `Recorded ${id} as "${input.verdict}", citing ${evidenceIds.length} of the ids you gave. ${invented.join(", ")} named no call you made and ${invented.length === 1 ? "was" : "were"} dropped.`,
   };
 }
 
@@ -303,19 +352,31 @@ export function submitReport(
   sessionId: string,
   input: SubmitReportInput,
 ): RecordOutcome {
-  const known = new Set(ledgerIn(sessionId).map((e) => e.toolUseId));
+  const entries = ledgerIn(sessionId);
+  const known = new Set(entries.map((e) => e.toolUseId));
+  const byEvidenceId = new Map(
+    entries.flatMap((e) =>
+      e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
+    ),
+  );
+  const resolve = (id: string): string | undefined => {
+    const toolUseId = byEvidenceId.get(id.trim()) ?? id;
+    return known.has(toolUseId) ? toolUseId : undefined;
+  };
   // A citation naming no call is dropped and the entry kept, exactly as a
   // hypothesis's is. The lane survives either way: it describes the moment, not
   // the call, so an unresolvable id must not cost the row its strand.
-  const timeline = input.timeline.map((entry) =>
-    entry.evidenceId !== undefined && known.has(entry.evidenceId)
-      ? entry
+  const timeline = input.timeline.map((entry) => {
+    const cited =
+      entry.evidenceId === undefined ? undefined : resolve(entry.evidenceId);
+    return cited !== undefined
+      ? { ...entry, evidenceId: cited }
       : {
           at: entry.at,
           what: entry.what,
           ...(entry.lane !== undefined && { lane: entry.lane }),
-        },
-  );
+        };
+  });
   const submitted: SubmittedReport = {
     ...(input.headline !== undefined && { headline: input.headline }),
     ...(input.affected !== undefined && { affected: input.affected }),

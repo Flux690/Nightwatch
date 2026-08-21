@@ -7,6 +7,7 @@ import {
   reportRetry,
 } from "./prompts/report.js";
 import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
+import { evidenceIdsByToolUseId } from "./evidence-id.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
 import { recoveryState } from "../verification/recovery.js";
@@ -34,6 +35,7 @@ import { hasMetricsSource } from "../integrations/metrics/sources.js";
 import {
   appendErrorMessage,
   appendTranscriptRows,
+  getTranscriptRows,
   appendRowsAndInterrupt,
   getNextSeq,
   getSession,
@@ -577,6 +579,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
               getReport(sessionId)?.hypotheses ?? [],
               gatedCalls(sessionId),
               unrecovered,
+              // The ledger is repeated here for the timeline to cite from, so it
+              // has to name calls the way their results named themselves.
+              evidenceIdsByToolUseId(getTranscriptRows(sessionId)),
             )
           : reportRetry(problem),
       );

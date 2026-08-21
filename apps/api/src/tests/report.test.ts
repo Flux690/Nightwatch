@@ -492,14 +492,58 @@ describe("the investigation record", () => {
         "tu-1",
         "tu-2",
       ]);
-      const none = await record(sessionId, "nothing behind it", "symptom", [
-        "tu-invented",
-      ]);
-
       const conviction = computeConviction(sessionId, getReport(sessionId)!);
       expect(conviction[one]).toBe("cited");
       expect(conviction[two]).toBe("corroborated");
-      expect(conviction[none]).toBeUndefined();
+    });
+
+    /* The handle has to be somewhere the model reads. The provider's own call id
+       lives in the message's tool_calls plumbing and never appears as content,
+       which is why one run invented 21 ids rather than copy a real one. */
+    it("puts each call's citation handle in its own result, and takes it back", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+
+      const { content } = await call("RecordHypothesis", sessionId, {
+        statement: "the disk filled",
+        verdict: "root_cause",
+        finding: "the read showed 98 percent",
+        // e1 is the first call the seeded transcript holds, which is tu-1.
+        evidenceIds: ["e1"],
+      });
+      expect(String(content)).toContain("Recorded h1");
+
+      // Stored as the provider id, so the console reveals the real call.
+      const [hypothesis] = getReport(sessionId)!.hypotheses;
+      expect(hypothesis?.evidenceIds).toEqual(["tu-1"]);
+
+      // And it resolves to real evidence rather than a dangling reference.
+      const resolved = resolveEvidence(sessionId, getReport(sessionId)!);
+      expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
+    });
+
+    /* A claim citing only ids that name no call is refused rather than stored
+       with what survives. The schema requires a citation, the filter ran after
+       that check, and nothing looked again, so one observed run recorded three
+       identical uncited root causes: told "recorded" and "your citations were
+       dropped" together, recording again is the only sensible move. */
+    it("refuses a claim whose every citation names no call", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+
+      const { content } = await call("RecordHypothesis", sessionId, {
+        statement: "nothing behind it",
+        verdict: "symptom",
+        finding: "",
+        evidenceIds: ["e9", "tu-invented"],
+      });
+      const answer = String(content);
+
+      expect(getReport(sessionId)?.hypotheses ?? []).toHaveLength(0);
+      expect(answer).toContain("Not recorded");
+      expect(answer).toContain("e9");
+      // Told what it could have cited, in the vocabulary it was given.
+      expect(answer).toMatch(/e1 through e\d+/);
     });
 
     it("does not corroborate one source read twice", async () => {

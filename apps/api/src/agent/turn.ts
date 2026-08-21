@@ -7,6 +7,8 @@ import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
+import { getTranscriptRows } from "../db/sessions.js";
+import { countToolCalls } from "./evidence-id.js";
 import { isToolName } from "@nightwarden/shared";
 
 // Which interrupt a gated call raises. An elicitation always raises one; a tool
@@ -103,6 +105,10 @@ export async function processToolUses(params: {
 }): Promise<TurnOutcome> {
   const { toolUses, offered, sessionId, execCtx, log } = params;
 
+  /* Numbered from what the transcript already holds plus this turn's position:
+     the calls in flight are not persisted yet, and the ledger walk that resolves
+     a citation later counts the same way. */
+  let nextEvidence = countToolCalls(getTranscriptRows(sessionId));
   const toolResults: ToolResult[] = [];
   const refused: string[] = [];
   let gated: { tool: ToolUse; kind: GateKind } | null = null;
@@ -166,6 +172,9 @@ export async function processToolUses(params: {
     }
 
     if (resolvePolicy(entry, tool.input) === "approve") {
+      // Consumes its number even though it runs later, so nothing after it in
+      // this turn renumbers when the human answers.
+      nextEvidence += 1;
       gateOrReject(tool, "approval");
       continue;
     }
@@ -179,9 +188,11 @@ export async function processToolUses(params: {
         state: { phase: "running" },
       }),
     });
+    nextEvidence += 1;
     const { content, toolOutcome } = await executeTool(entry, tool.input, {
       ...execCtx,
       toolUseId: tool.id,
+      evidenceId: `e${nextEvidence}`,
     });
     toolResults.push({
       tool_use_id: tool.id,

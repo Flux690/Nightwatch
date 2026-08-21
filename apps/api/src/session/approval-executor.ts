@@ -1,4 +1,6 @@
 import { loadConfig } from "../config/store.js";
+import { getTranscriptRows } from "../db/sessions.js";
+import { evidenceIdsByToolUseId } from "../agent/evidence-id.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
@@ -30,10 +32,16 @@ export async function executeApprovedTool(
       );
     }
 
+    /* The call is already in the transcript, so its number is settled: the walk
+       that assigns it and the walk that resolves a citation are the same one. */
+    const evidenceId = evidenceIdsByToolUseId(getTranscriptRows(sessionId)).get(
+      toolUseId,
+    );
     const { content, toolOutcome } = await executeTool(toolEntry, toolInput, {
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
       sessionId,
       toolUseId,
+      ...(evidenceId !== undefined && { evidenceId }),
     });
     return {
       tool_use_id: toolUseId,
