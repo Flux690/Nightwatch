@@ -591,6 +591,72 @@ describe("the investigation record", () => {
       expect(answers.get("tu-b")).toContain("[e2]");
     });
 
+    /* The card counts what a person already released against this service, so
+       a fifth restart at 3am is reported rather than slipped past. Counted from
+       the transcript, which is the only thing that can answer it. */
+    it("tells a card how often this same write already ran here", () => {
+      const sessionId = randomUUID();
+      seedAlertSession(
+        { sessionId, title: "t", createdAt: new Date().toISOString() },
+        [alert("prior-runs")],
+      );
+      const restart = (id: string, target: string) => ({
+        id,
+        name: "RestartDockerService",
+        input: { target, reason: "r", risk: "low" },
+      });
+      appendCall(
+        sessionId,
+        0,
+        restart("tu-1", "docker/web/api"),
+        "ok",
+        "T1",
+        undefined,
+        "approved",
+      );
+      appendCall(
+        sessionId,
+        2,
+        restart("tu-2", "docker/web/api"),
+        "ok",
+        "T2",
+        undefined,
+        "approved",
+      );
+      // A different service, so it must not add to the count above.
+      appendCall(
+        sessionId,
+        4,
+        restart("tu-3", "docker/web/cache"),
+        "ok",
+        "T3",
+        undefined,
+        "approved",
+      );
+      appendCall(
+        sessionId,
+        6,
+        restart("tu-4", "docker/web/api"),
+        "ok",
+        "T4",
+        undefined,
+        "approved",
+      );
+
+      const cards = buildTranscript(sessionId).flatMap((item) =>
+        item.kind === "tool_call" ? [item] : [],
+      );
+      const priorOf = (toolUseId: string): number | undefined =>
+        cards.find((c) => c.toolUseId === toolUseId)?.priorRuns;
+
+      // Counted in transcript order, so a card reports what ran before it and
+      // never counts itself.
+      expect(priorOf("tu-1")).toBeUndefined();
+      expect(priorOf("tu-2")).toBe(1);
+      expect(priorOf("tu-3")).toBeUndefined();
+      expect(priorOf("tu-4")).toBe(2);
+    });
+
     // Refused rather than stored with what survives. One run recorded three
     // identical uncited root causes when both were said in one breath.
     it("refuses a claim whose every citation names no call", async () => {
