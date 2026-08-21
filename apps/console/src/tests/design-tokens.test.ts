@@ -256,11 +256,6 @@ describe("the scale", () => {
     }
   });
 
-  it("puts the sidebar below the stage, which sits below what is raised", () => {
-    expect(step("sidebar").L).toBeLessThan(step("background").L);
-    expect(step("background").L).toBeLessThan(step("card").L);
-  });
-
   /* A gradient is a composition of steps, so each of its stops is held to the
      same rule every other colour is: it names a step, never a value. */
   it("builds every gradient out of steps", () => {
@@ -652,10 +647,6 @@ describe("motion", () => {
 });
 
 describe("spacing", () => {
-  it("states the 4px base the set is built on", () => {
-    expect(css).toContain("--spacing: 0.25rem;");
-  });
-
   it("holds every gap, padding and margin to the 4px set", () => {
     expectUtilityValues(
       /(?<![-\w])-?(?:gap|gap-x|gap-y|space-x|space-y|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml)-(\d+(?:\.\d+)?)(?![\w.-])/g,

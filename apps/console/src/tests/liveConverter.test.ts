@@ -206,36 +206,32 @@ describe("applyLiveEvent — thinking", () => {
 });
 
 describe("hasActiveStream", () => {
-  it("is false for an empty transcript", () => {
-    expect(hasActiveStream([])).toBe(false);
+  /* Whether the working animation shows. Four branches, and both sides of each
+     boolean, which is a table rather than a case apiece. */
+  it.each([
+    ["nothing has arrived", [], false],
+    ["thinking carries real text", [thinkingDelta("Reasoning")], true],
+    ["thinking carries only whitespace", [thinkingDelta("   ")], false],
+    ["an answer is streaming", [textDelta("Here is")], true],
+    ["a tool call is in flight", [toolCallStart("tu-1")], true],
+    [
+      "that tool call has answered",
+      [toolCallStart("tu-1"), toolCallEnd("tu-1", "ok")],
+      false,
+    ],
+  ])("is %s -> %s", (_label, events, expected) => {
+    const items = (events as ConsoleEvent[]).reduce<TranscriptItem[]>(
+      (acc, event) => applyLiveEvent(acc, event, "s1"),
+      [],
+    );
+    expect(hasActiveStream(items)).toBe(expected);
   });
 
-  it("is true while a thinking item streams real text", () => {
-    const items = applyLiveEvent([], thinkingDelta("Reasoning"), "s1");
-    expect(hasActiveStream(items)).toBe(true);
-  });
-
-  it("is false while a thinking item has only whitespace", () => {
-    const items = applyLiveEvent([], thinkingDelta("   "), "s1");
-    expect(hasActiveStream(items)).toBe(false);
-  });
-
-  it("is true while answer text streams", () => {
-    const items = applyLiveEvent([], textDelta("Here is"), "s1");
-    expect(hasActiveStream(items)).toBe(true);
-  });
-
-  it("is true while a tool card is in flight, false once it resolves", () => {
-    let items = applyLiveEvent([], toolCallStart("tu-1"), "s1");
-    expect(hasActiveStream(items)).toBe(true);
-    items = applyLiveEvent(items, toolCallEnd("tu-1", "ok"), "s1");
-    expect(hasActiveStream(items)).toBe(false);
-  });
-
+  // The tail decides it, so a finalized burst behind an in-flight card is not
+  // what is read - only the last item is.
   it("is false when the tail is a settled thinking item", () => {
     let items = applyLiveEvent([], thinkingDelta("Reasoning"), "s1");
     items = applyLiveEvent(items, toolCallStart("tu-1"), "s1");
-    // Tail is now an in-flight tool card; drop it to expose the finalized thinking.
     items = items.slice(0, 1);
     expect(items[0]).toMatchObject({ kind: "thinking", streaming: false });
     expect(hasActiveStream(items)).toBe(false);
