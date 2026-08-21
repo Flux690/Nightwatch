@@ -25,9 +25,8 @@ interface Crumb {
   to?: string;
 }
 
-/* `measure` names the page's own column from styles.css. "full" keeps the
-   stage's padding and drops the column, for a list of one-line rows; "none"
-   gives up the padding too, for a report beside a rail. */
+/* `measure` names the page's own column from styles.css. "none" gives up the
+   padding with it, for a report beside a rail. */
 export function Page({
   crumbs,
   beside,
@@ -40,7 +39,7 @@ export function Page({
      thing named sits after its name, wherever that name happens to end. */
   beside?: React.ReactNode;
   controls?: React.ReactNode;
-  measure?: "page" | "form" | "full" | "none";
+  measure?: "page" | "form" | "none";
   children?: React.ReactNode;
 }): React.JSX.Element {
   const { isOverlay, openOverlay, toggleSidebar } = useSidebar();

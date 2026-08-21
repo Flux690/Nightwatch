@@ -55,7 +55,9 @@ const INVESTIGATIONS = [
     status: "action_required",
     finding: "Raise the pod memory limit",
   }),
+  // Opened fourteen minutes ago, moved two: the row reads the second.
   investigationRow("inv-crit", "Container memory high", {
+    lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
     severity: "critical",
     severityLabel: "critical",
     status: "action_required",
@@ -684,7 +686,10 @@ describe("Shell", () => {
       expect(row).toHaveTextContent("Waiting on approval");
       // The label's own word, not a vocabulary we imposed on it.
       expect(row).toHaveTextContent("critical");
-      expect(row).toHaveTextContent("14m");
+      /* When it last moved, not when it opened. On a run parked for an answer
+         those are different numbers, and only the first one is worth reading. */
+      expect(row).toHaveTextContent("2m");
+      expect(row).not.toHaveTextContent("14m");
     });
 
     it("renders an absent severity as nothing rather than a substitute", async () => {

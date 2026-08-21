@@ -82,6 +82,9 @@
   /* A state is a mix against the surface it lands on, never a rung of its own:
      a fixed rung is right at one depth and wrong at the other four. */
   --control-hover: color-mix(in oklab, var(--control), var(--ink-3) 4%);
+  /* A card is a static container everywhere else, so it had no hover; a list of
+     them is a list of links, and one of those does. */
+  --card-hover: color-mix(in oklab, var(--card), var(--ink-3) 4%);
   --secondary-hover: color-mix(in oklab, var(--secondary), var(--ink-3) 4%);
   --muted-hover: color-mix(in oklab, var(--muted), var(--ink-3) 4%);
   --surface-hover: color-mix(in oklab, var(--surface), var(--ink-3) 4%);
@@ -172,6 +175,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
