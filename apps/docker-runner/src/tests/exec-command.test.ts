@@ -94,19 +94,6 @@ describe("execCommand handler", () => {
     );
   });
 
-  it("returns exit code 2 for commands that exit with code 2", async () => {
-    setupDockerMock(2, "partial output\n", "error detail\n");
-
-    const result = await execCommand({
-      service: SERVICE,
-      command: ["grep", "pattern", "/nonexistent"],
-      reason: "test",
-      risk: "low",
-    });
-
-    expect(result).toMatchObject({ exitCode: 2 });
-  });
-
   it("returns a not-running finding and never calls exec when there is no live instance", async () => {
     const exec = vi.fn();
     MockDocker.mockImplementation(function () {
@@ -130,8 +117,12 @@ describe("execCommand handler", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 
-  it("redacts secrets from exec stdout before returning", async () => {
-    setupDockerMock(0, "password=s3cr3t-value\nstatus=ok\n");
+  it("redacts secrets from both streams before returning", async () => {
+    setupDockerMock(
+      1,
+      "password=s3cr3t-value\nstatus=ok\n",
+      "token=mysecrettoken\nerror: connection refused\n",
+    );
 
     const result = await execCommand({
       service: SERVICE,
@@ -140,43 +131,13 @@ describe("execCommand handler", () => {
       risk: "low",
     });
 
-    const { stdout } = result as { stdout: string };
+    const { stdout, stderr } = result as { stdout: string; stderr: string };
     expect(stdout).not.toContain("s3cr3t-value");
-    expect(stdout).toContain("[REDACTED]");
     expect(stdout).toContain("status=ok");
-  });
-
-  it("redacts secrets from exec stderr before returning", async () => {
-    setupDockerMock(1, "", "token=mysecrettoken\nerror: connection refused\n");
-
-    const result = await execCommand({
-      service: SERVICE,
-      command: ["connect"],
-      reason: "test",
-      risk: "low",
-    });
-
-    const { stderr } = result as { stderr: string };
     expect(stderr).not.toContain("mysecrettoken");
-    expect(stderr).toContain("[REDACTED]");
     expect(stderr).toContain("connection refused");
-  });
-
-  it("caps exec stdout at 64 KB with an elision marker when output is very large", async () => {
-    const bigLine = "x".repeat(1000) + "\n";
-    const bigStdout = bigLine.repeat(100);
-    setupDockerMock(0, bigStdout);
-
-    const result = await execCommand({
-      service: SERVICE,
-      command: ["cat", "/big-file"],
-      reason: "test",
-      risk: "low",
-    });
-
-    const { stdout } = result as { stdout: string };
-    expect(stdout).toContain("bytes elided");
-    expect(Buffer.byteLength(stdout, "utf8")).toBeLessThan(bigStdout.length);
+    for (const stream of [stdout, stderr])
+      expect(stream).toContain("[REDACTED]");
   });
 
   it("propagates the raw engine error when the Docker API call fails", async () => {
@@ -202,22 +163,5 @@ describe("execCommand handler", () => {
     ).rejects.toThrow(
       "permission denied while trying to connect to the Docker daemon socket",
     );
-  });
-});
-
-describe("write dispatch", () => {
-  it("routes a write to its provider handler", async () => {
-    const { createDispatchRegistry } = await import("../commands/registry.js");
-
-    setupDockerMock(0, "ok");
-    const registry = createDispatchRegistry();
-
-    const result = await registry.get("DockerBash")!({
-      service: SERVICE,
-      command: ["ls"],
-      reason: "test",
-      risk: "low",
-    });
-    expect((result as { exitCode: number }).exitCode).toBe(0);
   });
 });

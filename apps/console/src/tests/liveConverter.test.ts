@@ -157,40 +157,20 @@ describe("applyLiveEvent — thinking", () => {
     expect((items[0] as ThinkingItem).text).toBe("Let me check the logs");
   });
 
-  it("stops streaming the thinking item the moment a text delta arrives", () => {
+  /* One rule with three ways of arriving: anything that is not another thinking
+     delta settles the burst. A row per event, not a case per event. */
+  it.each([
+    ["a text delta", () => textDelta("Checked."), "agent_text"],
+    ["a tool call", () => toolCallStart("tu-1"), "tool_call"],
+    ["an interrupt", () => interrupt("tu-gate"), "tool_call"],
+  ])("stops streaming the moment %s arrives", (_label, event, kind) => {
     let items: TranscriptItem[] = [];
     items = applyLiveEvent(items, thinkingDelta("Let me check"), "s1");
-    items = applyLiveEvent(items, textDelta("Checked."), "s1");
+    items = applyLiveEvent(items, event(), "s1");
 
     expect(items).toHaveLength(2);
-    const thinking = items[0] as ThinkingItem;
-    expect(thinking.streaming).toBe(false);
-    expect(items[1]).toMatchObject({ kind: "agent_text", text: "Checked." });
-  });
-
-  it("stops streaming the thinking item the moment a tool call starts", () => {
-    let items: TranscriptItem[] = [];
-    items = applyLiveEvent(items, thinkingDelta("Let me check"), "s1");
-    items = applyLiveEvent(items, toolCallStart("tu-1"), "s1");
-
-    expect(items).toHaveLength(2);
-    const thinking = items[0] as ThinkingItem;
-    expect(thinking.streaming).toBe(false);
-    expect(items[1]).toMatchObject({ kind: "tool_call", toolUseId: "tu-1" });
-  });
-
-  it("stops streaming the thinking item the moment an interrupt arrives", () => {
-    let items: TranscriptItem[] = [];
-    items = applyLiveEvent(items, thinkingDelta("Should I restart it?"), "s1");
-    items = applyLiveEvent(items, interrupt("tu-gate"), "s1");
-
-    expect(items).toHaveLength(2);
-    const thinking = items[0] as ThinkingItem;
-    expect(thinking.streaming).toBe(false);
-    expect(items[1]).toMatchObject({
-      kind: "tool_call",
-      toolUseId: "tu-gate",
-    });
+    expect((items[0] as ThinkingItem).streaming).toBe(false);
+    expect(items[1]).toMatchObject({ kind });
   });
 
   it("starts a new, independent thinking item for the next burst", () => {

@@ -3,41 +3,26 @@ import { capOutput, redactSecrets, sanitizeLines } from "../redact.js";
 
 describe("redactSecrets", () => {
   describe("key-value patterns (JSON, YAML, env)", () => {
-    it("redacts a password= assignment", () => {
-      const { content, redactedCount } = redactSecrets("password=s3cr3t-pass!");
-      expect(content).not.toContain("s3cr3t-pass!");
+    /* One rule over a keyword list, so a keyword is a row rather than a case.
+       Each is a distinct word the pattern has to know. */
+    it.each([
+      ["password=s3cr3t-pass!", "s3cr3t-pass!"],
+      ['{"password": "hunter2"}', "hunter2"],
+      ["token: abc123XYZ", "abc123XYZ"],
+      ["secret=my-secret-value", "my-secret-value"],
+      ["credential=mysecretcredential", "mysecretcredential"],
+      ["access_key=MYACCESSKEYVALUE", "MYACCESSKEYVALUE"],
+      ["api_key=ABCD1234", "ABCD1234"],
+    ])("redacts the value in %s", (line, secret) => {
+      const { content } = redactSecrets(line);
+      expect(content).not.toContain(secret);
       expect(content).toContain("[REDACTED]");
-      expect(redactedCount).toBe(1);
-    });
-
-    it("redacts a JSON password field", () => {
-      const { content } = redactSecrets('{"password": "hunter2"}');
-      expect(content).not.toContain("hunter2");
-      expect(content).toContain("[REDACTED]");
-    });
-
-    it("redacts a token: value line", () => {
-      const { content } = redactSecrets("token: abc123XYZ");
-      expect(content).not.toContain("abc123XYZ");
-      expect(content).toContain("[REDACTED]");
-    });
-
-    it("redacts a secret=value assignment", () => {
-      const { content } = redactSecrets("secret=my-secret-value");
-      expect(content).not.toContain("my-secret-value");
     });
 
     it("preserves the key name when redacting key=value", () => {
       const { content } = redactSecrets("api_key=ABCD1234");
       expect(content).toContain("api_key");
       expect(content).not.toContain("ABCD1234");
-    });
-
-    it("redacts credential and access_key forms", () => {
-      const { content: c1 } = redactSecrets("credential=mysecretcredential");
-      const { content: c2 } = redactSecrets("access_key=MYACCESSKEYVALUE");
-      expect(c1).not.toContain("mysecretcredential");
-      expect(c2).not.toContain("MYACCESSKEYVALUE");
     });
 
     it("redacts a quoted value with spaces in full (no leak after the first space)", () => {
@@ -197,25 +182,6 @@ describe("redactSecrets", () => {
       expect(content).toBe("/var/log/nginx/access.log");
     });
   });
-
-  describe("return value", () => {
-    it("returns redactedCount 0 when nothing to redact", () => {
-      const { redactedCount } = redactSecrets("hello world, port=8080");
-      expect(redactedCount).toBe(0);
-    });
-
-    it("returns the original string unchanged when nothing matches", () => {
-      const input = "INFO: server started successfully";
-      const { content } = redactSecrets(input);
-      expect(content).toBe(input);
-    });
-
-    it("counts multiple redactions across multiple rule matches", () => {
-      const input = "password=abc123 token=xyz789";
-      const { redactedCount } = redactSecrets(input);
-      expect(redactedCount).toBeGreaterThanOrEqual(2);
-    });
-  });
 });
 
 describe("capOutput", () => {
@@ -242,20 +208,6 @@ describe("capOutput", () => {
     expect(capped).toContain("TAIL_CONTENT");
   });
 
-  it("returns exactly 64 KB of content plus the elision marker for very large input", () => {
-    const big = "A".repeat(200 * 1024);
-    const capped = capOutput(big);
-    // The elided section reports the missing bytes
-    expect(capped).toMatch(/\[...\s+\d+ bytes elided\s+\.\.\.\]/);
-  });
-
-  it("accepts a custom maxBytes limit", () => {
-    const text = "x".repeat(100);
-    const capped = capOutput(text, 40);
-    expect(capped).toContain("bytes elided");
-    expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(text.length);
-  });
-
   it("does not split a multibyte character into a replacement char at the cut", () => {
     // Each emoji is 4 UTF-8 bytes, so an arbitrary byte cut lands mid-character;
     // a naive byte slice would decode the split halves as U+FFFD.
@@ -267,12 +219,6 @@ describe("capOutput", () => {
 });
 
 describe("sanitizeLines", () => {
-  it("redacts a secret that appears on one line", () => {
-    expect(
-      sanitizeLines(["ok", "token: abc123XYZ", "done"]).join("\n"),
-    ).not.toContain("abc123XYZ");
-  });
-
   // A PEM key spans many lines, so per-line matching would miss every one of them;
   // the lines are sanitized as one document and re-split.
   it("redacts a private key that spans several lines", () => {

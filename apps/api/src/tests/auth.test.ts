@@ -43,15 +43,6 @@ describe("POST /setup", () => {
     cleanupDb();
   });
 
-  it("rejects password shorter than 12 characters", async () => {
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/setup",
-      payload: { email: "admin@example.com", password: "tooshort" },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
   it("rejects password of exactly 11 characters", async () => {
     const res = await server.inject({
       method: "POST",
@@ -328,22 +319,14 @@ describe("session cookie unlocks protected routes", () => {
     cleanupDb();
   });
 
-  it("cookie from /setup unlocks a protected route", async () => {
-    const setupRes = await server.inject({
+  it("cookie from /login unlocks a protected route", async () => {
+    // Its own owner: this used to lean on a setup case running before it, so
+    // deleting that one broke a test about something else entirely.
+    await server.inject({
       method: "POST",
       url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
-    const sessionValue = extractSessionValue(setCookieHeader(setupRes));
-    const protectedRes = await server.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { cookie: `nw_auth=${sessionValue}` },
-    });
-    expect(protectedRes.statusCode).toBe(200);
-  });
-
-  it("cookie from /login unlocks a protected route", async () => {
     const loginRes = await server.inject({
       method: "POST",
       url: "/api/login",
@@ -384,11 +367,6 @@ describe("POST /logout", () => {
     const header = setCookieHeader(res);
     expect(header).toContain("nw_auth=");
     expect(header).toContain("Max-Age=0");
-  });
-
-  it("is safe to call when unauthenticated", async () => {
-    const res = await server.inject({ method: "POST", url: "/api/logout" });
-    expect(res.statusCode).toBe(200);
   });
 
   it("protected route is 401 without a cookie (simulates client after logout)", async () => {

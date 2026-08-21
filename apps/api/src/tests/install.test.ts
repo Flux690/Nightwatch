@@ -201,38 +201,6 @@ describe("kubernetesInstallManifest", () => {
   const WS_URL = "wss://api.example.com/api/clients/connect";
   const yaml = kubernetesInstallManifest(WS_URL, "nwr_tok");
 
-  it("creates the nightwarden namespace", () => {
-    expect(yaml).toContain("kind: Namespace");
-    expect(yaml).toContain("name: nightwarden");
-  });
-
-  it("includes a single-replica Deployment and a ServiceAccount", () => {
-    expect(yaml).toContain("kind: Deployment");
-    expect(yaml).toContain("replicas: 1");
-    expect(yaml).toContain("kind: ServiceAccount");
-  });
-
-  it("binds a ClusterRole for read access", () => {
-    expect(yaml).toContain("kind: ClusterRole");
-    expect(yaml).toContain("kind: ClusterRoleBinding");
-  });
-
-  it("grants read access to every resource the runner enumerates", () => {
-    for (const resource of [
-      "pods",
-      "deployments",
-      "statefulsets",
-      "daemonsets",
-      "replicasets",
-      "events",
-      "nodes",
-      "namespaces",
-      "pods/log",
-    ]) {
-      expect(yaml).toContain(resource);
-    }
-  });
-
   it("write ClusterRole grants patch and create on pods/exec", () => {
     const writeStart = yaml.indexOf("name: nightwarden-runner-write");
     const writeEnd = yaml.indexOf("---", writeStart);

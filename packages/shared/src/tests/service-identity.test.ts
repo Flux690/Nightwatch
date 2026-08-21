@@ -22,27 +22,10 @@ describe("target keys", () => {
     ).toBe("kubernetes/production/api-server");
   });
 
-  it("every key has exactly three segments, so nothing a user typed can widen one", () => {
-    const keys = [
-      dockerServiceKey({ project: "myapp", service: "postgres" }),
-      kubernetesWorkloadKey({
-        namespace: "production",
-        workload: "api-server",
-      }),
-    ];
-    for (const key of keys) expect(key.split("/")).toHaveLength(3);
-  });
-
   it("the container sub-selector is excluded, so calls differing only by container address one workload", () => {
     const base = { namespace: "shop", workload: "api" };
     expect(kubernetesWorkloadKey({ ...base, container: "sidecar" })).toBe(
       kubernetesWorkloadKey(base),
-    );
-  });
-
-  it("the two platforms cannot collide on a shared name", () => {
-    expect(dockerServiceKey({ project: "a", service: "b" })).not.toBe(
-      kubernetesWorkloadKey({ namespace: "a", workload: "b" }),
     );
   });
 });

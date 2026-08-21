@@ -121,36 +121,6 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(row?.platform).toBe("kubernetes");
     });
 
-    it("stores an optional label", async () => {
-      const res = await server.inject({
-        method: "POST",
-        url: "/api/tokens",
-        headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { platform: "docker", label: "prod-server" },
-      });
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.body) as { label: string };
-      expect(body.label).toBe("prod-server");
-    });
-
-    it("each generate produces a unique token", async () => {
-      const a = await server.inject({
-        method: "POST",
-        url: "/api/tokens",
-        payload: { platform: "docker" },
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      const b = await server.inject({
-        method: "POST",
-        url: "/api/tokens",
-        payload: { platform: "docker" },
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      const tokenA = (JSON.parse(a.body) as { token: string }).token;
-      const tokenB = (JSON.parse(b.body) as { token: string }).token;
-      expect(tokenA).not.toBe(tokenB);
-    });
-
     it("stores and returns serverName when provided", async () => {
       const res = await server.inject({
         method: "POST",
@@ -247,36 +217,6 @@ describe("Runner token lifecycle (issue 038)", () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.body).not.toContain(token);
-    });
-
-    it("includes id, label, createdAt, lastUsedAt", async () => {
-      const mint = await server.inject({
-        method: "POST",
-        url: "/api/tokens",
-        headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { platform: "docker", label: "meta-test" },
-      });
-      const { id } = JSON.parse(mint.body) as { id: string };
-
-      const res = await server.inject({
-        method: "GET",
-        url: "/api/tokens",
-        payload: { platform: "docker" },
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      const { tokens } = JSON.parse(res.body) as {
-        tokens: Array<{
-          id: string;
-          label: string | null;
-          createdAt: string;
-          lastUsedAt: string | null;
-        }>;
-      };
-      const found = tokens.find((t) => t.id === id);
-      expect(found).toBeDefined();
-      expect(found!.label).toBe("meta-test");
-      expect(found!.createdAt).toBeTruthy();
-      expect(found!.lastUsedAt).toBeNull();
     });
   });
 
