@@ -54,7 +54,25 @@ function extractToolUseIds(msg: NativeMessage): string[] {
     .map((b) => b.id);
 }
 
+/* Both directions, because each catches a different bug. A tool_use with no
+   result is a turn we failed to answer; a result with no call is a turn we
+   dropped, which is what a seed that unwinds too far leaves behind. */
 function validateTranscript(messages: NativeMessage[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
+    const answerable = new Set(
+      i > 0 ? extractToolUseIds(messages[i - 1]!) : [],
+    );
+    for (const block of msg.content) {
+      if (block.type === "tool_result" && !answerable.has(block.tool_use_id)) {
+        throw new Error(
+          `Contract violation: tool_result ${block.tool_use_id} at index ${i} answers no tool_use in the message before it`,
+        );
+      }
+    }
+  }
+
   for (let i = 1; i < messages.length; i++) {
     const prev = messages[i - 1]!;
     const curr = messages[i]!;
@@ -201,6 +219,10 @@ function makeProvider(
         onDelta?: (d: { kind: string; text: string }) => void,
         signal?: AbortSignal,
       ): Promise<ChatResponse> => {
+        /* Checked here and not only in seed(): seed sees what the caller hands
+           over, while this is the state a real request would be built from,
+           after every appendToolResults the run has made since. */
+        validateTranscript(messages);
         // Optional gate: park here until the test releases this turn, so timing tests
         // can act (e.g. inject an alert) mid-chat. No gate means immediate resolution.
         if (opts?.gate) await opts.gate();

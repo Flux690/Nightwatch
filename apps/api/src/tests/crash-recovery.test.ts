@@ -184,4 +184,47 @@ describe("recovering runs a restart interrupted", () => {
     expect(seeded[0]?.content).toBe("fix it");
     await waitFor(() => !isRunning(sessionId));
   });
+
+  /* The mirror of the case above, and the one that matters more: a gated call is
+     unanswered on purpose, so unwinding past it hands the model results for a
+     call it can no longer see it made - which every provider rejects. */
+  it("keeps the turn a resume is about to answer", () => {
+    const sessionId = killedRun();
+    appendTranscriptRows([
+      turn(sessionId, 0, {
+        kind: "user",
+        content: "restart it",
+        parts: [{ type: "text", text: "restart it" }],
+      }),
+      turn(sessionId, 1, {
+        content: "[tool: RestartDockerService]",
+        parts: [
+          {
+            type: "tool_call",
+            id: "tu-read",
+            name: "ListDockerServices",
+            input: {},
+          },
+          {
+            type: "tool_call",
+            id: "tu-gate",
+            name: "RestartDockerService",
+            input: { target: "docker/web/api" },
+          },
+        ],
+      }),
+    ]);
+
+    // Nobody has answered, so the turn is dropped: this is the crash case.
+    expect(buildSeed(sessionId)).toHaveLength(1);
+
+    /* Told what this dispatch answers, the same transcript keeps the turn - and
+       the siblings count too, since their results ride along with the gate's. */
+    const resumed = buildSeed(sessionId, ["tu-read", "tu-gate"]);
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]?.parts.map((p) => p.type)).toEqual([
+      "tool_call",
+      "tool_call",
+    ]);
+  });
 });

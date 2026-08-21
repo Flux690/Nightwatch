@@ -119,10 +119,17 @@ function unpause(
     resolvedAt,
   });
 
+  const resumed = [...completedResults, gatedResult];
   dispatcher.dispatch({
     sessionId,
-    seed: buildSeed(sessionId),
-    resumeToolResults: [...completedResults, gatedResult],
+    /* Every call in the suspended turn is still unanswered in the transcript -
+       the results are in this dispatch, not the record - so the seed is told to
+       keep the turn that made them rather than unwinding past it. */
+    seed: buildSeed(
+      sessionId,
+      resumed.map((r) => r.tool_use_id),
+    ),
+    resumeToolResults: resumed,
   });
 
   return { sessionId, toolUseId, status, resolvedAt };

@@ -8,9 +8,17 @@ function hasToolCall(message: TranscriptRow): boolean {
 
 /* A conversation ending on an unanswered `tool_use` is one every provider
    rejects, and it is what a crash between writing the assistant turn and running
-   its tools leaves. Later turns go too: keeping them keeps the unanswered call. */
-function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
-  const answered = new Set<string>();
+   its tools leaves. Later turns go too: keeping them keeps the unanswered call.
+
+   `resuming` names the calls this dispatch is about to answer: the gate, and
+   every sibling that ran beside it in the same turn. They are unanswered on
+   purpose, and dropping their turn would send results for calls the model can
+   no longer see it made. */
+function throughLastAnsweredExchange(
+  rows: TranscriptRow[],
+  resuming: readonly string[],
+): TranscriptRow[] {
+  const answered = new Set<string>(resuming);
   for (const row of rows) {
     for (const part of row.parts) {
       if (part.type === "tool_result") answered.add(part.toolCallId);
@@ -26,10 +34,16 @@ function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
   return rows;
 }
 
-// Replays the durable transcript for a resumed run, mapping our four kinds onto
-// the provider's two roles. An error row and the dead exchange it terminates are
-// dropped back to the last clean assistant turn; a harness row returns as user.
-export function buildSeed(sessionId: string): ProviderMessage[] {
+/* Replays the durable transcript for a resumed run, mapping our four kinds onto
+   the provider's two roles. An error row and the dead exchange it terminates are
+   dropped back to the last clean assistant turn; a harness row returns as user.
+
+   `resuming` names the calls whose results this dispatch is about to append, so
+   the turn that made them survives the unwind above. */
+export function buildSeed(
+  sessionId: string,
+  resuming: readonly string[] = [],
+): ProviderMessage[] {
   const rows: TranscriptRow[] = [];
   for (const message of getTranscriptRows(sessionId)) {
     if (message.kind !== "error") {
@@ -44,7 +58,7 @@ export function buildSeed(sessionId: string): ProviderMessage[] {
       rows.pop();
     }
   }
-  return throughLastAnsweredExchange(rows).map((m) => ({
+  return throughLastAnsweredExchange(rows, resuming).map((m) => ({
     role: m.kind === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
     parts: m.parts,
