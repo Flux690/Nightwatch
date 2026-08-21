@@ -205,6 +205,84 @@ describe("OpenRouterProvider", () => {
     expect(callArgs.response_format).toBeUndefined();
   });
 
+  /* The OpenAI family requires every property in `required` under strict, with
+     an optional one typed as a union with null. Our schemas are written the
+     honest way, so a wrong transform here 400s every request on this provider. */
+  it("widens optional properties to nullable and requires them all under strict", async () => {
+    mockFinalChatCompletion.mockResolvedValueOnce({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "done",
+            tool_calls: undefined,
+          },
+        },
+      ],
+    });
+
+    await provider.chat([
+      {
+        name: "GetDockerLogs",
+        description: "Read container logs.",
+        input_schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            target: { type: "string" },
+            runner: { type: "string" },
+            options: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: { label: { type: "string" } },
+                required: ["label"],
+              },
+            },
+          },
+          required: ["target"],
+        },
+      },
+    ]);
+
+    const sent = mockCompletionsStream.mock.calls[0]?.[0] as {
+      tools: Array<{
+        function: {
+          strict?: boolean;
+          parameters: {
+            required: string[];
+            properties: Record<
+              string,
+              { type?: unknown; items?: { required: string[] } }
+            >;
+          };
+        };
+      }>;
+    };
+    const fn = sent.tools[0]!.function;
+
+    expect(fn.strict).toBe(true);
+    // Every property named, not just the ones we call required.
+    expect(fn.parameters.required.sort()).toEqual([
+      "options",
+      "runner",
+      "target",
+    ]);
+    // A genuinely required one keeps its plain type.
+    expect(fn.parameters.properties["target"]?.type).toBe("string");
+    // An optional one becomes a union the model may answer with null.
+    expect(fn.parameters.properties["runner"]?.type).toEqual([
+      "string",
+      "null",
+    ]);
+    // Objects nested inside an array are rewritten too, or the API rejects them.
+    expect(fn.parameters.properties["options"]?.items?.required).toEqual([
+      "label",
+    ]);
+  });
+
   it("passes through real tool calls unchanged when the model uses tools", async () => {
     mockFinalChatCompletion.mockResolvedValueOnce({
       choices: [

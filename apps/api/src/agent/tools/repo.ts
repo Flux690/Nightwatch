@@ -276,6 +276,7 @@ export const REPO_TOOLS: Tool[] = [
         "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line, and you must read a file with this before you may edit it.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           path: {
             type: "string",
@@ -326,6 +327,7 @@ export const REPO_TOOLS: Tool[] = [
         "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read earlier in this session. The result is a diff showing what changed.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           path: {
             type: "string",
@@ -380,6 +382,7 @@ export const REPO_TOOLS: Tool[] = [
         "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           path: {
             type: "string",
@@ -417,6 +420,7 @@ export const REPO_TOOLS: Tool[] = [
         "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerBash or K8sBash when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           command: {
             type: "string",
@@ -469,6 +473,7 @@ export const REPO_TOOLS: Tool[] = [
         "Propose the repository changes you made in this session as a draft pull request for a human to review. Verify your change with Bash before calling this, and say in the body what you ran. You can call it more than once: this session's branch has at most one open pull request, so a later call updates the existing one with your newest commits rather than opening a second. Details of the incident and a reference to this session are added to the body for you. If you have not committed any changes, it tells you there is nothing to propose, which is an answer about the branch rather than a failure.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           title: {
             type: "string",

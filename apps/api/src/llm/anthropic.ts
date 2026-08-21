@@ -235,8 +235,14 @@ export class AnthropicProvider implements LLMProvider {
           ],
           ...this.thinkingParams(),
           ...this.compactionParams(),
-          // ToolSchema is structurally compatible with Anthropic.Beta.BetaTool.
-          tools: tools as Anthropic.Beta.BetaTool[],
+          /* strict constrains sampling to the schema, and Anthropic documents
+             that it also guarantees the tool name is one of these. Optional
+             fields stay optional here: only the OpenAI family requires every
+             property in `required`. */
+          tools: tools.map((t) => ({
+            ...t,
+            strict: true,
+          })) as Anthropic.Beta.BetaTool[],
           /* Compatible with adaptive thinking, which is what thinkingParams
              sends; only the older explicit thinking mode refuses it. */
           ...(forceTool !== undefined && {

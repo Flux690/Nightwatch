@@ -156,6 +156,7 @@ export const METRICS_TOOLS: Tool[] = [
         "Evaluate a PromQL expression against the connected metrics source at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           query: {
             type: "string",
@@ -209,6 +210,7 @@ export const METRICS_TOOLS: Tool[] = [
         "Evaluate a PromQL expression against the connected metrics source across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           query: {
             type: "string",
@@ -312,6 +314,7 @@ export const METRICS_TOOLS: Tool[] = [
         "List the metric names this source is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           contains: {
             type: "string",
@@ -366,6 +369,7 @@ export const METRICS_TOOLS: Tool[] = [
         "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Not every source stores this, and the result says so when it does not.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           metric: {
             type: "string",
@@ -420,6 +424,7 @@ export const METRICS_TOOLS: Tool[] = [
         "List the alerting rules this source evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           contains: {
             type: "string",

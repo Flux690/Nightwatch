@@ -168,6 +168,7 @@ export const GITHUB_TOOLS: Tool[] = [
         "List the pull requests merged and the commits landed on the connected repository's default branch in the window ending when the alert fired, or ending now if no alert started this session. Call this early, because not knowing what changed is the most common reason an investigation reaches the wrong conclusion. Note carefully that this tells you what was merged, not what was deployed. Before you name a change as the cause, confirm it actually reached the running system by checking the running image tag or when the service last restarted.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           windowHours: {
             type: "number",

@@ -27,6 +27,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "List every Docker service, running and stopped, with its status, image, uptime and health. Call this first when you do not yet know a service's target key, because every service-level Docker tool needs that key.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           runner: {
             type: "string",
@@ -34,6 +35,7 @@ export const DOCKER_TOOLS: Tool[] = [
               "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
           },
         },
+        required: [],
       },
     },
     effect: "read",
@@ -50,6 +52,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Read a Docker service's recent logs, which are its container's stdout and stderr. The result is filtered down to error and warning lines plus any line close to the alert's timestamp, so a quiet service can return very little.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -102,6 +105,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Read a Docker service's configuration: its image, restart policy, mounts, ports and healthcheck. Environment variables are reported by name only, never by value, so this cannot tell you what a setting is set to.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
@@ -119,6 +123,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Read a Docker service's current resource usage: CPU percentage, memory used against its limit, network traffic and block I/O. These are the values as of now, not a history, so use QueryMetricsRange when you need the shape over time.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
@@ -136,6 +141,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Read the Docker daemon's lifecycle events for a service, such as start, stop, die and out-of-memory kills. This is how you tell whether a container has been restarting repeatedly rather than running steadily.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -161,6 +167,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "List the processes running inside a Docker service's container, as docker top does. Use it to see whether the process you expect is the one actually running, and what it is consuming.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
@@ -178,6 +185,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Restart a Docker service by restarting its container. This changes the Docker host, so calling it pauses you until a human approves or rejects it, and the service is briefly unavailable while it comes back. If the human rejects the call, you will be told so and the restart will not have happened.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -215,6 +223,7 @@ export const DOCKER_TOOLS: Tool[] = [
         "Run a shell command inside a Docker service's container, as docker exec does. It runs inside the container and never on the Docker host itself. Because such a command is able to change things, calling it pauses you until a human approves or rejects it, even when the command you are running only reads. Use it to answer questions the typed Docker tools above do not cover, and to apply a fix once you know what the fix is.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,

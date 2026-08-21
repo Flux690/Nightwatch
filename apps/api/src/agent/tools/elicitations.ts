@@ -31,6 +31,7 @@ export const ELICITATIONS: Elicitation[] = [
         "Pause and ask the on-call engineer a question you cannot answer from the tools. Use it when you need a decision or a piece of context only a human holds, not to check work you could verify yourself. Your question is the reason you are interrupting them, so make it specific enough to answer in one click.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           question: {
             type: "string",
@@ -39,9 +40,13 @@ export const ELICITATIONS: Elicitation[] = [
           },
           options: {
             type: "array",
-            maxItems: MAX_QUESTION_OPTIONS,
+            /* The cap is prose and a runtime check, not a schema keyword: strict
+               decoding compiles the schema to a grammar and rejects array
+               length constraints. questionOptionOverflow enforces it either
+               way, because providers honoured maxItems unevenly regardless. */
             items: {
               type: "object",
+              additionalProperties: false,
               properties: {
                 label: {
                   type: "string",

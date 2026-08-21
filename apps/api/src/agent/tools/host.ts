@@ -23,7 +23,9 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { runner: RUNNER_PROPERTY },
+        required: [],
       },
     },
     effect: "read",
@@ -41,7 +43,9 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { runner: RUNNER_PROPERTY },
+        required: [],
       },
     },
     effect: "read",
@@ -59,7 +63,9 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { runner: RUNNER_PROPERTY },
+        required: [],
       },
     },
     effect: "read",
@@ -77,7 +83,9 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { runner: RUNNER_PROPERTY },
+        required: [],
       },
     },
     effect: "read",
@@ -95,6 +103,7 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           tailLines: {
             type: "number",
@@ -109,6 +118,7 @@ export const HOST_TOOLS: Tool[] = [
           },
           runner: RUNNER_PROPERTY,
         },
+        required: [],
       },
     },
     effect: "read",
@@ -126,6 +136,7 @@ export const HOST_TOOLS: Tool[] = [
         DOCKER_ONLY,
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           path: {
             type: "string",

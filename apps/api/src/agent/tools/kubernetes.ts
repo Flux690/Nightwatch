@@ -35,6 +35,7 @@ export const K8S_TOOLS: Tool[] = [
         "List the Kubernetes workloads in a namespace, meaning its Deployments, StatefulSets and DaemonSets, with their replica counts, image and rollout status. Call this first when you do not yet know a workload's target key, because every service-level Kubernetes tool needs that key.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           namespace: {
             type: "string",
@@ -47,6 +48,7 @@ export const K8S_TOOLS: Tool[] = [
               "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
+        required: [],
       },
     },
     effect: "read",
@@ -63,6 +65,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read a Kubernetes workload's recent logs, gathered from its pods. The result is filtered down to error and warning lines plus any line close to the alert's timestamp, so a quiet workload can return very little.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -106,6 +109,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read a Kubernetes workload's configuration: its image, update strategy, resource requests and limits, probes and volume mounts. Environment variables, ConfigMaps and Secrets are reported by name only, never by value, so this cannot tell you what a setting is set to.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -127,6 +131,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read resource usage for every pod of a Kubernetes workload: CPU in millicores and memory in bytes, set against each container's requests and limits, along with restart counts and why each container last terminated, such as OOMKilled. If the cluster runs no metrics-server the usage figures come back null, but the restart counts and termination reasons still report, and those alone often identify the problem.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -148,6 +153,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read the Kubernetes events for a workload and for its pods, merged into one list with the oldest first. These are events such as FailedCreate, BackOff and OOMKilling, and they are usually the fastest way to learn why a workload will not come up. Kubernetes deletes events on a timer, commonly one hour, so an empty list can mean the evidence expired rather than that nothing happened. Read the note on the result before concluding anything from an empty one.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -179,6 +185,7 @@ export const K8S_TOOLS: Tool[] = [
         "List the processes running inside a Kubernetes workload's pod. Use it to see whether the process you expect is the one actually running, and what it is consuming.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -200,6 +207,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read the rollout status of a Deployment, StatefulSet or DaemonSet: how many replicas are desired, ready, updated and available, the workload's conditions, and the reason a rollout has not finished. Use this when you suspect a deploy is stuck part-way rather than the application being at fault.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
@@ -217,6 +225,7 @@ export const K8S_TOOLS: Tool[] = [
         "Read the health of every node in the cluster: whether each is Ready, its MemoryPressure, DiskPressure and PIDPressure conditions, and its allocatable resources against its capacity. Use this to tell whether an unhealthy workload is the node's fault rather than its own. It needs no target key, because it reports on every node.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           runner: {
             type: "string",
@@ -224,6 +233,7 @@ export const K8S_TOOLS: Tool[] = [
               "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
+        required: [],
       },
     },
     effect: "read",
@@ -240,6 +250,7 @@ export const K8S_TOOLS: Tool[] = [
         "Restart a Kubernetes workload by performing a rollout restart of its Deployment, StatefulSet or DaemonSet, which replaces its pods one batch at a time. This changes the cluster, so calling it pauses you until a human approves or rejects it. If the human rejects the call, you will be told so and the restart will not have happened.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
@@ -273,6 +284,7 @@ export const K8S_TOOLS: Tool[] = [
         "Run a shell command inside a Kubernetes workload's pod, as kubectl exec does. It runs inside the pod and never on the node hosting it. Because such a command is able to change things, calling it pauses you until a human approves or rejects it, even when the command you are running only reads. Use it to answer questions the typed Kubernetes tools above do not cover, and to apply a fix once you know what the fix is.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,

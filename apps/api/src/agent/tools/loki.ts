@@ -187,6 +187,7 @@ export const LOKI_TOOLS: Tool[] = [
         'Read individual log lines from the connected Loki, selected with a LogQL query such as {app="api"} |= "error". Lines come back newest first, from a window around the alert or around now if no alert started this session. Every LogQL query has to begin with a label selector in braces, so if you do not already know which labels select this service, call DiscoverLogLabels first. Narrow the query itself with filters such as |= and |~ rather than fetching everything and reading through it.',
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           query: {
             type: "string",
@@ -350,6 +351,7 @@ export const LOKI_TOOLS: Tool[] = [
         'Count or rate log lines in the connected Loki using a metric-style LogQL expression, for example sum(rate({app="api"} |= "error" [5m])), across a window around the alert. Use this when you want a number derived from logs that Prometheus does not record, such as how often a particular message appears. When you want to read the lines themselves, use QueryLogs. Keep the number of returned series small with aggregations, because only the first twenty are returned.',
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           query: {
             type: "string",
@@ -449,6 +451,7 @@ export const LOKI_TOOLS: Tool[] = [
         "Find out which labels select a particular service's logs in Loki. There is no fixed convention for these, so you cannot guess them reliably; call this before QueryLogs whenever you do not already know the selector. Called with no arguments it lists the label names present around the alert. Given a label name it lists that label's values. Given a partial selector it lists the label sets of the streams that match, so you can narrow down from there.",
       input_schema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           label: {
             type: "string",

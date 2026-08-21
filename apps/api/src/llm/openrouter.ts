@@ -191,6 +191,55 @@ function maxCompletionTokens(
 // OpenRouter speaks the OpenAI chat-completions wire format, so the `openai`
 // npm package is the transport OpenRouter itself recommends. Everything else
 // here is OpenRouter's own dialect, not a generic compatibility shim.
+/* The OpenAI family, on both Chat Completions and Responses, requires every
+   property to appear in `required` under strict, with an optional one typed as a
+   union with null. Anthropic has no such rule, so the schemas are written the
+   honest way and bent here. A model that ignores strict simply sees a type it
+   may also send null for.
+
+   Sending strict to a provider that does not support it is safe: verified
+   against models on OpenRouter with and without structured-output support, both
+   answered 200. */
+function openAIStrictSchema(
+  schema: ToolSchema["input_schema"],
+): Record<string, unknown> {
+  const nullable = (value: unknown): unknown => {
+    if (typeof value !== "object" || value === null) return value;
+    const shape = { ...(value as Record<string, unknown>) };
+    if (shape["type"] === "object") return strictObject(shape);
+    if (shape["type"] === "array" && shape["items"] !== undefined) {
+      shape["items"] = nullable(shape["items"]);
+    }
+    return shape;
+  };
+
+  const strictObject = (
+    object: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const properties = (object["properties"] ?? {}) as Record<string, unknown>;
+    const required = new Set((object["required"] ?? []) as string[]);
+    const widened: Record<string, unknown> = {};
+    for (const [name, property] of Object.entries(properties)) {
+      const mapped = nullable(property) as Record<string, unknown>;
+      widened[name] =
+        required.has(name) || typeof mapped["type"] !== "string"
+          ? mapped
+          : { ...mapped, type: [mapped["type"], "null"] };
+    }
+    return {
+      ...object,
+      properties: widened,
+      required: Object.keys(widened),
+      additionalProperties: false,
+    };
+  };
+
+  return strictObject(schema as unknown as Record<string, unknown>) as Record<
+    string,
+    unknown
+  >;
+}
+
 export class OpenRouterProvider implements LLMProvider {
   private readonly client: OpenAI;
   private readonly model: string;
@@ -254,7 +303,8 @@ export class OpenRouterProvider implements LLMProvider {
           function: {
             name: t.name,
             description: t.description,
-            parameters: t.input_schema,
+            strict: true,
+            parameters: openAIStrictSchema(t.input_schema),
           },
         })),
         ...this.reasoningParam(),
