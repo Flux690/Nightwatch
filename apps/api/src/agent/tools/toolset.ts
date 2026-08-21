@@ -83,12 +83,6 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-// Asked of the whole catalogue rather than of one turn's offer, because the
-// transcript renders calls from runs whose offered set is long gone.
-export function isElicitation(name: string): boolean {
-  return ELICITATIONS.some((e) => e.schema.name === name);
-}
-
 /* Whether a human must permit this call. A function rather than a field read
    because a user rule will answer from the arguments as well as the tool,
    and `input` is already here for it. */

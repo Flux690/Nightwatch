@@ -178,8 +178,9 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     await resolvePending(sessionId);
 
-    // The decision has to be reconstructible from the database, not the browser
-    // that made it: the registry says gated, the outcome says declined.
+    // The decision has to come from the database rather than the browser that
+    // made it, and from what was recorded when the person was asked rather than
+    // from the tool's name - which says nothing about whether anyone answered.
     const items = await getTranscript(sessionId);
     const cards = items.filter(
       (i) => i.kind === "tool_call" && i.toolName === "RestartDockerService",
@@ -187,10 +188,12 @@ describe("a suspended session serves its pending row with its transcript", () =>
     // One call is one item for its whole life. A settled approval used to keep
     // its own card and grow a second one beneath it for the same call.
     expect(cards).toHaveLength(1);
-    expect(cards[0]?.kind === "tool_call" && cards[0].state).toMatchObject({
+    /* No outcome: a declined call never ran, so there is nothing to say about
+       how the tool behaved. That a person declined it is the decision. */
+    expect(cards[0]?.kind === "tool_call" && cards[0].state).toEqual({
       phase: "resolved",
       decision: "rejected",
-      outcome: "rejected",
+      result: expect.any(String),
     });
 
     unregisterRunner(conn);

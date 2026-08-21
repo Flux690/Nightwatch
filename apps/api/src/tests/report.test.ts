@@ -14,7 +14,11 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { NormalizedAlert, ToolOutcome } from "@nightwarden/shared";
+import type {
+  HumanDecision,
+  NormalizedAlert,
+  ToolOutcome,
+} from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
@@ -103,6 +107,7 @@ describe("the investigation record", () => {
     output: string,
     at: string,
     outcome?: ToolOutcome,
+    humanDecision?: HumanDecision,
   ): void {
     appendTranscriptRows([
       {
@@ -131,6 +136,7 @@ describe("the investigation record", () => {
             toolCallId: entry.id,
             output,
             ...(outcome !== undefined && { outcome }),
+            ...(humanDecision !== undefined && { humanDecision }),
           },
         ],
         timestamp: at,
@@ -517,11 +523,14 @@ describe("the investigation record", () => {
 
     // The clock a confirmation is measured against is the write itself, read
     // from the ledger: a gated call that answered is one the user released.
+    /* A gated write the user was asked about. Which way they went is recorded on
+       the result, because nothing else can say it: the tool's name is the same
+       whether a person released the call or the harness refused to offer it. */
     function appendRestart(
       sessionId: string,
       seq: number,
       at: string,
-      outcome?: ToolOutcome,
+      humanDecision: HumanDecision = "approved",
     ): void {
       appendCall(
         sessionId,
@@ -533,7 +542,8 @@ describe("the investigation record", () => {
         },
         "restarted",
         at,
-        outcome,
+        undefined,
+        humanDecision,
       );
     }
 
@@ -665,6 +675,52 @@ describe("the investigation record", () => {
       );
       // Nor is it a decision the user made about a write.
       expect(gatedCalls(sessionId)).toHaveLength(0);
+    });
+
+    /* The defect this record was built to end. With no Docker runner connected,
+       DockerBash is not in the offered set, so the harness answers the call
+       itself and no card is ever drawn. It still carries the name of a gated
+       tool, which is all the old check looked at - so five refusals were
+       reported to the user as five writes they had approved, and fed to the
+       report turn under a heading saying so. */
+    it("never counts a call the harness refused as a write the user released", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      appendCall(
+        sessionId,
+        4,
+        {
+          id: "tu-refused",
+          name: "DockerBash",
+          input: { target: "docker/app/web", command: "df -h" },
+        },
+        'Tool "DockerBash" is not available in this investigation.',
+        "2026-07-03T02:05:00.000Z",
+        "system",
+      );
+      appendCall(
+        sessionId,
+        6,
+        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        METRICS,
+        "2026-07-03T02:06:00.000Z",
+      );
+
+      // Nobody was asked, so there is nothing to report either way.
+      expect(gatedCalls(sessionId)).toHaveLength(0);
+
+      /* And it starts no clock. A refusal that counted as a released write made
+         every later reading a confirmation of it, so a claim citing one graded
+         `verified` - the tier that means an action ran and was checked. */
+      const id = await record(
+        sessionId,
+        "the container is out of disk",
+        "root_cause",
+        ["tu-after"],
+      );
+      expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
+        "cited",
+      );
     });
   });
 
@@ -977,8 +1033,8 @@ describe("the investigation record", () => {
        "I could not work out the cause" is a complete ending, releasing a write
        and then going quiet with the condition still firing is not. */
     describe("a run that acted", () => {
-      // A gated call carrying a result: the registry says it needed releasing,
-      // and no rejected outcome on it says the user released it.
+      // A write the user was asked about and let through, recorded on the call
+      // where it happened. Nothing about the tool's name could say this.
       function releasedWrite(sessionId: string, seq: number): void {
         appendCall(
           sessionId,
@@ -990,6 +1046,8 @@ describe("the investigation record", () => {
           },
           "restarted",
           "2026-07-03T02:05:00.000Z",
+          undefined,
+          "approved",
         );
       }
 

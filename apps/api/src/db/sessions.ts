@@ -436,15 +436,15 @@ export function appendRowsAndInterrupt(
        (session_id, seq, kind, content, canonical, timestamp)
      VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
   );
-  const insertHumanInput = getDb().prepare(
-    `INSERT INTO pending_human_input
-       (session_id, tool_use_id, kind, completed_results, claimed_at)
-     VALUES (@sessionId, @toolUseId, @kind, @completedResults, @claimedAt)`,
-  );
-  // Suspending IS the interrupt row, so the state that keeps this session's seat
-  // is written with it rather than by whoever notices afterwards.
+  /* Suspending IS the gate, so the state that keeps this session's seat is
+     written with it rather than by whoever notices afterwards. One statement,
+     because the gate and the seat are now columns on the same row. */
   const suspend = getDb().prepare(
-    `UPDATE sessions SET run_state = 'suspended' WHERE session_id = ?`,
+    `UPDATE sessions
+        SET run_state = 'suspended', awaiting_tool_use_id = @toolUseId,
+            awaiting_kind = @kind, awaiting_results = @completedResults,
+            attempt_started_at = @claimedAt
+      WHERE session_id = @sessionId`,
   );
   const txn = getDb().transaction(() => {
     for (const m of messages) {
@@ -457,22 +457,21 @@ export function appendRowsAndInterrupt(
         timestamp: m.timestamp,
       });
     }
-    insertHumanInput.run({
+    suspend.run({
       sessionId: pendingHumanInput.sessionId,
       toolUseId: pendingHumanInput.toolUseId,
       kind: pendingHumanInput.kind,
       completedResults: JSON.stringify(pendingHumanInput.completedResults),
       claimedAt: pendingHumanInput.claimedAt ?? null,
     });
-    suspend.run(pendingHumanInput.sessionId);
     const last = messages[messages.length - 1];
     if (last) touchSession(last.sessionId, last.timestamp);
   });
   txn();
 }
 
-// Takes the report column with it and cascades to the transcript and the pending
-// approval. Nothing about a session outlives it.
+// Takes the report column and the gate with it, and cascades to the transcript.
+// Nothing about a session outlives it.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
@@ -528,8 +527,8 @@ const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS create
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastContent,
         s.last_activity_at AS lastActivityAt,
-        (p.session_id IS NOT NULL) AS awaitingHumanInput,
-        p.kind AS pendingKind,
+        (s.awaiting_tool_use_id IS NOT NULL) AS awaitingHumanInput,
+        s.awaiting_kind AS pendingKind,
         s.stopped_at AS stoppedAt`;
 
 function toSource(
@@ -568,9 +567,10 @@ export function listSessionSources(
       : `WHERE s.investigation = ${kind === "investigation" ? 1 : 0}`;
   const rows = getDb()
     .prepare(
+      // No join any more: whether a session awaits a human is a column on its own
+      // row, which is also the leading key of the sort below.
       `SELECT ${LIST_COLUMNS}
        FROM sessions s
-       LEFT JOIN pending_human_input p ON p.session_id = s.session_id
        ${filter}
        ORDER BY awaitingHumanInput DESC, lastActivityAt DESC, s.session_id ASC
        LIMIT ? OFFSET ?`,

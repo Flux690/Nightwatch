@@ -2,6 +2,7 @@ import type {
   Conviction,
   EvidenceKind,
   GatedCall,
+  HumanDecision,
   Hypothesis,
   Report,
   ReportConviction,
@@ -14,7 +15,7 @@ import type {
 import { amendReport, appendToReport, getReport } from "../db/reports.js";
 import { getTranscriptRows } from "../db/sessions.js";
 import { publishReportUpdated } from "../session/stream.js";
-import { targetKeyFromInput, wasGated } from "../session/transcript.js";
+import { targetKeyFromInput } from "../session/transcript.js";
 import { findTool } from "./tools/toolset.js";
 import { evidenceSource } from "./evidence-source.js";
 
@@ -37,6 +38,9 @@ interface LedgerEntry {
   // Absent when the call simply answered. Carried on the result part it belongs
   // to, so one walk answers both what a call returned and how it went.
   outcome?: ToolOutcome;
+  // Absent unless a person was asked about this call, which is the only thing
+  // that makes it a released write rather than a call the harness ran or refused.
+  humanDecision?: HumanDecision;
   timestamp: string;
 }
 
@@ -62,6 +66,9 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
         if (entry) {
           entry.result = part.output;
           if (part.outcome !== undefined) entry.outcome = part.outcome;
+          if (part.humanDecision !== undefined) {
+            entry.humanDecision = part.humanDecision;
+          }
         }
       }
     }
@@ -116,6 +123,9 @@ export function resolveEvidence(
       input,
       result,
       ...(outcome !== undefined && { outcome }),
+      ...(entry.humanDecision !== undefined && {
+        humanDecision: entry.humanDecision,
+      }),
     });
   }
   return resolved;
@@ -138,23 +148,24 @@ function convictionOf(
   return sources.size >= 2 ? "corroborated" : "cited";
 }
 
-/* Every call the user had to release, and which way they went, read back
-   from the session's own ledger. The registry says a call was gated, the outcome
-   says it was declined, and who decided is not recorded: there is one user. */
+/* Every call the user was actually asked about, and which way they went, read
+   back from what was recorded at the call. A tool's name cannot answer this: a
+   call the harness refused because the tool was never offered carries the name
+   of a gated tool and reached no gate at all, which is how five refusals once
+   reported as five writes the user approved. An answered question is not a
+   write, so it is not one of these. */
 export function gatedCalls(sessionId: string): GatedCall[] {
   return ledgerIn(sessionId).flatMap((entry) => {
-    if (!wasGated(entry.toolName) || entry.result === null) return [];
-    const { outcome } = entry;
+    const { humanDecision, outcome } = entry;
+    if (entry.result === null) return [];
+    if (humanDecision !== "approved" && humanDecision !== "rejected") return [];
     return [
       {
         toolUseId: entry.toolUseId,
         toolName: entry.toolName,
         target: targetKeyFromInput(entry.input),
         at: entry.timestamp,
-        decision:
-          outcome === "rejected"
-            ? ("rejected" as const)
-            : ("approved" as const),
+        decision: humanDecision,
         ...(outcome !== undefined && { outcome }),
         result: entry.result,
       },
@@ -162,14 +173,14 @@ export function gatedCalls(sessionId: string): GatedCall[] {
   });
 }
 
-// The instant the last released write answered, which is what makes a later read
-// a confirmation rather than another observation. A declined call changed
-// nothing, so it never starts that clock.
+/* The instant the last released write answered, which is what makes a later read
+   a confirmation rather than another observation. Only a call a person released
+   starts that clock: a declined one changed nothing, and a refused one never
+   ran, so neither can promote a later reading to `verified`. */
 function lastExecutedAt(ledger: Map<string, LedgerEntry>): string | null {
   let latest: string | null = null;
   for (const entry of ledger.values()) {
-    if (entry.result === null || !wasGated(entry.toolName)) continue;
-    if (entry.outcome === "rejected") continue;
+    if (entry.result === null || entry.humanDecision !== "approved") continue;
     if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
   }
   return latest;

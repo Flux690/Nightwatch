@@ -7,7 +7,12 @@ import { cn } from "@/lib/utils";
 import { isTool } from "@nightwarden/shared";
 import type { ToolName } from "@nightwarden/shared";
 import { asRecord, stringAt as inputString } from "@/lib/toolResult";
-import type { ToolCallItem, ToolCallState, ToolOutcome } from "./types.js";
+import type {
+  HumanDecision,
+  ToolCallItem,
+  ToolCallState,
+  ToolOutcome,
+} from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
@@ -62,8 +67,6 @@ const OUTCOME_LABEL: Record<ToolOutcome, string> = {
   retryable: "Unavailable",
   permission: "Permission denied",
   system: "Failed",
-  // A decision, not a fault: nothing broke and nothing ran.
-  rejected: "Declined",
 };
 
 const OUTCOME_TONE: Record<ToolOutcome, string> = {
@@ -72,8 +75,12 @@ const OUTCOME_TONE: Record<ToolOutcome, string> = {
   retryable: "text-wait",
   permission: "text-wait",
   system: "text-fail",
-  rejected: "text-muted-foreground",
 };
+
+/* A decision, not a fault: nothing broke and nothing ran. It reads off what the
+   person said rather than off a tool outcome, because a declined call has none -
+   the tool it names never executed. */
+const DECLINED = { text: "Declined", tone: "text-muted-foreground" } as const;
 
 // The one-line reading of a settled call, shared with the report so a cited
 // result reads the same in both. The class outranks the finding's own tone: a
@@ -82,7 +89,9 @@ export function resultSummary(
   toolName: string,
   result: unknown,
   outcome: ToolOutcome | undefined,
+  humanDecision?: HumanDecision,
 ): { text: string; tone: string } {
+  if (humanDecision === "rejected") return { ...DECLINED };
   const finding = findingFor(toolName, result);
   const tone =
     outcome !== undefined
@@ -336,6 +345,9 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
     toolName,
     result,
     outcomeOf(item.state),
+    item.state.phase === "resolved" && item.state.decision === "rejected"
+      ? "rejected"
+      : undefined,
   );
   /* The one row that names its input rather than its result. What was asked is
      what a reader scanning back is looking for, and the answer is one click

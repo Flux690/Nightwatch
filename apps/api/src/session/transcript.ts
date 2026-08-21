@@ -1,6 +1,7 @@
 import type {
   ApprovalStatus,
   ContinueCardItem,
+  HumanDecision,
   TranscriptRow,
   ToolCallState,
   ToolGate,
@@ -13,7 +14,6 @@ import {
 } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { getSession, getTranscriptRows, isRunning } from "../db/sessions.js";
-import { findTool, isElicitation } from "../agent/tools/toolset.js";
 
 // The tool input's target key. A write addresses a service by it, and a tool
 // that names none is not addressing one.
@@ -22,12 +22,6 @@ export function targetKeyFromInput(
 ): string | null {
   const target = input["target"];
   return typeof target === "string" ? target : null;
-}
-
-// Whether a human had to permit this call, read from the registry rather than
-// recorded: policy is what gates a call, so it is also what says one was gated.
-export function wasGated(toolName: string): boolean {
-  return findTool(toolName)?.policy === "approve";
 }
 
 /* The only place a tool call becomes an item. Both the transcript fetch and the
@@ -100,7 +94,6 @@ function reportCard(sessionId: string): TranscriptItem | null {
 // A tool call's state, in precedence order: what the session is suspended on
 // beats what a human already decided, which beats the tool merely having run.
 function toolCallState(
-  toolName: string,
   result: string | undefined,
   gate: ToolGate | null,
   decided: ApprovalStatus | null,
@@ -108,6 +101,9 @@ function toolCallState(
 ): ToolCallState {
   if (gate !== null) return { phase: "awaiting_human", gate };
   const classified = outcome === undefined ? {} : { outcome };
+  /* Every path a person is on ends here, including an answered question: the
+     decision was recorded when they were asked, so nothing needs to work out
+     from a tool's name whether the words in the result are theirs. */
   if (decided !== null)
     return {
       phase: "resolved",
@@ -116,11 +112,6 @@ function toolCallState(
       ...classified,
     };
   if (result === undefined) return { phase: "running" };
-  /* Only a clean result came from a person. A question the harness refused -
-     too many options to draw - also has a result, and calling that "answered"
-     would put words the reader never said into the record. */
-  if (isElicitation(toolName) && outcome === undefined)
-    return { phase: "resolved", decision: "answered", result };
   return { phase: "complete", result, ...classified };
 }
 
@@ -133,26 +124,29 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   // transcript rows below, which hold it already.
   const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
 
-  // A decision the user already made, reconstructed rather than stored: the
-  // registry says the call needed one, and the outcome says which way it went.
+  /* What the user decided, read back from what was recorded when they were
+     asked. Not reconstructed from the tool's name: that cannot tell a call a
+     person released from one the harness refused without ever drawing a card. */
   const decisionFor = (
-    toolName: string,
     toolUseId: string,
     settled: boolean,
-  ): ApprovalStatus | null => {
-    if (!settled || !wasGated(toolName)) return null;
-    return outcomes.get(toolUseId) === "rejected" ? "rejected" : "approved";
-  };
+  ): ApprovalStatus | null =>
+    settled ? (decisions.get(toolUseId) ?? null) : null;
 
-  // One pass for both: a result and how it went arrive on the same part.
+  // One pass for all three: a result, how it went, and what a person said all
+  // arrive on the same part.
   const results = new Map<string, string>();
   const outcomes = new Map<string, ToolOutcome>();
+  const decisions = new Map<string, HumanDecision>();
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool_result") {
         results.set(part.toolCallId, part.output);
         if (part.outcome !== undefined) {
           outcomes.set(part.toolCallId, part.outcome);
+        }
+        if (part.humanDecision !== undefined) {
+          decisions.set(part.toolCallId, part.humanDecision);
         }
       }
     }
@@ -251,7 +245,6 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
             ? awaiting.kind
             : null;
         const decided = decisionFor(
-          part.name,
           part.id,
           results.has(part.id) && awaiting === null,
         );
@@ -261,7 +254,6 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
             toolName: part.name,
             input: part.input,
             state: toolCallState(
-              part.name,
               results.get(part.id),
               gate,
               decided,

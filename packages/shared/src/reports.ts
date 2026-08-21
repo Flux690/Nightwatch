@@ -1,7 +1,7 @@
 // Two parts, two authors, two moments: the ledger the agent appends to as it
 // works, and the report written once at the end over a ledger already complete.
 
-import type { ToolOutcome } from "./messages.js";
+import type { HumanDecision, ToolOutcome } from "./messages.js";
 
 // How a hypothesis resolved. Five, because without a home for "symptom of
 // something upstream" the model must overclaim a root cause or say nothing. A
@@ -132,6 +132,9 @@ export interface ResolvedEvidence {
   // the file really is not there - while a cited crash proves nothing about the
   // fleet, and the report must not read the two the same way.
   outcome?: ToolOutcome;
+  // Present only where a person was asked. A cited call they declined never ran,
+  // which is a different thing again from one that ran and found nothing.
+  humanDecision?: HumanDecision;
 }
 
 // Computed from the ledger on every read and never stored, so no tool input can
@@ -149,8 +152,8 @@ export interface GatedCall {
   // When it answered, which is what places it on the timeline.
   at: string;
   decision: "approved" | "rejected";
-  // Present only on a call that did not simply answer; `rejected` is the class a
-  // human authored, every other member the API's own reading.
+  // Present only on a call that did not simply answer, and always the API's own
+  // reading of the tool: what the person said is `decision` above.
   outcome?: ToolOutcome;
   // Only worth reading on a failure: a success is its own output, which the
   // transcript already shows.

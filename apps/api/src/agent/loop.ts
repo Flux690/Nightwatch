@@ -55,7 +55,6 @@ import type {
   MessagePart,
   NormalizedAlert,
   SubmittedReport,
-  ToolOutcome,
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
@@ -68,17 +67,27 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-/* `outcome` is not a wire field, so a provider snapshot always comes back
-   without it. The run knew it before the row existed; this puts it back. */
+/* Neither `outcome` nor `humanDecision` is a wire field, so a provider snapshot
+   always comes back without them. The run knew both before the row existed; this
+   puts them back. */
+type ResultAnnotation = Pick<ToolResult, "outcome" | "humanDecision">;
+
 function stampOutcomes(
   parts: MessagePart[],
-  outcomes: ReadonlyMap<string, ToolOutcome>,
+  annotations: ReadonlyMap<string, ResultAnnotation>,
 ): MessagePart[] {
-  if (outcomes.size === 0) return parts;
+  if (annotations.size === 0) return parts;
   return parts.map((part) => {
     if (part.type !== "tool_result") return part;
-    const outcome = outcomes.get(part.toolCallId);
-    return outcome === undefined ? part : { ...part, outcome };
+    const noted = annotations.get(part.toolCallId);
+    if (noted === undefined) return part;
+    return {
+      ...part,
+      ...(noted.outcome !== undefined && { outcome: noted.outcome }),
+      ...(noted.humanDecision !== undefined && {
+        humanDecision: noted.humanDecision,
+      }),
+    };
   });
 }
 
@@ -97,7 +106,7 @@ function persistNewTurns(
   fromCount: number,
   seqOffset: number,
   harnessTurns: ReadonlySet<number>,
-  outcomes: ReadonlyMap<string, ToolOutcome>,
+  outcomes: ReadonlyMap<string, ResultAnnotation>,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
@@ -290,12 +299,18 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   // Held for the run, not the turn: a resumed turn's results are stamped from
   // what the suspend parked rather than from tools this run ran.
-  const seenOutcomes = new Map<string, ToolOutcome>();
+  const seenOutcomes = new Map<string, ResultAnnotation>();
   const noteOutcomes = (results: readonly ToolResult[]): void => {
     for (const result of results) {
-      if (result.outcome !== undefined) {
-        seenOutcomes.set(result.tool_use_id, result.outcome);
+      if (result.outcome === undefined && result.humanDecision === undefined) {
+        continue;
       }
+      seenOutcomes.set(result.tool_use_id, {
+        ...(result.outcome !== undefined && { outcome: result.outcome }),
+        ...(result.humanDecision !== undefined && {
+          humanDecision: result.humanDecision,
+        }),
+      });
     }
   };
 

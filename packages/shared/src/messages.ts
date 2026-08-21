@@ -35,16 +35,26 @@ export const TOOL_OUTCOMES = [
   "permission",
   // The tool itself broke.
   "system",
-  // The user said no, so it never ran. The only member a human authors, and the
-  // only record that a gated call was declined: the output holds the refusal we
-  // sent the model, not the decision behind it.
-  "rejected",
 ] as const;
 
 export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
 
 export function isToolOutcome(value: unknown): value is ToolOutcome {
   return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
+}
+
+/* What a person said when the harness stopped and asked them. Recorded at the
+   call, never re-derived: the registry can say a tool needs releasing, but only
+   this can say anyone was asked, and a call the harness refused was not.
+
+   Deliberately not a member of ToolOutcome - that says how the tool behaved,
+   and a human is not a tool. The same split `effect` and `policy` already make. */
+export const HUMAN_DECISIONS = ["approved", "rejected", "answered"] as const;
+
+export type HumanDecision = (typeof HUMAN_DECISIONS)[number];
+
+export function isHumanDecision(value: unknown): value is HumanDecision {
+  return typeof value === "string" && HUMAN_DECISIONS.some((d) => d === value);
 }
 
 export interface ToolResultPart {
@@ -57,6 +67,10 @@ export interface ToolResultPart {
   // Our own classification, which no wire format carries. Stamped from what the
   // run knew, which is what lets it live with the call instead of beside it.
   outcome?: ToolOutcome;
+  /* Present only when a person was actually asked. Absent is the answer for
+     every call that never reached a gate - including one the harness refused
+     because the tool was not offered, which used to read as an approval. */
+  humanDecision?: HumanDecision;
 }
 
 /* Where the provider summarised the conversation to fit its window. Drawn,

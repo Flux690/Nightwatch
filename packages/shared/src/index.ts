@@ -159,11 +159,14 @@ export type {
   NativeEnvelope,
   CanonicalMessage,
   ToolOutcome,
+  HumanDecision,
 } from "./messages.js";
 export {
   messagePartsToText,
   TOOL_OUTCOMES,
   isToolOutcome,
+  HUMAN_DECISIONS,
+  isHumanDecision,
 } from "./messages.js";
 export type {
   ToolGate,

@@ -12,7 +12,11 @@ import { publishInterruptResolved, publishTranscriptItem } from "./stream.js";
 import { toolCallCard } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
-import type { ApprovalResponse, RespondRequest } from "@nightwarden/shared";
+import type {
+  ApprovalResponse,
+  HumanDecision,
+  RespondRequest,
+} from "@nightwarden/shared";
 
 export class HumanInputError extends Error {
   constructor(
@@ -83,14 +87,18 @@ function ensureDeleted(sessionId: string): void {
 function unpause(
   sessionId: string,
   toolUseId: string,
-  status: "approved" | "rejected" | "answered",
+  status: HumanDecision,
   completedResults: ToolResult[],
-  gatedResult: ToolResult,
+  answer: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
 ): HumanInputActionResult {
   ensureDeleted(sessionId);
 
   const resolvedAt = new Date().toISOString();
+  /* The one place that knows a person was asked, so the one place that can say
+     so. Stamped here rather than at each call site above: every path through
+     this function had a human at the end of it, and none of the others did. */
+  const gatedResult: ToolResult = { ...answer, humanDecision: status };
   // Read off the result rather than passed beside it: how a call went belongs
   // to the call, and two ways to say it is one way to say two things.
   const { outcome } = gatedResult;
@@ -265,10 +273,10 @@ export async function respondToPendingHumanInput(
         ? `They said: "${answer}". Take that into account`
         : "They gave no reason. Take the rejection itself as the signal"
     }, then continue the investigation with a different approach. Do not call this tool again with the same arguments.`,
+    /* No outcome: the tool never ran, so there is nothing to say about how it
+       behaved. That a person chose this is said by humanDecision, which unpause
+       stamps - it is a fact about them, not about the tool. */
     is_error: true,
-    // The one outcome a human authors. The output carries the refusal we sent
-    // the model, which reads as a failure; only this says a person chose it.
-    outcome: "rejected",
   };
   logger.info({ sessionId, tool: call.name }, "rejected");
   return unpause(

@@ -2,6 +2,7 @@
 // both ends compile against one definition.
 export type {
   ToolOutcome,
+  HumanDecision,
   ToolGate,
   ToolCallState,
   UserTurnItem,

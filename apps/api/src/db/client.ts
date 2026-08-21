@@ -90,6 +90,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- When a person ended the run. Recorded, because otherwise a stopped run is
   -- indistinguishable from one that concluded nothing.
   stopped_at           TEXT,
+  -- The gate this session is parked on, all null when it is not parked. Columns
+  -- rather than a table because there is at most one per session and it was only
+  -- ever read by session id. What a person decided is not here: that is durable
+  -- and lives on the transcript, while these three are live control state.
+  awaiting_tool_use_id TEXT,
+  awaiting_kind        TEXT      CHECK (awaiting_kind IN
+                                   ('approval', 'clarification', 'continue')),
+  -- Results of the calls that ran beside the gated one, with nowhere valid to
+  -- sit until it is answered too: the wire needs one message for the whole turn.
+  awaiting_results     TEXT      NOT NULL DEFAULT '[]',
+  -- Stamped before an approved call runs. A claim that outlives the process is
+  -- what says the write may already have happened, so it is never replayed
+  -- silently. Intent recorded before the fact, which no append-only row can do.
+  attempt_started_at   TEXT,
   report               TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL
@@ -131,15 +145,6 @@ CREATE TABLE IF NOT EXISTS session_transcript (
   canonical      TEXT,
   timestamp      TEXT      NOT NULL,
   PRIMARY KEY (session_id, seq)
-);
-
-CREATE TABLE IF NOT EXISTS pending_human_input (
-  session_id            TEXT   NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-  tool_use_id           TEXT   NOT NULL,
-  kind                  TEXT   NOT NULL DEFAULT 'approval',
-  completed_results     TEXT   NOT NULL DEFAULT '[]',
-  claimed_at            TEXT,
-  PRIMARY KEY (session_id)
 );
 
 `;

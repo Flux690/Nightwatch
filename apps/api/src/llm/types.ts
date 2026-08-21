@@ -2,6 +2,7 @@
 // through these shapes, never to a vendor SDK directly.
 
 import type {
+  HumanDecision,
   MessagePart,
   NativeEnvelope,
   ToolName,
@@ -32,9 +33,11 @@ export interface ToolResult {
   content: string;
   is_error?: boolean;
   /* Carried alongside the wire fields, never sent: adapters read the three above
-     and ignore this. It rides here so a result that crosses a suspend - parked
-     in the interrupt row as JSON - comes back knowing how it went. */
+     and ignore these. They ride here so a result that crosses a suspend - parked
+     on the session row as JSON - comes back knowing how it went. */
   outcome?: ToolOutcome;
+  // Set only where a person was asked, which is the only place it can be known.
+  humanDecision?: HumanDecision;
 }
 
 export interface ChatResponse {

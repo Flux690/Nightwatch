@@ -702,7 +702,6 @@ describe("ReportPanel", () => {
             target: null,
             at: "2026-07-21T12:12:00.000Z",
             decision: "rejected",
-            outcome: "rejected",
             result: null,
           },
           {
