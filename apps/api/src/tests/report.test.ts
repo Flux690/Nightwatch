@@ -697,6 +697,39 @@ describe("the investigation record", () => {
       );
     });
 
+    /* A model that cannot see it is looping would spend the whole budget asking
+       for a tool that is not there. Only the clock used to stop it. */
+    it("ends a run that spends three turns asking for tools it does not have", async () => {
+      const barren = {
+        toolUses: [{ id: "tu-x", name: "GetK8sLogs", input: { target: "x" } }],
+        text: "",
+      };
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-1" }] },
+          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-2" }] },
+          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-3" }] },
+          // Never reached: the run ends on the third barren turn.
+          { toolUses: [], text: "still going" },
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("barren"),
+      ]);
+
+      expect(await runSession({ sessionId, alerts: [alert("barren")] })).toBe(
+        "completed",
+      );
+
+      const ended = getTranscriptRows(sessionId).find(
+        (row) => row.kind === "error",
+      );
+      expect(ended?.content).toContain("asked only for tools");
+      // It says what it did have, so the ending is actionable rather than blunt.
+      expect(ended?.content).toContain("RecordHypothesis");
+    });
+
     // From a real run with no runner connected: GetK8sLogs exists and was
     // withheld, the rest were invented, and all three got one sentence.
     it("tells a withheld tool from an invented one, and names a near miss", async () => {

@@ -50,6 +50,36 @@ const CLARIFICATION_OPTIONS = [
   },
 ];
 
+/* The gate the product is built on, asserted from the registry rather than tool
+   by tool: a write that reaches a production machine waits for a human. A tool
+   added with the wrong policy passes every other test in this suite. */
+describe("policy-gate: no runner write runs unapproved", () => {
+  it("gates every write that leaves the API for a machine", () => {
+    const runnerWrites = TOOL_REGISTRY.filter(
+      (tool) => tool.on === "runner" && tool.effect === "write",
+    );
+    expect(runnerWrites.length).toBeGreaterThan(0);
+    for (const tool of runnerWrites) {
+      expect(tool.policy, tool.schema.name).toBe("approve");
+    }
+  });
+
+  /* The exception, stated so it cannot widen quietly: a repo write lands in a
+     disposable container on a throwaway branch, which is where its safety is. */
+  it("lets an api-side write run only where the sandbox is the gate", () => {
+    const ungated = TOOL_REGISTRY.filter(
+      (tool) => tool.effect === "write" && tool.policy === "auto",
+    );
+    expect(ungated.map((tool) => tool.schema.name).sort()).toEqual([
+      "Bash",
+      "Edit",
+      "OpenPullRequest",
+      "Write",
+    ]);
+    for (const tool of ungated) expect(tool.on, tool.schema.name).toBe("api");
+  });
+});
+
 // The reason cannot be forgotten because it is part of the call's shape, the
 // same way approval cannot because it is the entry's policy.
 describe("policy-gate: the reason rides every gated call", () => {

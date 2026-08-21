@@ -7,7 +7,7 @@ import {
   type Platform,
   type RunnerCommandMessage,
 } from "@nightwarden/shared";
-import type { ToolSchema } from "../llm/types.js";
+import type { ToolResult, ToolSchema } from "../llm/types.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -43,6 +43,13 @@ import { resolveCommand } from "../ws/command-transport.js";
 import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
 import { buildChatContext } from "../agent/context.js";
 import { connectedPlatforms } from "../agent/policy.js";
+import { randomUUID } from "node:crypto";
+import { runSession } from "../agent/loop.js";
+import { seedChatSession } from "./session-helper.js";
+import {
+  deleteLokiIntegration,
+  saveLokiIntegration,
+} from "../db/integrations.js";
 import { mountApi } from "./api-server.js";
 import {
   kubernetesManifest,
@@ -456,6 +463,59 @@ describe("toolset assembly by fleet capabilities", () => {
         resumed.chat.mock.calls[0]?.[0] as ToolSchema[]
       ).map((s) => s.name);
       expect(resumedNames).not.toContain("RecordHypothesis");
+    });
+  });
+
+  /* The toolset is re-read every turn, so it can change under a running model.
+     Told nothing, the model reads that as the rules having moved. */
+  describe("a toolset that changes mid-run", () => {
+    let cleanupDb: () => void;
+    beforeAll(() => {
+      cleanupDb = useTempDb();
+    });
+    afterAll(() => cleanupDb());
+
+    it("names what appeared, and offers it on the turn after", async () => {
+      const provider = scriptRunner.create();
+      /* Cast because getMockImplementation unions in a constructor signature
+         this method cannot have. */
+      const record = provider.appendToolResults.getMockImplementation() as
+        ((results: ToolResult[]) => void) | undefined;
+      /* Connected as the first turn's results land, which is between the two
+         reads of the toolset - where a user connecting Loki in another tab
+         would land. */
+      provider.appendToolResults.mockImplementation((results) => {
+        saveLokiIntegration({
+          baseUrl: "http://loki.internal:3100",
+          orgId: null,
+          authorization: null,
+        });
+        record?.(results);
+      });
+      mockCreateProvider.mockImplementationOnce(() => provider);
+      setScript([
+        {
+          text: "",
+          toolUses: [{ id: "tu-a", name: "ListDockerServices", input: {} }],
+        },
+        { text: "Done.", toolUses: [] },
+      ]);
+
+      const sessionId = randomUUID();
+      seedChatSession(sessionId, "what is running?");
+      await runSession({ sessionId, userMessage: "what is running?" });
+
+      const told = provider.appendUserMessage.mock.calls
+        .map(([msg]) => String(msg))
+        .find((msg) => msg.includes("connected while you were working"));
+      expect(told, "the model was never told").toBeDefined();
+      expect(told).toContain("QueryLogs");
+
+      // And the tool is actually on the next request, not only announced.
+      const second = (provider.chat.mock.calls[1]?.[0] ?? []) as ToolSchema[];
+      expect(second.map((s) => s.name)).toContain("QueryLogs");
+
+      deleteLokiIntegration();
     });
   });
 });
