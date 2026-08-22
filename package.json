@@ -1,6 +1,6 @@
 {
   "name": "nightwarden",
-  "version": "0.3.115",
+  "version": "0.3.116",
   "private": true,
   "engines": {
     "node": ">=24",
@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "vitest run",
     "dev": "pnpm --filter @nightwarden/api --filter @nightwarden/console --parallel dev",
     "dev:docker-runner": "pnpm --filter @nightwarden/docker-runner dev",
     "dev:kubernetes-runner": "pnpm --filter @nightwarden/kubernetes-runner dev",
@@ -23,6 +23,7 @@
     "@types/node": "26.1.1",
     "esbuild": "0.28.1",
     "prettier": "3.9.5",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }
 }

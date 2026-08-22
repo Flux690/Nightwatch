@@ -2,13 +2,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 
+// Injected by vitest.config.ts, which runs in Node and is the only place certain
+// of this package's location however the suite was started.
+const SRC = process.env["CONSOLE_SRC"] ?? "";
+
 /* Every token points at a step, each band is evenly spaced, and every pair
    clears its WCAG floor. Converted here because a browser reports oklch() back
    verbatim, and a first prototype's rgb() regex read L, C and H as r, g and b. */
 
 type Step = { L: number; C: number; H: number };
 
-const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8");
+const css = readFileSync(join(SRC, "styles.css"), "utf8");
 const root = css.matchAll(/:root\s*\{([\s\S]*?)\n\}/g);
 const declarations = new Map<string, string>();
 for (const block of root) {
@@ -506,7 +510,7 @@ function sources(
   return into;
 }
 
-const SOURCES = sources(join(process.cwd(), "src"));
+const SOURCES = sources(SRC);
 
 /* Values a utility of this kind may name. Anything else either fails silently
    or invents a rung, which is the drift these bands exist to stop. */

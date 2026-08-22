@@ -95,10 +95,11 @@ jobs:
           push-to-registry: true
 
       # Publishing on every push makes history unbounded, so it is bounded here.
-      # Each build's attestation is a version of its own, so the count is not
-      # ten builds - confirm the depth against a real listing before trusting it.
+      # Three versions per build, not one: the image, the provenance attestation,
+      # and the index tagged sha256-<image digest> that links them. Thirty is ten
+      # builds; counting it in builds would silently keep three.
       - uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ matrix.name }}
           package-type: container
-          min-versions-to-keep: 10
+          min-versions-to-keep: 30
