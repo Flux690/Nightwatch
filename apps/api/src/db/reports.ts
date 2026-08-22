@@ -11,15 +11,6 @@ export function getReport(sessionId: string): Report | undefined {
   return row?.report != null ? (JSON.parse(row.report) as Report) : undefined;
 }
 
-export function hasReport(sessionId: string): boolean {
-  const row = getDb()
-    .prepare(
-      `SELECT 1 FROM sessions WHERE session_id = ? AND report IS NOT NULL`,
-    )
-    .get(sessionId);
-  return row !== undefined;
-}
-
 function emptyReport(): Report {
   return {
     hypotheses: [],

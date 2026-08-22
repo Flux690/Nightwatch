@@ -34,7 +34,7 @@ import {
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
-import { hasReport } from "../db/reports.js";
+import { getReport } from "../db/reports.js";
 import { buildInitialContext } from "../agent/context.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
@@ -205,7 +205,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     // the run has produced a report to infer anything from.
     const created = await waitFor(() => getSession(sessionId));
     expect(created.investigation).toBe(true);
-    expect(hasReport(sessionId)).toBe(false);
+    expect(getReport(sessionId)).toBeUndefined();
 
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
