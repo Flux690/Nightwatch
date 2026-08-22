@@ -15,6 +15,7 @@ import {
 import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
 import { resolveAlertTarget } from "../alerts/resolve-target.js";
+import { stripHarnessMarker } from "./harness-marker.js";
 
 interface InitialContext {
   systemPrompt: string;
@@ -105,9 +106,11 @@ ${alertsSection}
 ${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}${buildMetricsSummary()}
 Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
+  // Stripped whole: labels, annotations and group context are the sender's text,
+  // and nothing we write here contains the marker for it to remove.
   return {
     systemPrompt: systemPromptFor(opts, true),
-    openingTurn,
+    openingTurn: stripHarnessMarker(openingTurn),
   };
 }
 

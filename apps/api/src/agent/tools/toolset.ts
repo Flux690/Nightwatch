@@ -1,4 +1,5 @@
 import { executeRunnerTool } from "../executor.js";
+import { stripHarnessMarker } from "../harness-marker.js";
 import {
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_TOOL_RESULT_CHARS,
@@ -82,7 +83,11 @@ export async function executeTool(
     tool.on === "api"
       ? await tool.execute(input, effectiveCtx)
       : await executeRunnerTool(tool, input, effectiveCtx);
-  const content = withEvidenceId(result.content, ctx.evidenceId);
+  // Stripped here rather than per tool: a log line or a file is the outside
+  // world speaking, and this is the one door all of it comes through.
+  const content = stripHarnessMarker(
+    withEvidenceId(result.content, ctx.evidenceId),
+  );
   if (content.length > MAX_TOOL_RESULT_CHARS) {
     return {
       content: tooLarge(tool.schema.name, content.length),

@@ -9,6 +9,7 @@ import {
 } from "./prompts/report.js";
 import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
+import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
 import { recoveryState } from "../verification/recovery.js";
@@ -380,13 +381,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     }
   };
 
-  /* Tagged, because a provider takes two roles and neither of them is ours: a
-     harness turn is sent as the user's, and a model with no way to tell them
-     apart answers NightWarden as though it were the person - apologising to
-     them for something they never said. The row's `kind` is still what the
-     console reads for origin; text can be typed, so it settles nothing there. */
+  // The one emitter of the marker. The row's `kind` is still what the console
+  // reads for origin.
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
-    provider.appendUserMessage(`<nightwarden>\n${text}\n</nightwarden>`);
+    provider.appendUserMessage(harnessTurn(text));
     harnessTurns.add(provider.snapshot().length - 1);
   };
 
@@ -494,7 +492,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // Persist the new user turn immediately so the console shows it the moment
     // it's sent, instead of waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
-      provider.appendUserMessage(input.userMessage);
+      provider.appendUserMessage(stripHarnessMarker(input.userMessage));
       persistedCount = persistNewTurns(
         provider,
         sessionId,
@@ -515,9 +513,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       );
     }
   } else {
-    // An alert has no human to type the first turn, so NightWarden writes it.
-    // A person's own first message is theirs, and is marked as neither.
-    provider.start(input.userMessage ?? openingTurn ?? "");
+    // An alert has no human to type the first turn, so NightWarden writes it and
+    // marks it as its own. A person's own first message is theirs.
+    provider.start(
+      input.userMessage !== undefined
+        ? stripHarnessMarker(input.userMessage)
+        : openingTurn !== null
+          ? harnessTurn(openingTurn)
+          : "",
+    );
     if (input.userMessage === undefined && openingTurn !== null) {
       harnessTurns.add(0);
     }

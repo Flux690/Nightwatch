@@ -4,6 +4,7 @@ import {
   getPendingHumanInputBySessionId,
 } from "../db/interrupts.js";
 import { findToolCall } from "../db/sessions.js";
+import { stripHarnessMarker } from "../agent/harness-marker.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
@@ -196,7 +197,7 @@ export async function respondToPendingHumanInput(
 
   // Before the claim, so a malformed request is refused without taking the lock
   // and wedging the interrupt for the well-formed retry behind it.
-  const answer = text?.trim() ?? "";
+  const answer = stripHarnessMarker(text?.trim() ?? "");
   if (pending.kind === "clarification") {
     if (decision !== undefined) {
       throw new HumanInputError(
