@@ -344,10 +344,8 @@ describe("ReportPanel", () => {
     const prLink = screen.getByRole("link", { name: /#482 bump cache size/ });
     expect(prLink).toHaveAttribute("href", "https://github.com/o/r/pull/482");
 
-    /* And the commits beside them. A change pushed straight to the branch is
-       evidence the same way a merged pull request is; only the pull requests
-       were drawn, so which way the change landed decided whether the report
-       could show it at all. */
+    /* And the commits beside them: a change pushed straight to the branch is
+       evidence the same way a merged pull request is. */
     expect(screen.getByText("9a1c4e7")).toBeInTheDocument();
     expect(screen.getByText("raise the cache ceiling")).toBeInTheDocument();
     // The subject only: a commit body is prose the report has no room for.

@@ -36,7 +36,6 @@ const EMPTY_ITEMS: TranscriptItem[] = [];
 /* What gets pinned above the message box, from the projection or the live
    stream. Only what stops the whole run qualifies: a question and the
    time-budget prompt. An approval gates one tool, so it stays inline. */
-// What is waiting on the user, drawn above the input so it never scrolls away.
 function dockedCard(items: TranscriptItem[]): TranscriptItem | undefined {
   for (const item of items) {
     if (item.kind === "continue_card") {
@@ -53,11 +52,9 @@ function dockedCard(items: TranscriptItem[]): TranscriptItem | undefined {
   return undefined;
 }
 
-/* The report is not a message. It is the artifact the conversation produces,
-   rewritten by every run, so no position among the messages is right: written
-   where it happened it goes stale, and last it sits under a question asked
-   after it. Docked, it is beside the input the whole time and the ordering
-   question stops being asked. */
+/* The report is not a message: every run rewrites it, so no position among them
+   is right. Written where it happened it goes stale, and pushed last it sits
+   under a question asked after it. Docked, it is out of the ordering. */
 function dockedReport(items: TranscriptItem[]): TranscriptItem | undefined {
   return items.find((item) => item.kind === "report_card");
 }

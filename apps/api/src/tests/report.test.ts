@@ -206,10 +206,9 @@ describe("the investigation record", () => {
     return hypotheses[hypotheses.length - 1]!.id;
   }
 
-  /* The report turn's tool, which is never in the toolset: the loop attaches it
-     alone once the ledger gate has passed. Every field is required, so the
-     filled-in ones a case does not care about come from here and a case that is
-     about a missing field overrides it to blank. */
+  /* The report turn's tool, attached alone once the ledger gate has passed.
+     Every field is required, so a case that is about one blank field overrides
+     just that field and takes the rest from here. */
   async function submit(
     sessionId: string,
     input: Record<string, unknown>,
@@ -423,10 +422,8 @@ describe("the investigation record", () => {
       expect(submitted.timeline[0]!.evidenceId).toBeUndefined();
     });
 
-    /* Every field is declared required on the schema the model is shown, so a
-       blank one is refused rather than stored as "none". Accepting it made the
-       contract a suggestion: a report claiming a headline and a recommendation
-       it does not have reads as complete to everyone downstream. */
+    /* Refused rather than stored as "none": a report claiming a headline and a
+       recommendation it does not have reads as complete downstream. */
     it("refuses a blank in a field the schema declares required", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
@@ -1265,10 +1262,9 @@ describe("the investigation record", () => {
     /* The same loop entered again, not a second way to make a report. The
        sentence that re-enters is NightWarden's, so a reader who pressed a button
        is never shown words in their own voice that they did not write. */
-    /* A follow-up writes the report again over the same column, so the request
-       has to carry what is being replaced. Without it the model rewrites from a
-       context that may since have been compacted, and a paragraph it wrote an
-       hour ago disappears with nothing to say it ever existed. */
+    /* A follow-up writes over the same column, so the request has to carry what
+       is being replaced. Without it the model rewrites from a context that may
+       since have been compacted. */
     it("shows a second run the report it is replacing, as its own prior work", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
@@ -1311,10 +1307,8 @@ describe("the investigation record", () => {
       });
     });
 
-    /* A run that has read a great deal and settled nothing is asked about it
-       once, while the results are still close to hand. Counted over calls that
-       answered: a refused call taught the run nothing, so it is no evidence the
-       run should have concluded something by now. */
+    /* A run that has read a great deal and settled nothing is asked once, over
+       calls that answered: a refused call taught the run nothing. */
     describe("the record check", () => {
       function connectRunner() {
         const runnerId = generateRunnerToken("docker", "rc-host").id;

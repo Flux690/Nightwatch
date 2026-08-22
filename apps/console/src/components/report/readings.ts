@@ -1,10 +1,9 @@
 import { asRecord, numberAt, stringAt } from "@/lib/toolResult";
 import { formatBytes } from "@/components/transcript/toolFindings";
 
-/* What a cited result holds, read from its shape rather than its tool name: the
-   declared kind already says what to draw, and these say where the numbers and
-   the lines are. A tool that answers something else reads as nothing, which the
-   caller renders as its one-line reading instead. */
+/* What a cited result holds, read from its shape rather than its tool name. A
+   tool that answers something else reads as nothing, and the caller falls back
+   to its one-line reading. */
 
 // One runner's answer inside a fan-out, or the result itself when there is no
 // envelope. A fleet tool is enveloped even for a single runner.
@@ -85,10 +84,9 @@ export interface ReadingGroup {
   rows: Array<{ key: string; label: string; value: string }>;
 }
 
-/* Every top-level number a result carries, in the order it carries them.
-   Nothing is selected and nothing is ranked: the one-line reading above already
-   says which of them is the finding. Values nested in arrays - a pod, a
-   filesystem, a core - are not read here and stay with that line. */
+/* Every top-level number, in the order it is carried. Nothing is ranked: the
+   one-line reading above already says which is the finding. Values nested in
+   arrays are not read here and stay with that line. */
 export function readingGroups(result: unknown): ReadingGroup[] {
   return scopes(result).flatMap((scope) => {
     const rows = Object.entries(scope.result).flatMap(([key, value]) =>

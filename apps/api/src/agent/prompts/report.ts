@@ -173,11 +173,9 @@ function sentenceFor(gap: ReportGap): string {
 const RECOVERY_SENTENCE =
   "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the user should do in your recommendation. Do not repeat a write that has already run.";
 
-/* Sent once, mid-run, when a run has read a good deal and settled nothing. Not
-   a repair request: nothing has failed, and the honest answer may well be that
-   it is still narrowing. It states what is true and asks, rather than insisting
-   - a run pushed into recording something it has not tested would record a
-   guess, which is the one thing the record must never hold. */
+/* Sent once, mid-run, when a run has read a good deal and settled nothing. It
+   asks rather than insists: a run pushed into recording something it has not
+   tested records a guess, which is what the record must never hold. */
 export function recordCheck(answeredCalls: number): string {
   return `You have made ${answeredCalls} tool calls that returned something, and your investigation record is still empty. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
 }
@@ -206,10 +204,9 @@ function writeLine(call: GatedCall): string {
   return `${call.at}  ${call.toolName}${target}  ${call.decision}`;
 }
 
-/* The questions a write-up answers, asked before it is written rather than left
-   to the field descriptions to imply. Each says that nothing is a real answer,
-   because the alternative to saying so is a model inventing a cause to fill a
-   heading - which is the one failure this whole record exists to prevent. */
+/* Asked before the write-up rather than left to the field descriptions to
+   imply. Each says nothing found is a real answer, because a heading a model
+   must fill is one it will invent for. */
 const REPORT_RUBRIC = `Account for each of these. "None found" is a complete answer to any of them, and an honest one; never invent something to fill a line.
 
 - The root cause: the underlying condition that made this possible.

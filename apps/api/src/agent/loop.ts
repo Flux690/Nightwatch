@@ -233,19 +233,13 @@ const MAX_BARREN_TURNS = 3;
    field the model left blank rather than on the write-up itself. */
 const MAX_REPORT_ATTEMPTS = 3;
 
-/* Answered tool calls before the run is asked whether it has settled anything.
-   Eight is past orientation - listing, logs, metrics and config are four calls
-   of looking around - and long before the budget matters. A check, not a repair
+/* Answered calls before the run is asked whether it has settled anything. Eight
+   is past orientation and long before the budget matters. A check, not a repair
    attempt: nothing has failed, the record is simply still empty. */
 const CALLS_BEFORE_RECORD_CHECK = 8;
 
-// What is wrong with the report just written, read back from the record rather
-// than from the call that wrote it.
 /* Only what the tool could not already refuse. Every field is required and
-   non-blank at the tool, so a stored report has prose in all of them; what is
-   left to check here is the turn that ended without calling the tool at all.
-   A run whose condition never recovered is told so before it writes, by the
-   recovery sentence in the request, rather than caught after. */
+   non-blank there, so what is left is the turn that never called it. */
 function problemWithReport(submitted: SubmittedReport | null): string | null {
   if (submitted === null) {
     /* Says only what is true of both ways to get here: the turn never called
@@ -933,10 +927,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
     }
 
-    /* Counted over calls that answered: a refused call taught the run nothing,
-       so it is no evidence the run should have settled something by now. After
-       the results are on the provider, for the reason the drain above is - a
-       harness turn wedged between a tool_use and its result orphans the pair. */
+    /* Calls that answered only: a refused one taught the run nothing. Counted
+       after the results are on the provider, because a harness turn wedged
+       between a tool_use and its result orphans the pair. */
     answeredCalls += toolResults.filter(
       (result) => result.toolOutcome === undefined,
     ).length;

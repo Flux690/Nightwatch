@@ -42,10 +42,8 @@ const RECORD_HYPOTHESIS_INPUT = z.object({
   evidenceIds: z.array(z.string()).min(1),
 });
 
-/* Every one of these is declared required on the schema the model is shown, so
-   accepting a blank made the contract a suggestion: a report with no headline
-   and no recommendation passed while claiming to have both. The report turn
-   names the field it refused and asks again. */
+/* All declared required on the schema the model is shown, so accepting a blank
+   made the contract a suggestion. The report turn names the field it refused. */
 const SUBMIT_REPORT_INPUT = z.object({
   headline: prose,
   affected: prose,

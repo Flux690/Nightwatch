@@ -1,12 +1,9 @@
 import { transcriptItemKey } from "@nightwarden/shared";
 import type { TranscriptItem } from "./types.js";
 
-/* One list from the two the session holds, so whoever draws it does not also
-   have to assemble it. Lifted out of the column because the parent needs the
-   assembled list too: it decides which items are docked above the chat input
-   rather than drawn inline, and it cannot pick from a list it never sees.
-   Passing a key down for the column to skip worked for one docked card and
-   would not survive a second. */
+/* One list from the two the session holds. Lifted out of the column because the
+   parent decides which items dock above the input, and it cannot pick from a
+   list it never sees. */
 
 export interface MergeInput {
   persisted: TranscriptItem[];

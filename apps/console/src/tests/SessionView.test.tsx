@@ -1766,10 +1766,9 @@ describe("the Agent page", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/agent"));
   });
 
-  /* The report is not a message. It is the artifact the run produces and keeps
-     rewriting, so it is docked beside the input rather than left in the flow:
-     written where it happened it goes stale, and pushed last it sits underneath
-     a question asked after it. Docked, it is out of the ordering entirely. */
+  /* The report is not a message: every run rewrites it. Written where it
+     happened it goes stale, and pushed last it sits under a question asked
+     after it. Docked, it is out of the ordering entirely. */
   it("docks the report beside the input rather than drawing it in the flow", async () => {
     setup([
       { kind: "user_turn", id: "u1", text: "what happened?" },

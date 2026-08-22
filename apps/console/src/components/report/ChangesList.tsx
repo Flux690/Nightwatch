@@ -36,10 +36,8 @@ export function pullRequestsFrom(result: unknown): PullRequest[] {
   });
 }
 
-/* Commits, which GetRecentChanges returns beside the pull requests and which
-   nothing drew. An incident caused by a commit pushed straight to the branch
-   rendered as bare prose while one caused by a pull request got a link, so what
-   a report could show depended on how the change happened to land. */
+/* Returned beside the pull requests and drawn by nothing, so what a report could
+   show depended on how the change happened to land. */
 export interface Commit {
   sha: string;
   message: string;

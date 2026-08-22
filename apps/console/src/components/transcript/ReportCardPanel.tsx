@@ -5,10 +5,8 @@ import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import type { ReportCardItem } from "./types.js";
 import { openReport } from "./openReport.js";
 
-/* The artifact the investigation produces, drawn as a surface rather than as a
-   rule across the transcript. It was a rule when it was always the last thing
-   on the page and read as an ending; docked above the input it is a standing
-   object the run keeps rewriting, and a divider is not what that looks like. */
+/* Drawn as a surface, not a rule. A rule read as an ending when it was always
+   last; docked, it is a standing object the run keeps rewriting. */
 
 const PHASE: Record<
   ReportCardItem["state"]["phase"],

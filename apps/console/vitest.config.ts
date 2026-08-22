@@ -6,10 +6,9 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    /* This package's own src, resolved here because only the config is certain
-       of it: cwd is the repo root under the root run and this package under a
-       filtered one, and Vite does not leave import.meta.url a file: URL for a
-       test transformed for jsdom. */
+    /* Resolved here because only the config is certain of it: cwd differs
+       between the root run and a filtered one, and import.meta.url is not a
+       file: URL in a test transformed for jsdom. */
     env: {
       CONSOLE_SRC: fileURLToPath(new URL("./src", import.meta.url)),
     },
