@@ -64,4 +64,17 @@ export const METRICS_SOURCE_CONTENT: Record<
       "Thanos has no auth of its own, so this is whatever your proxy expects.",
     warnings: [],
   },
+  amp: {
+    queryPlaceholder:
+      "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-.../",
+    queryHelp:
+      "Your workspace's query endpoint. Every request is signed with the AWS credentials below instead of a header.",
+    rulesPlaceholder:
+      "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-.../",
+    rulesHelp: `Usually the same workspace endpoint. ${RULES_WHY}`,
+    authHelp: "An IAM user or role with query access to this workspace.",
+    warnings: [
+      "AMP's rules confirmation is unverified against a live workspace - if it does not work, leave the rules URL empty and rely on your alert source's resolved notification instead.",
+    ],
+  },
 };

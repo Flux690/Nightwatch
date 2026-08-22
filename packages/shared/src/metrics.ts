@@ -7,6 +7,7 @@ export const METRICS_SOURCE_KINDS = [
   "victoriametrics",
   "mimir",
   "thanos",
+  "amp",
 ] as const;
 
 export type MetricsSourceKind = (typeof METRICS_SOURCE_KINDS)[number];
@@ -15,9 +16,17 @@ export function isMetricsSourceKind(value: string): value is MetricsSourceKind {
   return (METRICS_SOURCE_KINDS as readonly string[]).includes(value);
 }
 
-/* What the console sends for one endpoint: an Authorization value and a tenant,
-   the shape Loki already uses. A basic pair is its own field because Grafana
-   Cloud hands out an instance id and a token, never a base64 blob. */
+// AMP signs every request with these instead of a static header.
+export interface AmpCredential {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  sessionToken?: string;
+}
+
+/* What the console sends for one endpoint: an Authorization value and a
+   tenant, the shape Loki already uses. The four AMP fields apply only when
+   kind is "amp". */
 export interface MetricsEndpointInput {
   url: string;
   authHeader?: string;
@@ -26,6 +35,10 @@ export interface MetricsEndpointInput {
   // Sent as X-Scope-OrgID. Mimir requires it whenever multi-tenancy is on and
   // ignores it when off, so sending it where configured is always safe.
   orgId?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  region?: string;
+  sessionToken?: string;
 }
 
 // Never the credential itself: a status says what is configured, not its value.

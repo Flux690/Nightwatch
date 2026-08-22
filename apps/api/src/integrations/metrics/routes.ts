@@ -15,10 +15,10 @@ import {
 import { logger } from "../../logger.js";
 import { MetricsApiError, instantQuery, alertingRules } from "./client.js";
 import {
-  authorizationOf,
   endpointFrom,
   getMetricsSource,
   listMetricsSources,
+  secretFor,
   statusOf,
 } from "./sources.js";
 import { METRICS_PRESETS } from "./presets.js";
@@ -29,6 +29,11 @@ const EndpointSchema = z.object({
   basicUsername: z.string().min(1).optional(),
   basicPassword: z.string().min(1).optional(),
   orgId: z.string().min(1).optional(),
+  // AMP only: SigV4 request-signing credentials in place of the above.
+  accessKeyId: z.string().min(1).optional(),
+  secretAccessKey: z.string().min(1).optional(),
+  region: z.string().min(1).optional(),
+  sessionToken: z.string().min(1).optional(),
 });
 
 const ConnectSchema = z.object({
@@ -103,19 +108,19 @@ export async function registerMetricsRoutes(
       const { kind, query, rules } = parsed.data;
       const name = availableName(kind);
       try {
-        await instantQuery(endpointFrom(query, name), "up");
+        await instantQuery(endpointFrom(query, name, kind), "up");
         if (rules !== undefined) {
-          await alertingRules(endpointFrom(rules, `${name} rules`));
+          await alertingRules(endpointFrom(rules, `${name} rules`, kind));
         }
         const id = saveMetricsSource({
           kind,
           label: name,
           queryUrl: query.url,
-          queryAuthorization: authorizationOf(query),
+          queryAuthorization: secretFor(query, kind),
           queryOrgId: query.orgId ?? null,
           rulesUrl: rules?.url ?? null,
           rulesAuthorization:
-            rules === undefined ? null : authorizationOf(rules),
+            rules === undefined ? null : secretFor(rules, kind),
           rulesOrgId: rules?.orgId ?? null,
         });
         logger.info({ kind, id, url: query.url }, "metrics source connected");

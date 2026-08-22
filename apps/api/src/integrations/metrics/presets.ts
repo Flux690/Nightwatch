@@ -43,4 +43,11 @@ export const METRICS_PRESETS: Record<MetricsSourceKind, MetricsPreset> = {
     // the Prometheus filter params since thanos-io#6703 closed in January 2025.
     rulesOnQueryEndpoint: true,
   },
+  amp: {
+    label: "Amazon Managed Prometheus",
+    // Unverified against a live workspace: AMP's rule management API is a
+    // separate AWS surface, not necessarily this Prometheus-shaped one.
+    metricMetadata: true,
+    rulesOnQueryEndpoint: true,
+  },
 };

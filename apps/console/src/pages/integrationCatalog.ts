@@ -71,6 +71,12 @@ export const INTEGRATION_CATALOG: Record<IntegrationSlug, IntegrationIdentity> =
       description:
         "Query Thanos and read the rules it aggregates from your rulers.",
     },
+    amp: {
+      label: "Amazon Managed Prometheus",
+      logo: "/logos/amp.svg",
+      description:
+        "Query Amazon Managed Service for Prometheus, signed with your AWS credentials.",
+    },
     loki: {
       label: "Grafana Loki",
       logo: "/logos/loki.svg",

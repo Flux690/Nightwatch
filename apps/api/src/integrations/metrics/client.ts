@@ -1,5 +1,6 @@
-import type { MetricsErrorCode } from "@nightwarden/shared";
+import type { AmpCredential, MetricsErrorCode } from "@nightwarden/shared";
 import { describeNetworkFailure } from "../reachability.js";
+import { signedRequest } from "./sigv4.js";
 
 /* The Prometheus HTTP API, and nothing else. Every source we support speaks
    it, so there is one client here and no per-product adapter; what varies is
@@ -24,6 +25,9 @@ export interface MetricsEndpoint {
   authorization: string | null;
   orgId: string | null;
   name: string;
+  // Set only for AMP: every request is signed with these instead of carrying
+  // `authorization`, which stays null when this is set.
+  sigv4?: AmpCredential;
 }
 
 // One series per labelset; instant results are normalized to a single-entry
@@ -60,18 +64,23 @@ async function metricsFetch(
   // Mimir requires a tenant whenever multi-tenancy is on and ignores it when
   // off, so sending it where one is configured is always safe.
   if (endpoint.orgId !== null) headers["X-Scope-OrgID"] = endpoint.orgId;
+  const init: RequestInit = {
+    headers:
+      form === undefined
+        ? headers
+        : { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+    ...(form !== undefined && {
+      method: "POST",
+      body: new URLSearchParams(form).toString(),
+    }),
+  };
+  const url = joinUrl(endpoint.url, path);
   let res: Response;
   try {
-    res = await fetch(joinUrl(endpoint.url, path), {
-      headers:
-        form === undefined
-          ? headers
-          : { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
-      ...(form !== undefined && {
-        method: "POST",
-        body: new URLSearchParams(form).toString(),
-      }),
-    });
+    res =
+      endpoint.sigv4 === undefined
+        ? await fetch(url, init)
+        : await fetch(await signedRequest(endpoint.sigv4, url, init));
   } catch (err) {
     throw new MetricsApiError(
       "network",

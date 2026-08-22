@@ -92,6 +92,7 @@ export {
 } from "./tools/names.js";
 export { METRICS_SOURCE_KINDS, isMetricsSourceKind } from "./metrics.js";
 export type {
+  AmpCredential,
   MetricsSourceKind,
   MetricsSourceStatus,
   MetricsEndpointInput,

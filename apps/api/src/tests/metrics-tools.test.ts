@@ -45,20 +45,27 @@ function json(body: unknown, status = 200): Response {
 }
 
 // Routes the two query endpoints the tools touch; anything else fails loudly.
+// A signed AMP request arrives as a Request object (metricsFetch calls
+// fetch(signedRequest) with no second argument), everything else as (url, init).
 function installPromMock(mock: PromMock): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: unknown, init?: RequestInit): Promise<Response> => {
-      const url = String(input);
+      const isRequest = input instanceof Request;
+      const url = isRequest ? (input as Request).url : String(input);
       if (!url.includes("/api/v1/query")) {
         throw new Error(`Unexpected Prometheus request in test: ${url}`);
       }
+      const body = isRequest
+        ? await (input as Request).clone().text()
+        : String(init?.body ?? "");
+      const authorization = isRequest
+        ? ((input as Request).headers.get("Authorization") ?? undefined)
+        : (init?.headers as Record<string, string>)["Authorization"];
       mock.requests.push({
         path: url.slice(url.indexOf("/api/v1")),
-        params: new URLSearchParams(String(init?.body ?? "")),
-        authorization: (init?.headers as Record<string, string>)[
-          "Authorization"
-        ],
+        params: new URLSearchParams(body),
+        authorization,
       });
       if (mock.status === "error") {
         return json(
@@ -158,6 +165,34 @@ describe("metrics tools through the tool dispatch", () => {
 
     await executeTool(instant, { query: "up" }, ctx);
     expect(mock.requests[1]!.params.get("time")).toBeNull();
+  });
+
+  it("signs an AMP query with SigV4 instead of sending a static header", async () => {
+    connect({
+      kind: "amp",
+      label: "AMP",
+      queryUrl:
+        "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-test",
+      queryAuthorization: JSON.stringify({
+        accessKeyId: "AKIDEXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        region: "us-east-1",
+      }),
+      rulesUrl: null,
+      rulesAuthorization: null,
+    });
+    mock.result = [{ metric: { name: "api" }, value: [1752667200, "1"] }];
+
+    const result = await executeTool(
+      instant,
+      { query: "up" },
+      mintSession(ALERT),
+    );
+
+    expect(result.toolOutcome).toBeUndefined();
+    expect(mock.requests[0]!.authorization).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-east-1\/aps\/aws4_request/,
+    );
   });
 
   it("range query windows around firedAt with an auto step, echoing the window in the result", async () => {

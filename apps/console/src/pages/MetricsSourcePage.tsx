@@ -23,12 +23,19 @@ import { METRICS_SOURCE_CONTENT } from "./metricsSourceContent";
 import { INTEGRATION_CATALOG } from "./integrationCatalog";
 import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
+// A superset draft rather than a discriminated union: one state shape, one
+// onChange signature, regardless of kind. Only AMP reads the four AWS fields;
+// toInput picks which half of the draft it sends.
 interface EndpointDraft {
   url: string;
   authHeader: string;
   basicUsername: string;
   basicPassword: string;
   orgId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  sessionToken: string;
 }
 
 const EMPTY: EndpointDraft = {
@@ -37,10 +44,32 @@ const EMPTY: EndpointDraft = {
   basicUsername: "",
   basicPassword: "",
   orgId: "",
+  accessKeyId: "",
+  secretAccessKey: "",
+  region: "",
+  sessionToken: "",
 };
 
 // Only what the user filled in travels: an empty field is not a credential.
-function toInput(draft: EndpointDraft): MetricsEndpointInput {
+function toInput(
+  draft: EndpointDraft,
+  kind: MetricsSourceKind,
+): MetricsEndpointInput {
+  if (kind === "amp") {
+    return {
+      url: draft.url.trim(),
+      ...(draft.accessKeyId.trim() && {
+        accessKeyId: draft.accessKeyId.trim(),
+      }),
+      ...(draft.secretAccessKey.trim() && {
+        secretAccessKey: draft.secretAccessKey.trim(),
+      }),
+      ...(draft.region.trim() && { region: draft.region.trim() }),
+      ...(draft.sessionToken.trim() && {
+        sessionToken: draft.sessionToken.trim(),
+      }),
+    };
+  }
   return {
     url: draft.url.trim(),
     ...(draft.authHeader.trim() && { authHeader: draft.authHeader.trim() }),
@@ -128,6 +157,97 @@ function EndpointFields({
   );
 }
 
+// AMP signs every request instead of carrying a header, so it takes AWS
+// credentials in place of EndpointFields' header/basic-auth pair.
+function AmpCredentialFields({
+  idPrefix,
+  draft,
+  onChange,
+  authHelp,
+}: {
+  idPrefix: string;
+  draft: EndpointDraft;
+  onChange: (next: EndpointDraft) => void;
+  authHelp: string;
+}): React.JSX.Element {
+  return (
+    <>
+      <div className="flex max-w-control gap-3">
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`${idPrefix}-access-key`}>
+            Access key ID
+          </FieldLabel>
+          <FieldDescription>{authHelp}</FieldDescription>
+          <Input
+            className="max-w-control"
+            id={`${idPrefix}-access-key`}
+            value={draft.accessKeyId}
+            onChange={(e) =>
+              onChange({ ...draft, accessKeyId: e.currentTarget.value })
+            }
+          />
+        </Field>
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`${idPrefix}-secret-key`}>
+            Secret access key
+          </FieldLabel>
+          <Input
+            className="max-w-control"
+            id={`${idPrefix}-secret-key`}
+            type="password"
+            value={draft.secretAccessKey}
+            onChange={(e) =>
+              onChange({ ...draft, secretAccessKey: e.currentTarget.value })
+            }
+          />
+        </Field>
+      </div>
+      <div className="flex max-w-control gap-3">
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`${idPrefix}-region`}>Region</FieldLabel>
+          <Input
+            className="max-w-control"
+            id={`${idPrefix}-region`}
+            placeholder="us-east-1"
+            value={draft.region}
+            onChange={(e) =>
+              onChange({ ...draft, region: e.currentTarget.value })
+            }
+          />
+        </Field>
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`${idPrefix}-session-token`}>
+            Session token (optional)
+          </FieldLabel>
+          <Input
+            className="max-w-control"
+            id={`${idPrefix}-session-token`}
+            type="password"
+            value={draft.sessionToken}
+            onChange={(e) =>
+              onChange({ ...draft, sessionToken: e.currentTarget.value })
+            }
+          />
+        </Field>
+      </div>
+    </>
+  );
+}
+
+function CredentialFields(props: {
+  kind: MetricsSourceKind;
+  idPrefix: string;
+  draft: EndpointDraft;
+  onChange: (next: EndpointDraft) => void;
+  authHelp: string;
+}): React.JSX.Element {
+  return props.kind === "amp" ? (
+    <AmpCredentialFields {...props} />
+  ) : (
+    <EndpointFields {...props} />
+  );
+}
+
 export function MetricsSourcePage({
   kind,
 }: {
@@ -156,10 +276,10 @@ export function MetricsSourcePage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind,
-          query: toInput(query),
+          query: toInput(query, kind),
           // Absent rather than empty: a source with no rules endpoint is a
           // supported configuration, and the card says what it costs.
-          ...(rules.url.trim() !== "" && { rules: toInput(rules) }),
+          ...(rules.url.trim() !== "" && { rules: toInput(rules, kind) }),
         }),
       }),
     onMutate: () => setConnectError(null),
@@ -276,7 +396,8 @@ export function MetricsSourcePage({
               }
             />
           </Field>
-          <EndpointFields
+          <CredentialFields
+            kind={kind}
             idPrefix="metrics-query"
             draft={query}
             onChange={setQuery}
@@ -299,11 +420,16 @@ export function MetricsSourcePage({
             />
           </Field>
           {rules.url.trim() !== "" && (
-            <EndpointFields
+            <CredentialFields
+              kind={kind}
               idPrefix="metrics-rules"
               draft={rules}
               onChange={setRules}
-              authHelp="The rules endpoint often wants its own credential - on Grafana Cloud a service account token rather than the metrics one."
+              authHelp={
+                kind === "amp"
+                  ? "The rules endpoint often wants its own IAM credential."
+                  : "The rules endpoint often wants its own credential - on Grafana Cloud a service account token rather than the metrics one."
+              }
             />
           )}
 

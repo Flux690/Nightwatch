@@ -515,6 +515,39 @@ describe("metrics source routes", () => {
     expect(rawSecrets("mimir")).not.toContain("glc-token");
   });
 
+  // AMP signs every request instead of carrying a header, so the probe itself
+  // must arrive signed - checked on the real Request the client sends.
+  it("signs an AMP probe with SigV4 instead of a static header", async () => {
+    let seen: Request | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        seen = input as Request;
+        return jsonResponse(PROM_OK);
+      }),
+    );
+
+    await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload: {
+        kind: "amp",
+        query: {
+          url: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-test",
+          accessKeyId: "AKIDEXAMPLE",
+          secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          region: "us-east-1",
+        },
+      },
+    });
+
+    expect(seen?.headers.get("authorization")).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-east-1\/aps\/aws4_request/,
+    );
+    expect(storedSecret("amp", "query")).toContain("AKIDEXAMPLE");
+    expect(rawSecrets("amp")).not.toContain("wJalrXUtnFEMI");
+  });
+
   /* A legitimate configuration, not an error - and the one the console has to
      say out loud, because without it recovery can never be confirmed. */
   it("accepts a source with no rules endpoint and reports the gap as null", async () => {
