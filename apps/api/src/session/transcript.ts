@@ -78,7 +78,12 @@ function reportCard(sessionId: string): TranscriptItem | null {
   const session = getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
   if (getReport(sessionId)?.submitted != null) {
-    return { kind: "report_card", id: "report", state: { phase: "ready" } };
+    /* A run in flight will write this again over the same column, so the card
+       says so rather than offering a report that is about to be replaced.
+       Without it a follow-up reads as finished from the moment it starts. */
+    return isRunning(sessionId)
+      ? { kind: "report_card", id: "report", state: { phase: "building" } }
+      : { kind: "report_card", id: "report", state: { phase: "ready" } };
   }
   if (isRunning(sessionId) || hasPendingHumanInput(sessionId)) return null;
   const hypotheses = getReport(sessionId)?.hypotheses ?? [];

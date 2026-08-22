@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ConsoleEvent,
   SessionKind,
   TranscriptItem,
 } from "@nightwarden/shared";
 import { transcriptItemKey } from "@nightwarden/shared";
+import { mergeTranscript } from "@/components/transcript/mergeTranscript";
 
 import {
   MessageScrollerProvider,
@@ -35,22 +36,30 @@ const EMPTY_ITEMS: TranscriptItem[] = [];
 /* What gets pinned above the message box, from the projection or the live
    stream. Only what stops the whole run qualifies: a question and the
    time-budget prompt. An approval gates one tool, so it stays inline. */
-function dockedCard(...lists: TranscriptItem[][]): TranscriptItem | undefined {
-  for (const items of lists) {
-    for (const item of items) {
-      if (item.kind === "continue_card") {
-        if (item.state.phase === "awaiting_human") return item;
-        continue;
-      }
-      if (
-        item.kind === "tool_call" &&
-        item.state.phase === "awaiting_human" &&
-        item.state.gate === "clarification"
-      )
-        return item;
+// What is waiting on the user, drawn above the input so it never scrolls away.
+function dockedCard(items: TranscriptItem[]): TranscriptItem | undefined {
+  for (const item of items) {
+    if (item.kind === "continue_card") {
+      if (item.state.phase === "awaiting_human") return item;
+      continue;
     }
+    if (
+      item.kind === "tool_call" &&
+      item.state.phase === "awaiting_human" &&
+      item.state.gate === "clarification"
+    )
+      return item;
   }
   return undefined;
+}
+
+/* The report is not a message. It is the artifact the conversation produces,
+   rewritten by every run, so no position among the messages is right: written
+   where it happened it goes stale, and last it sits under a question asked
+   after it. Docked, it is beside the input the whole time and the ordering
+   question stops being asked. */
+function dockedReport(items: TranscriptItem[]): TranscriptItem | undefined {
+  return items.find((item) => item.kind === "report_card");
 }
 
 function ScrollToEndChatInput(
@@ -73,23 +82,16 @@ function ScrollToEndChatInput(
 }
 
 function TranscriptColumn({
-  persistedItems: fetched,
-  liveItems,
-  pendingEcho,
-  lastEchoText,
+  items,
   showWorking,
-  dockedKey,
   submittingToolUseId,
   onResolve,
   onAnswer,
   onRetryReport,
 }: {
-  persistedItems: TranscriptItem[];
-  liveItems: TranscriptItem[];
-  // Rendered above the chat input instead of inline, so it never scrolls away.
-  dockedKey: string | null;
-  pendingEcho: string | null;
-  lastEchoText: string | null;
+  // Already merged and already stripped of whatever is docked: the column draws
+  // the list it is handed and decides nothing about what belongs in it.
+  items: TranscriptItem[];
   showWorking: boolean;
   submittingToolUseId: string | null;
   onResolve: (
@@ -100,54 +102,6 @@ function TranscriptColumn({
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
   onRetryReport: () => void;
 }): React.JSX.Element {
-  const persistedItems = useMemo(() => {
-    if (lastEchoText === null) return fetched;
-    // The persisted copy of a just-echoed bubble mounts without the fade so
-    // the echo-to-persisted swap has no visible frame.
-    return fetched.map((item) =>
-      item.kind === "user_turn" && item.text === lastEchoText
-        ? { ...item, instant: true }
-        : item,
-    );
-  }, [fetched, lastEchoText]);
-
-  // The fetch can return the persisted user turn before any event is heard
-  // for a newly-created session; if the last user turn already carries the
-  // echoed text, the echo would double-render - suppress it.
-  const echoPersisted = (): boolean => {
-    for (let i = persistedItems.length - 1; i >= 0; i--) {
-      const item = persistedItems[i];
-      if (item?.kind === "user_turn") return item.text === pendingEcho;
-    }
-    return false;
-  };
-  const echoItem: TranscriptItem | null =
-    pendingEcho !== null && !echoPersisted()
-      ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
-      : null;
-
-  // A streamed turn lives only until the transcript holds it. Derived, so the
-  // two can never both be drawn and there is no window where neither is.
-  const savedTurns = new Set(
-    persistedItems.flatMap((item) => ("turn" in item ? [item.turn] : [])),
-  );
-  const live = liveItems.filter(
-    (item) => !("turn" in item) || !savedTurns.has(item.turn),
-  );
-
-  // Live events update the fetched list in place rather than competing with it:
-  // a card can be replaced by a newer version of itself, never discarded.
-  const merged = [...persistedItems, ...(echoItem ? [echoItem] : [])];
-  for (const item of live) {
-    const key = transcriptItemKey(item);
-    const at = merged.findIndex((seen) => transcriptItemKey(seen) === key);
-    if (at === -1) merged.push(item);
-    else merged[at] = item;
-  }
-  const allItems = merged.filter(
-    (item) => transcriptItemKey(item) !== dockedKey,
-  );
-
   return (
     <MessageScrollerContent
       data-testid="transcript-column"
@@ -155,7 +109,7 @@ function TranscriptColumn({
       aria-label="Session transcript"
       className="mx-auto w-full max-w-chat gap-0 px-6 pb-8 pt-4"
     >
-      {allItems.map((item, index) => (
+      {items.map((item, index) => (
         <MessageScrollerItem
           key={transcriptItemKey(item)}
           className={
@@ -180,9 +134,7 @@ function TranscriptColumn({
         </MessageScrollerItem>
       ))}
       {showWorking && (
-        <MessageScrollerItem
-          className={allItems.length === 0 ? "mt-0" : "mt-2"}
-        >
+        <MessageScrollerItem className={items.length === 0 ? "mt-0" : "mt-2"}>
           <WorkingIndicator />
         </MessageScrollerItem>
       )}
@@ -457,7 +409,22 @@ export function SessionView({
     setIsRunning(false);
   }, []);
 
-  const dockedItem = dockedCard(persistedItems, liveItems);
+  const allItems = mergeTranscript({
+    persisted: persistedItems,
+    live: liveItems,
+    pendingEcho,
+    lastEchoText: lastEchoRef.current,
+  });
+  const dockedItem = dockedCard(allItems);
+  const reportItem = dockedReport(allItems);
+  const docked = new Set(
+    [dockedItem, reportItem].flatMap((item) =>
+      item ? [transcriptItemKey(item)] : [],
+    ),
+  );
+  const inlineItems = allItems.filter(
+    (item) => !docked.has(transcriptItemKey(item)),
+  );
   const submittingToolUseId = respond.isPending
     ? (respond.variables?.toolUseId ?? null)
     : null;
@@ -487,12 +454,8 @@ export function SessionView({
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <TranscriptColumn
-              persistedItems={persistedItems}
-              liveItems={liveItems}
-              pendingEcho={pendingEcho}
-              lastEchoText={lastEchoRef.current}
+              items={inlineItems}
               showWorking={showWorking}
-              dockedKey={dockedItem ? transcriptItemKey(dockedItem) : null}
               submittingToolUseId={submittingToolUseId}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
@@ -507,6 +470,19 @@ export function SessionView({
             <span className="animate-pulse text-sm text-muted-foreground">
               {activityNotice}
             </span>
+          </div>
+        )}
+
+        {/* Above the gated card, so whatever is waiting on an answer stays
+            nearest the input; both can be present at once. */}
+        {reportItem && (
+          <div className="mx-auto mb-2 w-full max-w-chat px-6">
+            <TranscriptItemRenderer
+              item={reportItem}
+              onResolve={handleResolve}
+              onAnswer={handleAnswer}
+              onRetryReport={handleRetryReport}
+            />
           </div>
         )}
 

@@ -111,6 +111,14 @@ const EVIDENCE: ResolvedEvidence[] = [
           url: "https://github.com/o/r/pull/482",
         },
       ],
+      commits: [
+        {
+          sha: "9a1c4e7f0b2d",
+          message: "raise the cache ceiling\n\nlonger body nobody reads here",
+          author: "dev",
+          committedAt: "2026-07-21T10:02:00.000Z",
+        },
+      ],
     }),
   },
 ];
@@ -335,6 +343,17 @@ describe("ReportPanel", () => {
     // The fix cites the change list, which renders as the merged pull request.
     const prLink = screen.getByRole("link", { name: /#482 bump cache size/ });
     expect(prLink).toHaveAttribute("href", "https://github.com/o/r/pull/482");
+
+    /* And the commits beside them. A change pushed straight to the branch is
+       evidence the same way a merged pull request is; only the pull requests
+       were drawn, so which way the change landed decided whether the report
+       could show it at all. */
+    expect(screen.getByText("9a1c4e7")).toBeInTheDocument();
+    expect(screen.getByText("raise the cache ceiling")).toBeInTheDocument();
+    // The subject only: a commit body is prose the report has no room for.
+    expect(
+      screen.queryByText(/longer body nobody reads here/),
+    ).not.toBeInTheDocument();
   });
 
   it("draws a call cited by several claims once and names it under the rest", () => {

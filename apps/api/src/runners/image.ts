@@ -14,7 +14,7 @@ const IMAGE_ENV_VAR: Record<Platform, string> = {
 };
 
 // Empty is absent, not an override: compose writes "" for any variable the
-// operator left unset, and ?? alone would serve that as the image name.
+// user left unset, and ?? alone would serve that as the image name.
 export function runnerImage(platform: Platform): string {
   const override = process.env[IMAGE_ENV_VAR[platform]];
   return override === undefined || override === ""

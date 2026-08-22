@@ -6,7 +6,7 @@ import {
   type DiffLine,
 } from "@/components/transcript/DiffCard";
 import { parsePullRequestResult } from "@/components/transcript/PRCard";
-import { ChangesList, pullRequestsFrom } from "./ChangesList.js";
+import { ChangesList, commitsFrom, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
 import { plotCaption, plotFrom } from "./plot.js";
 import {
@@ -192,11 +192,16 @@ function drawingFor(
     }
     case "change": {
       const merged = pullRequestsFrom(entry.result);
-      if (merged.length > 0) {
+      const commits = commitsFrom(entry.result);
+      if (merged.length > 0 || commits.length > 0) {
+        const counted = [
+          merged.length > 0 ? `${merged.length} merged` : null,
+          commits.length > 0 ? `${commits.length} committed` : null,
+        ].filter(Boolean);
         return {
-          body: <ChangesList pullRequests={merged} />,
+          body: <ChangesList pullRequests={merged} commits={commits} />,
           of: "",
-          scope: `${merged.length} merged in the window`,
+          scope: `${counted.join(", ")} in the window`,
         };
       }
       const opened = parsePullRequestResult(entry.result);

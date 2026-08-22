@@ -1,33 +1,32 @@
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import type { ReportCardItem } from "./types.js";
 import { openReport } from "./openReport.js";
 
-/* The end of the run, drawn the way the transcript draws any other fact about
-   the run: a rule the label rides. This one is last and nothing renders below
-   it, which is what reads as an ending without a word spent on it. */
+/* The artifact the investigation produces, drawn as a surface rather than as a
+   rule across the transcript. It was a rule when it was always the last thing
+   on the page and read as an ending; docked above the input it is a standing
+   object the run keeps rewriting, and a divider is not what that looks like. */
 
-/* Not a card. The report is not in here - this is the door to it, and a filled
-   panel would promise content it does not hold. Cobalt only once it is ready,
-   because that is the one moment there is something to act on. */
 const PHASE: Record<
   ReportCardItem["state"]["phase"],
-  { label: string; rule: string; ink: string }
+  { label: string; note: string; ink: string }
 > = {
   building: {
-    label: "Writing the investigation report",
-    rule: "bg-border",
+    label: "Investigation report",
+    note: "Writing it up",
     ink: "text-muted-foreground",
   },
   ready: {
-    label: "Report ready",
-    rule: "bg-primary-ink",
+    label: "Investigation report",
+    note: "Ready to read",
     ink: "text-foreground",
   },
   failed: {
-    label: "The report was not written",
-    rule: "bg-fail",
+    label: "Investigation report",
+    note: "Not written",
     ink: "text-fail",
   },
 };
@@ -42,26 +41,24 @@ export function ReportCardPanel({
   onRetry?: () => void;
 }): React.JSX.Element {
   const phase = item.state.phase;
-  const { label, rule, ink } = PHASE[phase];
+  const { label, note, ink } = PHASE[phase];
 
   return (
     <div
       role="status"
       data-testid="report-card"
       data-phase={phase}
-      className="animate-in fade-in flex items-center gap-3 py-1 text-sm duration-(--duration-slow)"
+      className={cn(
+        TOOL_CARD_CLASS,
+        "animate-in fade-in flex items-center gap-3 rounded-lg bg-card px-4 duration-(--duration-slow)",
+      )}
     >
-      <span aria-hidden className={cn("h-px w-6 shrink-0", rule)} />
-      <span
-        className={cn(
-          "shrink-0 font-medium whitespace-nowrap",
-          ink,
-          phase === "building" && "shimmer",
-        )}
-      >
-        {label}
-      </span>
-      <span aria-hidden className={cn("h-px min-w-0 flex-1", rule)} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className={cn("text-xs", ink, phase === "building" && "shimmer")}>
+          {note}
+        </span>
+      </div>
       {/* Ready waits to be clicked: a run ending must not swap the view out
           from under whoever is mid-sentence. */}
       {phase === "ready" && (
@@ -69,8 +66,8 @@ export function ReportCardPanel({
           Open report
         </Button>
       )}
-      {/* Why it was not written is the error notice above, which is where every
-          other failure in the run explains itself. */}
+      {/* Why it was not written is the error notice in the transcript, which is
+          where every other failure in the run explains itself. */}
       {phase === "failed" && (
         <Button
           size="sm"

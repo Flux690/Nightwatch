@@ -1766,6 +1766,26 @@ describe("the Agent page", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/agent"));
   });
 
+  /* The report is not a message. It is the artifact the run produces and keeps
+     rewriting, so it is docked beside the input rather than left in the flow:
+     written where it happened it goes stale, and pushed last it sits underneath
+     a question asked after it. Docked, it is out of the ordering entirely. */
+  it("docks the report beside the input rather than drawing it in the flow", async () => {
+    setup([
+      { kind: "user_turn", id: "u1", text: "what happened?" },
+      { kind: "report_card", id: "report", state: { phase: "ready" } },
+    ]);
+
+    const card = await screen.findByTestId("report-card");
+    expect(card).toHaveAttribute("data-phase", "ready");
+    // Drawn exactly once, and not among the messages.
+    expect(screen.getAllByTestId("report-card")).toHaveLength(1);
+    const column = screen.getByTestId("transcript-column");
+    expect(column).not.toContainElement(card);
+    // The turn it shares the transcript with is still drawn inline.
+    expect(column).toHaveTextContent("what happened?");
+  });
+
   it("does not offer to delete a chat a run is still holding", async () => {
     const user = userEvent.setup();
     setupPage({ path: "/agent/c1", running: true });

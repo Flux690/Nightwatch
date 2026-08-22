@@ -27,7 +27,7 @@ function findingTone(row: SessionListRow): string {
 }
 
 /* Two lines: what happened, then what the investigation says about it. The
-   severity word is the operator's own and is never matched against a list, so
+   severity word is the user's own and is never matched against a list, so
    a fleet labelling its alerts P1 reads exactly as one labelling them critical. */
 function InvestigationRow({
   row,

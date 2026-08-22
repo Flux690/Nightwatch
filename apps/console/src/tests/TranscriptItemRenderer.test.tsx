@@ -289,9 +289,10 @@ describe("TranscriptItemRenderer", () => {
         "data-phase",
         "building",
       );
-      expect(
-        screen.getByText(/writing the investigation report/i),
-      ).toBeInTheDocument();
+      // The card names the artifact and its state apart, so the name is steady
+      // while the run rewrites what sits behind it.
+      expect(screen.getByText(/investigation report/i)).toBeInTheDocument();
+      expect(screen.getByText(/writing it up/i)).toBeInTheDocument();
     });
 
     /* Nothing opens on its own: a report that arrives over the message being
@@ -313,7 +314,7 @@ describe("TranscriptItemRenderer", () => {
       const onRetryReport = vi.fn();
       wrap(card("failed"), { onRetryReport });
 
-      expect(screen.getByText(/report was not written/i)).toBeInTheDocument();
+      expect(screen.getByText(/not written/i)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /try again/i }));
       expect(onRetryReport).toHaveBeenCalled();
     });

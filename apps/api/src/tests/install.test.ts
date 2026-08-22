@@ -87,7 +87,7 @@ describe("GET /runners/install", () => {
       expect(res.body).toContain("registry.internal/dr:1.2");
     });
 
-    /* Compose writes "" for every variable the operator left unset, so an empty
+    /* Compose writes "" for every variable the user left unset, so an empty
        override is the ordinary case rather than an odd one. Treating it as a
        value would serve an empty image name and the pull would fail on the host. */
     it("falls back to the default when the override is empty", async () => {

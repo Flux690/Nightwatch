@@ -4,7 +4,7 @@ import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
 
-// Empty is absent: compose writes "" for any variable the operator left unset,
+// Empty is absent: compose writes "" for any variable the user left unset,
 // and an empty credential would be sent as a header rather than omitted.
 function optionalEnv(name: string): string | null {
   const value = process.env[name];

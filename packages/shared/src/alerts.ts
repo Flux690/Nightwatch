@@ -1,7 +1,7 @@
 export type AlertSeverity = "critical" | "warning" | "info";
 
 /* Every sender NightWarden mints a credential for. One row per kind, so an
-   operator sees one card and one credential each; the kind decides which card
+   user sees one card and one credential each; the kind decides which card
    and which status line, never how a body is parsed. */
 export const ALERT_SOURCE_KINDS = ["alertmanager", "grafana"] as const;
 
