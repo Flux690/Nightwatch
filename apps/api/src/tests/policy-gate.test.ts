@@ -1,9 +1,6 @@
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { harness, type Harness } from "./harness.js";
 import { vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -19,9 +16,6 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import {
@@ -30,17 +24,8 @@ import {
 } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import {
-  registerRunner,
-  setRunnerManifest,
-  unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
-import { mountApi } from "./api-server.js";
-import { dockerService } from "./manifest-helper.js";
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
@@ -103,53 +88,32 @@ describe("policy-gate: the reason rides every gated call", () => {
 });
 
 describe("policy-gate: gating is driven by tool policy", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
-  let TEST_TOKEN: string;
-  let conn: RunnerConnection;
   let SESSION: string;
   const executedCommands: string[] = [];
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("docker", "access-gate-001").id;
-
-    conn = registerRunner({
-      runnerId: TEST_TOKEN,
-      platform: "docker",
-      send: (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        const { commandName, correlationId } = msg.payload;
-        executedCommands.push(commandName);
-        resolveCommand({
-          correlationId,
-          success: true,
-          result:
-            commandName === "RestartDockerService" ? { restarted: true } : [],
-        });
-      },
-      close: () => {},
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      runners: [
+        {
+          name: "access-gate-host",
+          services: ["svc-01"],
+          answer: ({ commandName }) => {
+            executedCommands.push(commandName);
+            return commandName === "RestartDockerService"
+              ? { restarted: true }
+              : [];
+          },
+        },
+      ],
     });
-    setRunnerManifest(TEST_TOKEN, {
-      platform: "docker",
-      hostname: "access-gate-host",
-      runnerVersion: "2.0.0",
-      services: [dockerService("svc-01")],
-    });
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    unregisterRunner(conn);
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

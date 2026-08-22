@@ -1,8 +1,5 @@
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage } from "@nightwarden/shared";
+import { harness, type Harness } from "./harness.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -19,9 +16,6 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
@@ -29,16 +23,7 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { buildTranscript } from "../session/transcript.js";
-import {
-  registerRunner,
-  setRunnerManifest,
-  unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
-import { mountApi } from "./api-server.js";
-import { dockerServiceKey } from "@nightwarden/shared";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN: ScriptedTurn = {
@@ -47,56 +32,20 @@ const FINISH_TURN: ScriptedTurn = {
 };
 
 describe("continue-request interrupts", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
   let SESSION: string;
-  let TEST_TOKEN: string;
-  let conn: RunnerConnection;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("docker", "continue-032").id;
-
-    conn = registerRunner({
-      runnerId: TEST_TOKEN,
-      platform: "docker",
-      send: (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        const {
-          commandName: _cn,
-          commandInput: _ci,
-          correlationId,
-        } = msg.payload;
-        resolveCommand({ correlationId, success: true, result: [] });
-      },
-      close: () => {},
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      runners: [{ name: "continue-host", services: ["web-01/api"] }],
     });
-    setRunnerManifest(TEST_TOKEN, {
-      platform: "docker",
-      hostname: "continue-host",
-      runnerVersion: "2.0.0",
-      services: [
-        {
-          identity: { project: "web-01", service: "api" },
-          target: dockerServiceKey({ project: "web-01", service: "api" }),
-          status: "running",
-        },
-      ],
-    });
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    unregisterRunner(conn);
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

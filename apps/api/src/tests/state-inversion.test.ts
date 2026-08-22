@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { harness, type Harness } from "./harness.js";
 import { dispatchAlertSession } from "./session-helper.js";
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 import type {
   NormalizedAlert,
   SessionDetail,
@@ -27,7 +25,6 @@ const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
 import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import {
@@ -39,28 +36,22 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
 import { hasReport } from "../db/reports.js";
 import { buildInitialContext } from "../agent/context.js";
-import { mountApi } from "./api-server.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+    });
+    ({ port } = nw);
+    SESSION = nw.session;
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

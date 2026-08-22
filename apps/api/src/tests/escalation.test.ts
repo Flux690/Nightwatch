@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dispatchAlertSession } from "./session-helper.js";
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
-import type {
-  NormalizedAlert,
-  RunnerCommandMessage,
-} from "@nightwarden/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 
 import {
   createContractFakeProvider,
@@ -18,66 +12,29 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
+import { harness, type Harness } from "./harness.js";
 import { getTranscriptRows } from "../db/sessions.js";
-import {
-  registerRunner,
-  setRunnerManifest,
-  unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
-import { mountApi } from "./api-server.js";
-import { dockerService } from "./manifest-helper.js";
 
 describe("termination paths: every run ends in model text, no escalation", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
-  let TEST_TOKEN: string;
-  let conn: RunnerConnection;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("docker", "test-esc-runner").id;
-
-    conn = registerRunner({
-      runnerId: TEST_TOKEN,
-      platform: "docker",
-      send: (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        const { correlationId } = msg.payload;
-        resolveCommand({ correlationId, success: true, result: [] });
-      },
-      close: () => {},
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      runners: [{ name: "esc-host", services: ["web-01"] }],
     });
-    setRunnerManifest(TEST_TOKEN, {
-      platform: "docker",
-      hostname: "esc-host",
-      runnerVersion: "2.0.0",
-      services: [dockerService("web-01")],
-    });
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    unregisterRunner(conn);
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

@@ -7,8 +7,7 @@ import {
   it,
   vi,
 } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
+import { harness, type Harness } from "./harness.js";
 import {
   createContractFakeProvider,
   createGateController,
@@ -21,7 +20,6 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { generateAlertSourceToken } from "../db/alert-sources.js";
-import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
 import { updateConfig } from "../config/store.js";
@@ -34,14 +32,6 @@ import {
   queueDepth,
   recordRunFailure,
 } from "../db/sessions.js";
-import {
-  registerRunner,
-  setRunnerManifest,
-  unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { dockerService, manifest } from "./manifest-helper.js";
-import { mountApi } from "./api-server.js";
 import { randomUUID } from "node:crypto";
 import { waitFor } from "./wait.js";
 import { seedAlertSession } from "./session-helper.js";
@@ -105,33 +95,20 @@ function delivery(groupKey: string, alerts: AlertSpec[], truncated = 0) {
 }
 
 describe("POST /alerts/ingest: one delivery, one investigation", () => {
-  let server: FastifyInstance;
-  let cleanupDb: () => void;
-  let conn: RunnerConnection;
+  let nw: Harness;
   let token: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    conn = registerRunner({
-      runnerId: "ingest-runner",
-      platform: "docker",
-      send: () => {},
-      close: () => {},
+    nw = await harness({
+      routes: [registerAlertRoutes],
+      runners: [{ name: "host-web-01", services: ["web-01"] }],
+      listen: false,
     });
-    setRunnerManifest(
-      "ingest-runner",
-      manifest("host-web-01", [dockerService("web-01")]),
-    );
     token = generateAlertSourceToken("alertmanager");
-    server = Fastify({ logger: false });
-    await mountApi(server, registerAlertRoutes);
-    await server.ready();
   });
 
   afterAll(async () => {
-    await server.close();
-    unregisterRunner(conn);
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 
@@ -147,7 +124,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
   function ingest(
     body: ReturnType<typeof delivery>,
   ): Promise<{ enqueued: number; skipped: number }> {
-    return server
+    return nw.server
       .inject({
         method: "POST",
         url: "/api/alerts/ingest",

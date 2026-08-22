@@ -1,7 +1,5 @@
-import type { AddressInfo } from "node:net";
+import { harness, type Harness } from "./harness.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -16,8 +14,7 @@ mockCreateProvider.mockImplementation(() =>
   createContractFakeProvider([{ toolUses: [], text: "Done." }]),
 );
 
-import { connectTestMetrics, useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { connectTestMetrics } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
@@ -27,27 +24,22 @@ import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { deleteMetricsSource } from "../db/metrics.js";
 import { listSessionPage } from "../session/list.js";
-import { mountApi } from "./api-server.js";
 
 describe("POST /sessions/:id/stop", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-
-    server = Fastify({ logger: false });
-    await mountApi(server, registerSessionRoutes, registerConsoleEventRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    nw = await harness({
+      routes: [registerSessionRoutes, registerConsoleEventRoutes],
+    });
+    ({ port } = nw);
+    SESSION = nw.session;
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

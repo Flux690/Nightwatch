@@ -1,7 +1,5 @@
-import type { AddressInfo } from "node:net";
+import { harness, type Harness } from "./harness.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
 import type { ConsoleEvent, NormalizedAlert } from "@nightwarden/shared";
 
@@ -12,8 +10,6 @@ import {
   mockCreateTitleProvider,
 } from "./llm-factory-mock.js";
 import { createContractFakeProvider } from "./contract-fake-provider.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { subscribeConsole } from "../session/bus.js";
@@ -48,7 +44,6 @@ import {
   generateSessionTitle,
   buildAlertTitleSource,
 } from "../session/title.js";
-import { mountApi } from "./api-server.js";
 
 function scriptTitleOnce(text: string): void {
   mockCreateTitleProvider.mockImplementationOnce(() =>
@@ -61,23 +56,18 @@ function seedSession(sessionId: string, title: string): void {
 }
 
 describe("session title generation", () => {
-  let cleanupDb: () => void;
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    server = Fastify({ logger: false });
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    nw = await harness({ routes: [registerSessionRoutes] });
+    ({ port } = nw);
+    SESSION = nw.session;
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

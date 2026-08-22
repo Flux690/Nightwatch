@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwarden/shared";
 
 // Scripted provider: drives the loop to a gated tool so the interrupt row is
@@ -22,11 +19,10 @@ const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
 import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
+import { harness, type Harness } from "./harness.js";
 import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import type {
@@ -35,7 +31,6 @@ import type {
   SessionListPage,
   TranscriptItem,
 } from "@nightwarden/shared";
-import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -60,24 +55,17 @@ const RESTART_TURN = (): ScriptedTurn => ({
 });
 
 describe("a suspended session serves its pending row with its transcript", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-
-    server = Fastify({ logger: false });
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    nw = await harness({ routes: [registerSessionRoutes] });
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

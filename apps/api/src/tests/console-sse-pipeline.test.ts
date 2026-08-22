@@ -1,8 +1,10 @@
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { AddressInfo } from "node:net";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage, SessionDetail } from "@nightwarden/shared";
+import { harness, type Harness } from "./harness.js";
+import { mountApi } from "./api-server.js";
+import type { SessionDetail } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -16,57 +18,26 @@ import {
 const script = createScriptRunner();
 mockCreateProvider.mockImplementation(() => script.create());
 
-import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { registerRunner, unregisterRunner } from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
-import { mountApi } from "./api-server.js";
 
 describe("console SSE pipeline", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
-  let conn: RunnerConnection;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    const TEST_TOKEN = generateRunnerToken("docker", "test-runner").id;
-
-    // Persistence is local; the scripted provider calls no runner tool here, so
-    // the runner receives nothing. Resolve defensively for any stray command.
-    conn = registerRunner({
-      runnerId: TEST_TOKEN,
-      platform: "docker",
-      send: (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        resolveCommand({
-          correlationId: msg.payload.correlationId,
-          success: true,
-          result: [],
-        });
-      },
-      close: () => {},
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      runners: [{ name: "sse-host", services: ["web-01"] }],
     });
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    unregisterRunner(conn);
-    await server.close();
-    cleanupDb();
+    await nw.close();
   });
 
   it("delivers delta events then RUN_FINISHED, transcript loadable after", async () => {
@@ -206,7 +177,7 @@ describe("console SSE pipeline", () => {
 
   it("sends heartbeat comments on the configured interval", async () => {
     const hb = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(hb, (api) =>
+    await mountApi(hb, (api: FastifyInstance) =>
       registerConsoleEventRoutes(api, { heartbeatInterval: 50 }),
     );
     await hb.listen({ port: 0, host: "127.0.0.1" });

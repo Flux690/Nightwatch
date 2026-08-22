@@ -1,39 +1,30 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { harness, type Harness } from "./harness.js";
 import { generateRunnerToken } from "../db/runner.js";
 import { registerInstallRoutes } from "../runners/install.js";
 import { kubernetesInstallManifest } from "../runners/install-kubernetes.js";
-import { mountApi } from "./api-server.js";
 
 const URL = "/api/runners/install";
 
 describe("GET /runners/install", () => {
-  let server: FastifyInstance;
-  let cleanupDb: () => void;
+  let nw: Harness;
   let SESSION: string;
   let DOCKER_TOKEN: string;
   let K8S_TOKEN: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
+    nw = await harness({ routes: [registerInstallRoutes] });
+    SESSION = nw.session;
     DOCKER_TOKEN = generateRunnerToken("docker", "test-server").plaintext;
     K8S_TOKEN = generateRunnerToken("kubernetes", "k8s-server").plaintext;
-    server = Fastify({ logger: false, trustProxy: true });
-    await mountApi(server, registerInstallRoutes);
-    await server.ready();
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
   });
 
   function get(token: string | null, headers: Record<string, string> = {}) {
-    return server.inject({
+    return nw.server.inject({
       method: "GET",
       url: URL,
       headers: {
@@ -51,7 +42,7 @@ describe("GET /runners/install", () => {
     });
 
     it("does not accept the token as a query parameter", async () => {
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "GET",
         url: `${URL}?token=${DOCKER_TOKEN}`,
         headers: { cookie: `nw_auth=${SESSION}` },

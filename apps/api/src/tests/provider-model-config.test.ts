@@ -8,11 +8,9 @@ import {
   it,
   vi,
 } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
+import { harness, type Harness } from "./harness.js";
 import { registerConfigRoutes } from "../config/routes.js";
-import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { clearTestLLM, configureTestLLM } from "./temp-db.js";
 import { updateConfig, updateProvider } from "../config/store.js";
 import type {
   AgentConfig,
@@ -20,7 +18,6 @@ import type {
   ModelOption,
   ProviderOption,
 } from "@nightwarden/shared";
-import { mountApi } from "./api-server.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
 function mockResponse(
@@ -78,22 +75,19 @@ function anthropicModel(
 }
 
 describe("provider/model config seam", () => {
-  let server: FastifyInstance;
-  let cleanupDb: () => void;
+  let nw: Harness;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    // Before the harness: the cookie is signed with this key and the stored
+    // credentials are encrypted with it, so stubbing it afterwards invalidates both.
     vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
-    SESSION = await mintTestSession();
-    server = Fastify({ logger: false });
-    await mountApi(server, registerConfigRoutes);
-    await server.ready();
+    nw = await harness({ routes: [registerConfigRoutes] });
+    SESSION = nw.session;
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 
@@ -102,7 +96,7 @@ describe("provider/model config seam", () => {
   });
 
   async function getModels(): Promise<ModelOption[]> {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -115,7 +109,7 @@ describe("provider/model config seam", () => {
   }
 
   async function storedMask(): Promise<string | null> {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "GET",
       url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -138,7 +132,7 @@ describe("provider/model config seam", () => {
   it("POST /config/models: rejects a bad key, which is how a wrong key is reported", async () => {
     stubFetch(() => mockResponse(401, {}));
 
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -155,7 +149,7 @@ describe("provider/model config seam", () => {
       vi.fn().mockRejectedValue(new TypeError("fetch failed")),
     );
 
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -184,7 +178,7 @@ describe("provider/model config seam", () => {
     );
 
     // Nothing here is stored: the active provider is still Anthropic.
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -216,7 +210,7 @@ describe("provider/model config seam", () => {
       }),
     );
 
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -234,7 +228,7 @@ describe("provider/model config seam", () => {
     const calls = vi.fn();
     vi.stubGlobal("fetch", calls);
     try {
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "POST",
         url: "/api/config/models",
         headers: { cookie: `nw_auth=${SESSION}` },
@@ -253,7 +247,7 @@ describe("provider/model config seam", () => {
     clearTestLLM();
     stubFetch(() => mockResponse(200, { data: [{ id: "openai/gpt-5" }] }));
     try {
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "POST",
         url: "/api/config/models",
         headers: { cookie: `nw_auth=${SESSION}` },
@@ -270,7 +264,7 @@ describe("provider/model config seam", () => {
     stubFetch(() => mockResponse(200, { data: [{ id: "claude-sonnet-4-6" }] }));
     const maskBefore = await storedMask();
 
-    await server.inject({
+    await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -282,7 +276,7 @@ describe("provider/model config seam", () => {
   });
 
   it("GET /config/providers: serves the picker so the console keeps no provider list of its own", async () => {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "GET",
       url: "/api/config/providers",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -302,7 +296,7 @@ describe("provider/model config seam", () => {
   });
 
   it("GET /config/providers: returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "GET",
       url: "/api/config/providers",
     });
@@ -311,7 +305,7 @@ describe("provider/model config seam", () => {
   });
 
   it("POST /config/models: returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "POST",
       url: "/api/config/models",
       payload: {},
@@ -347,7 +341,7 @@ describe("provider/model config seam", () => {
       model: string,
       reasoningLevel?: string,
     ): Promise<AgentConfig> {
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "PATCH",
         url: "/api/config",
         headers: { cookie: `nw_auth=${SESSION}` },
@@ -718,14 +712,14 @@ describe("provider/model config seam", () => {
   });
 
   it("GET /config: returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({ method: "GET", url: "/api/config" });
+    const res = await nw.server.inject({ method: "GET", url: "/api/config" });
     expect(res.statusCode).toBe(401);
   });
 
   // --- Key never returned to browser ---
 
   it("GET /config: never returns apiKeyEncrypted or plaintext key in the response", async () => {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "GET",
       url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -740,7 +734,7 @@ describe("provider/model config seam", () => {
   });
 
   it("PATCH /config/key: saves the encrypted key and returns the masked representation", async () => {
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "PATCH",
       url: "/api/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -756,7 +750,7 @@ describe("provider/model config seam", () => {
 
   it("PATCH /config/key then GET /config: persists the encrypted key and round-trips it to a mask, never the plaintext", async () => {
     const apiKey = "sk-ant-roundtrip-abcd9999";
-    const saved = await server.inject({
+    const saved = await nw.server.inject({
       method: "PATCH",
       url: "/api/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -766,7 +760,7 @@ describe("provider/model config seam", () => {
 
     // GET /config reads the row, decrypts, and masks - proving the encrypt →
     // store → decrypt → mask round-trip without ever returning the plaintext.
-    const res = await server.inject({
+    const res = await nw.server.inject({
       method: "GET",
       url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
@@ -788,7 +782,7 @@ describe("provider/model config seam", () => {
     });
 
     it("GET /config reports no provider and no model rather than guessing one, while keeping the operational defaults", async () => {
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "GET",
         url: "/api/config",
         headers: { cookie: `nw_auth=${SESSION}` },
@@ -810,7 +804,7 @@ describe("provider/model config seam", () => {
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
 
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "POST",
         url: "/api/config/models",
         headers: { cookie: `nw_auth=${SESSION}` },
@@ -825,7 +819,7 @@ describe("provider/model config seam", () => {
     it("an env API key is not a live fallback: the DB is the only runtime source", async () => {
       vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-from-the-environment");
 
-      const res = await server.inject({
+      const res = await nw.server.inject({
         method: "GET",
         url: "/api/config",
         headers: { cookie: `nw_auth=${SESSION}` },

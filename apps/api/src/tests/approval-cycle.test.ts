@@ -1,12 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { harness, type Harness } from "./harness.js";
 import { dispatchAlertSession } from "./session-helper.js";
-import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 import type {
   NormalizedAlert,
-  RunnerCommandMessage,
   SessionReportResponse,
 } from "@nightwarden/shared";
 import { seedCompleteReport } from "./report-helper.js";
@@ -27,9 +24,6 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
-import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import {
@@ -40,15 +34,6 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import {
-  registerRunner,
-  setRunnerManifest,
-  unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
-import { mountApi } from "./api-server.js";
-import { dockerService } from "./manifest-helper.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -57,56 +42,31 @@ const FINISH_TURN = {
 };
 
 describe("durable approval interrupts", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
-  let TEST_TOKEN: string;
-  let conn: RunnerConnection;
   let SESSION: string;
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("docker", "approval-022").id;
-
-    conn = registerRunner({
-      runnerId: TEST_TOKEN,
-      platform: "docker",
-      send: (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "RestartDockerService") {
-          restartCommands.push(commandInput);
-          resolveCommand({
-            correlationId,
-            success: true,
-            result: { restarted: true },
-          });
-        } else {
-          resolveCommand({ correlationId, success: true, result: [] });
-        }
-      },
-      close: () => {},
+    nw = await harness({
+      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      runners: [
+        {
+          name: "approval-host",
+          services: ["web-01"],
+          answer: ({ commandName, commandInput }) => {
+            if (commandName !== "RestartDockerService") return [];
+            restartCommands.push(commandInput);
+            return { restarted: true };
+          },
+        },
+      ],
     });
-    setRunnerManifest(TEST_TOKEN, {
-      platform: "docker",
-      hostname: "approval-host",
-      runnerVersion: "2.0.0",
-      services: [dockerService("web-01")],
-    });
-
-    server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    ({ port, session: SESSION } = nw);
   });
 
   afterAll(async () => {
-    unregisterRunner(conn);
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 

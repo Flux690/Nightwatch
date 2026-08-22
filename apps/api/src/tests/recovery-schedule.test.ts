@@ -7,10 +7,8 @@ import { reconcileRecovery } from "../verification/reconciler.js";
 import { seedAlertSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 
-/* The sweep thins out as an incident ages. Too dense and it hammers the metrics
-   source during the incident; too thin and a recovery is never confirmed. Its
-   own file because `asked` is a count over every open session, so the cadence
-   can only be read in a database holding one. */
+/* Its own file because a pass reports a count over every open session, so the
+   cadence is only readable in a database holding one. */
 describe("how often an open condition is asked about", () => {
   let cleanupDb: () => void;
 

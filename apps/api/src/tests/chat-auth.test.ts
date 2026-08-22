@@ -1,7 +1,5 @@
-import type { AddressInfo } from "node:net";
+import { harness, type Harness } from "./harness.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
 
 // Minimal scripted provider: finishes in one free-form turn so the loop exits
 // without runner tools, letting tests focus on the chat route boundary.
@@ -17,33 +15,25 @@ mockCreateProvider.mockImplementation(() =>
   createContractFakeProvider([{ toolUses: [], text: "Done." }]),
 );
 
-import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { clearTestLLM, configureTestLLM } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { mountApi } from "./api-server.js";
 
 describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
-  let server: FastifyInstance;
+  let nw: Harness;
   let port: number;
-  let cleanupDb: () => void;
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    SESSION = await mintTestSession();
-
-    server = Fastify({ logger: false });
-    await mountApi(server, registerSessionRoutes);
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    port = (server.server.address() as AddressInfo).port;
+    nw = await harness({ routes: [registerSessionRoutes] });
+    ({ port } = nw);
+    SESSION = nw.session;
   });
 
   afterAll(async () => {
-    await server.close();
-    cleanupDb();
+    await nw.close();
     vi.unstubAllEnvs();
   });
 
