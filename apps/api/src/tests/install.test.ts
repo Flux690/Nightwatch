@@ -80,6 +80,24 @@ describe("GET /runners/install", () => {
       expect(docker.body).toContain("nightwarden-docker-runner");
       expect(kubernetes.body).toContain("nightwarden-kubernetes-runner");
     });
+
+    it("serves the override when one is set", async () => {
+      vi.stubEnv("NIGHTWARDEN_DOCKER_RUNNER_IMAGE", "registry.internal/dr:1.2");
+      const res = await get(DOCKER_TOKEN);
+      expect(res.body).toContain("registry.internal/dr:1.2");
+    });
+
+    /* Compose writes "" for every variable the operator left unset, so an empty
+       override is the ordinary case rather than an odd one. Treating it as a
+       value would serve an empty image name and the pull would fail on the host. */
+    it("falls back to the default when the override is empty", async () => {
+      vi.stubEnv("NIGHTWARDEN_DOCKER_RUNNER_IMAGE", "");
+      vi.stubEnv("NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE", "");
+      const docker = await get(DOCKER_TOKEN);
+      const kubernetes = await get(K8S_TOKEN);
+      expect(docker.body).toContain("nightwarden-docker-runner:latest");
+      expect(kubernetes.body).toContain("nightwarden-kubernetes-runner:latest");
+    });
   });
 
   describe("the address a runner dials back on", () => {

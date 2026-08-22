@@ -13,6 +13,11 @@ const IMAGE_ENV_VAR: Record<Platform, string> = {
   kubernetes: "NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE",
 };
 
+// Empty is absent, not an override: compose writes "" for any variable the
+// operator left unset, and ?? alone would serve that as the image name.
 export function runnerImage(platform: Platform): string {
-  return process.env[IMAGE_ENV_VAR[platform]] ?? DEFAULT_IMAGE[platform];
+  const override = process.env[IMAGE_ENV_VAR[platform]];
+  return override === undefined || override === ""
+    ? DEFAULT_IMAGE[platform]
+    : override;
 }

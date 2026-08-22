@@ -19,9 +19,25 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-}
+      # Evidence sources, on the same first-boot terms. Probed before they save,
+      # and Prometheus is seeded as its own rules endpoint, which is what lets an
+      # investigation opened by its alerts ever reach Resolved.
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-}
+      PROMETHEUS_AUTH_HEADER: ${PROMETHEUS_AUTH_HEADER:-}
+      LOKI_URL: ${LOKI_URL:-}
+      LOKI_AUTH_HEADER: ${LOKI_AUTH_HEADER:-}
+      LOKI_ORG_ID: ${LOKI_ORG_ID:-}
+      # Unset means a key file is generated in NIGHTWARDEN_DIR and reused; set it
+      # to manage the value yourself. Changing it makes stored credentials
+      # unreadable and signs every owner session out.
+      SECRET_KEY: ${SECRET_KEY:-}
+      # Override to pin a tag or serve the runners from a private registry.
+      NIGHTWARDEN_DOCKER_RUNNER_IMAGE: ${NIGHTWARDEN_DOCKER_RUNNER_IMAGE:-}
+      NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE: ${NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       # Same path inside and out, never a named volume: the host daemon resolves

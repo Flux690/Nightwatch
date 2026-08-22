@@ -4,6 +4,13 @@ import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
 
+// Empty is absent: compose writes "" for any variable the operator left unset,
+// and an empty credential would be sent as a header rather than omitted.
+function optionalEnv(name: string): string | null {
+  const value = process.env[name];
+  return value === undefined || value === "" ? null : value;
+}
+
 // A first-boot seed, never a live source: an integration the user has already
 // connected is never overwritten. Each is probed with the exact call the console's
 // Connect button makes, so a URL that cannot work fails at boot, not at 3am.
@@ -16,7 +23,7 @@ async function seedPrometheus(): Promise<void> {
   if (listMetricsSourceRows().length > 0) return;
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
-  const authHeader = process.env["PROMETHEUS_AUTH_HEADER"] ?? null;
+  const authHeader = optionalEnv("PROMETHEUS_AUTH_HEADER");
   const endpoint = {
     url,
     authorization: authHeader,
@@ -54,8 +61,8 @@ async function seedLoki(): Promise<void> {
   if (getLokiIntegration() !== null) return;
   const url = process.env["LOKI_URL"];
   if (!url) return;
-  const authHeader = process.env["LOKI_AUTH_HEADER"] ?? null;
-  const orgId = process.env["LOKI_ORG_ID"] ?? null;
+  const authHeader = optionalEnv("LOKI_AUTH_HEADER");
+  const orgId = optionalEnv("LOKI_ORG_ID");
 
   try {
     await probeLoki(url, authHeader, orgId);

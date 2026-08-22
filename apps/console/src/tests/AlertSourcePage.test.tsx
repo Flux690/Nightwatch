@@ -36,17 +36,6 @@ function dockerRunner(name: string): RunnerRecord {
   };
 }
 
-const MATCHED_VALIDATE = {
-  alerts: [
-    {
-      sourceAlertId: "sample",
-      identityKey: "docker/prod-web-01/sample-service/sample-service",
-      advertisedOn: ["prod-web-01"],
-      exactMatch: true,
-    },
-  ],
-};
-
 function jsonOk(body: unknown, status = 200) {
   return Promise.resolve({
     ok: true,
@@ -92,7 +81,6 @@ function setup(
     configured?: boolean;
     lastReceivedAt?: string | null;
     runners?: RunnerRecord[];
-    validate?: unknown;
     kind?: AlertSourceKind;
   } = {},
 ) {
@@ -100,7 +88,6 @@ function setup(
     configured = false,
     lastReceivedAt = null,
     runners = [dockerRunner("prod-web-01")],
-    validate = MATCHED_VALIDATE,
     kind = "alertmanager",
   } = opts;
   const base = `/api/integrations/alerting/${kind}`;
@@ -127,8 +114,6 @@ function setup(
           ingestUrl: INGEST_URL,
           lastReceivedAt: rotated ? null : lastReceivedAt,
         });
-      if (url === "/api/alerts/validate" && init?.method === "POST")
-        return jsonOk(validate);
       return jsonOk({});
     });
   vi.stubGlobal("fetch", fetchMock);
