@@ -380,8 +380,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     }
   };
 
+  /* Tagged, because a provider takes two roles and neither of them is ours: a
+     harness turn is sent as the user's, and a model with no way to tell them
+     apart answers NightWarden as though it were the person - apologising to
+     them for something they never said. The row's `kind` is still what the
+     console reads for origin; text can be typed, so it settles nothing there. */
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
-    provider.appendUserMessage(text);
+    provider.appendUserMessage(`<nightwarden>\n${text}\n</nightwarden>`);
     harnessTurns.add(provider.snapshot().length - 1);
   };
 

@@ -1024,14 +1024,17 @@ describe("the investigation record", () => {
       };
       return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
     }
+    /* Matched on content, not on the first character: every harness message is
+       wrapped in a <nightwarden> tag so the model can tell who is speaking, and
+       the tag is asserted on its own below rather than by each of these. */
     function completionRequests(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
-        m.startsWith("Your investigation record"),
+        m.includes("Your investigation record"),
       );
     }
     function reportRequests(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
-        m.startsWith("Your investigation is over"),
+        m.includes("Your investigation is over"),
       );
     }
 
@@ -1075,6 +1078,32 @@ describe("the investigation record", () => {
         text: "",
       };
     }
+
+    /* A provider takes two roles and neither of them is ours, so a harness turn
+       is sent in the user's. Tagged, or the model answers NightWarden as though
+       the person had spoken and apologises to them for something nobody said. */
+    it("marks every message it writes as its own, never as the user's", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          recordTurn("root_cause", "the disk filled up"),
+          { toolUses: [], text: "Done." },
+          submitTurn(),
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("tagged"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("tagged")] });
+
+      const written = harnessMessages();
+      expect(written.length).toBeGreaterThan(0);
+      for (const message of written) {
+        expect(message.startsWith("<nightwarden>")).toBe(true);
+        expect(message.endsWith("</nightwarden>")).toBe(true);
+      }
+    });
 
     it("asks a run that recorded nothing for the record, then writes up anyway", async () => {
       // Every turn is a free-form finish; the gate should push back MAX_NUDGES
