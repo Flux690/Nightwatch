@@ -480,6 +480,8 @@ Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider*
 
 **Upgrade.** `docker compose pull && docker compose up -d`. Pre-1.0 there are no schema migrations - a release that changes the schema is applied by deleting `nightwarden.db` and setting up again, and the release notes say when that applies.
 
+**Tags.** Every push to `main` publishes, so `:latest` tracks `main` and moves under you on the next pull. Each build is also tagged `sha-<short commit>`, which never moves: pin that in the compose file and in `NIGHTWARDEN_DOCKER_RUNNER_IMAGE` / `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` if you want an upgrade to be a decision rather than a side effect of restarting. Every image carries a signed provenance attestation naming the commit and workflow that built it, verifiable with `gh attestation verify`.
+
 **Architecture.** The published images are `linux/amd64`, which is what a standard cloud VM runs. `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures, so on arm64 hosts - Apple Silicon, Graviton, Ampere - build locally rather than pulling.
 
 **Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/docker-runner/Dockerfile -t nightwarden-docker-runner .` and `docker build -f apps/kubernetes-runner/Dockerfile -t nightwarden-kubernetes-runner .` for the two runners. Both build natively for whatever machine you are on; add `--platform linux/amd64` on an Apple Silicon Mac when the image is destined for an x86 host.
@@ -616,7 +618,7 @@ pnpm test
 pnpm format:check   # pnpm format fixes what it reports
 ```
 
-These are exactly what CI runs. `.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request and push to `main`, and `publish-images.yml` calls the same one before it pushes anything to the registry, so a release can never clear a lower bar than a pull request.
+These are exactly what CI runs. `.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request, and `publish-images.yml` calls the same one on every push to `main` before it pushes anything to the registry, so a release can never clear a lower bar than a pull request. `pnpm test` is a single run over every workspace, so one command reports the whole repo; a package can still be run on its own with `pnpm --filter @nightwarden/<package> test`.
 
 A production build (compiled output for deployment) is available with:
 
