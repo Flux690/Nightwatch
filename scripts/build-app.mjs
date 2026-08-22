@@ -27,6 +27,9 @@ await build({
   platform: "node",
   format: "esm",
   target: `node${major}`,
+  // The product's one version, inlined so nothing has to restate it in source
+  // and drift. Absent under tsx, which is why every reader supplies a fallback.
+  define: { "process.env.NW_VERSION": JSON.stringify(root.version) },
   sourcemap: true,
   // From dependencies, not esbuild's `packages: "external"`: shared is a
   // devDependency, and externalising everything would leave it unresolved.

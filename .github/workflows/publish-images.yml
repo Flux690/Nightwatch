@@ -1,13 +1,22 @@
-# Manual only: images are published when a human decides to, never on a push.
+# Every push to main publishes, so :latest always names what main holds. The
+# dispatch entry stays for republishing a commit without pushing a new one.
 name: Publish images
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
         description: "Tag to publish (in addition to latest)"
         required: false
         default: ""
+
+# Never cancels: an interrupted run can leave a manifest pushed with no
+# attestation beside it, so a second push queues behind the first instead.
+concurrency:
+  group: publish-images
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -49,7 +58,9 @@ jobs:
 
       # Repository names must be lowercase; the account name is not.
       - id: repo
-        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - id: build
         uses: docker/build-push-action@v7
@@ -61,8 +72,13 @@ jobs:
           # better-sqlite3 and argon2 compile for the right target. arm64 hosts
           # build locally; the README says so.
           platforms: linux/amd64
+          # The commit tag is what keeps the registry free of orphans: :latest is a
+          # moving pointer, so without a second tag the digest it leaves behind
+          # loses its last one and becomes untagged. With this, every build stays
+          # addressable and retention below prunes by age rather than by accident.
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/${{ matrix.name }}:latest
+            ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/${{ matrix.name }}:sha-${{ steps.repo.outputs.sha }}
             ${{ inputs.tag && format('{0}/{1}/{2}:{3}', env.REGISTRY, steps.repo.outputs.owner, matrix.name, inputs.tag) || '' }}
           # Scoped per image: on one shared scope the two matrix legs evict each
           # other and neither ends up cached.
@@ -77,3 +93,12 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/${{ matrix.name }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      # Publishing on every push makes history unbounded, so it is bounded here.
+      # Each build's attestation is a version of its own, so the count is not
+      # ten builds - confirm the depth against a real listing before trusting it.
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.name }}
+          package-type: container
+          min-versions-to-keep: 10

@@ -7,7 +7,9 @@ import {
 } from "@nightwarden/shared";
 import { getAppsV1Api } from "../kubernetes/client.js";
 
-const RUNNER_VERSION = "0.3.0";
+// The root package.json version, inlined at build time. "dev" under tsx, which
+// runs from source and so has no build step to inline anything.
+const RUNNER_VERSION = process.env.NW_VERSION ?? "dev";
 
 // No probing: this binary is a Kubernetes runner, so an unreachable API server is a
 // failure to report, not a reason to go looking for something else to be.

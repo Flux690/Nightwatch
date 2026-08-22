@@ -1,8 +1,9 @@
 name: CI
 
+# Pull requests only. A push to main is gated by publish-images.yml, which calls
+# the same verify workflow before it writes anything to the registry, so running
+# here as well would only spend a second full suite on the same commit.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 # A superseded run on the same branch is answering a question nobody is asking.
