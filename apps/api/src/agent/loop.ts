@@ -3,6 +3,7 @@ import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import {
   completionRequest,
+  recordCheck,
   reportRequest,
   reportRetry,
 } from "./prompts/report.js";
@@ -226,22 +227,30 @@ const MAX_NUDGES = 3;
 // enough to tell a wrong guess from a model with nothing left to try.
 const MAX_BARREN_TURNS = 3;
 
-// The report turn has one tool and one job, so a second failure is a model that
-// cannot do it rather than one that misread the request.
-const MAX_REPORT_ATTEMPTS = 2;
+/* The report turn has one tool and one job. Three, matching the finish gate:
+   repair loops stop paying off past that, and the first two are often spent on a
+   field the model left blank rather than on the write-up itself. */
+const MAX_REPORT_ATTEMPTS = 3;
+
+/* Answered tool calls before the run is asked whether it has settled anything.
+   Eight is past orientation - listing, logs, metrics and config are four calls
+   of looking around - and long before the budget matters. A check, not a repair
+   attempt: nothing has failed, the record is simply still empty. */
+const CALLS_BEFORE_RECORD_CHECK = 8;
 
 // What is wrong with the report just written, read back from the record rather
 // than from the call that wrote it.
-function problemWithReport(
-  submitted: SubmittedReport | null,
-  unrecovered: boolean,
-): string | null {
+/* Only what the tool could not already refuse. Every field is required and
+   non-blank at the tool, so a stored report has prose in all of them; what is
+   left to check here is the turn that ended without calling the tool at all.
+   A run whose condition never recovered is told so before it writes, by the
+   recovery sentence in the request, rather than caught after. */
+function problemWithReport(submitted: SubmittedReport | null): string | null {
   if (submitted === null) {
-    return "You ended the turn without writing the report.";
-  }
-  if (submitted.summary.trim() === "") return "Your report has no summary.";
-  if (unrecovered && submitted.recommendation.trim() === "") {
-    return "A write you released has run, nothing can confirm the condition recovered, and your report recommends nothing.";
+    /* Says only what is true of both ways to get here: the turn never called
+       the tool, or it called it and the call was refused. Which one it was is
+       already above - a refusal names the field it refused. */
+    return "The report has not been written.";
   }
   return null;
 }
@@ -537,6 +546,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
   let barrenTurns = 0;
+  // Tool calls that answered, and whether the run has been asked about its
+  // still-empty record. Asked once: the finish gate covers a model that ignores it.
+  let answeredCalls = 0;
+  let recordChecked = false;
   // How many completion requests each gap has survived, so a repeat is loud.
   const gapsSeen = new Map<ReportGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
@@ -577,6 +590,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
               // The ledger is repeated here for the timeline to cite from, so it
               // has to name calls the way their results named themselves.
               evidenceIdsByToolUseId(getTranscriptRows(sessionId)),
+              /* What a previous run already wrote, so a follow-up revises it
+                 rather than rewriting it from a context that may since have been
+                 compacted. Null on the first run, which has nothing to revise. */
+              getReport(sessionId)?.submitted ?? null,
             )
           : reportRetry(problem),
       );
@@ -648,10 +665,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
       persist();
 
-      problem = problemWithReport(
-        getReport(sessionId)?.submitted ?? null,
-        unrecovered,
-      );
+      problem = problemWithReport(getReport(sessionId)?.submitted ?? null);
       if (problem === null) {
         log.info({ turn, attempt }, "investigation report written");
         publishReportCard(sessionId, "ready");
@@ -908,6 +922,24 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     const injected = dispatcher.drainInbox(sessionId);
     if (injected.length > 0) {
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
+    }
+
+    /* Counted over calls that answered: a refused call taught the run nothing,
+       so it is no evidence the run should have settled something by now. After
+       the results are on the provider, for the reason the drain above is - a
+       harness turn wedged between a tool_use and its result orphans the pair. */
+    answeredCalls += toolResults.filter(
+      (result) => result.toolOutcome === undefined,
+    ).length;
+    if (
+      opensInvestigation &&
+      !recordChecked &&
+      answeredCalls >= CALLS_BEFORE_RECORD_CHECK &&
+      (getReport(sessionId)?.hypotheses ?? []).length === 0
+    ) {
+      recordChecked = true;
+      log.info({ turn, answeredCalls }, "record still empty; asking about it");
+      sendHarnessMessage(provider, recordCheck(answeredCalls));
     }
     persist();
   }

@@ -42,9 +42,13 @@ const RECORD_HYPOTHESIS_INPUT = z.object({
   evidenceIds: z.array(z.string()).min(1),
 });
 
+/* Every one of these is declared required on the schema the model is shown, so
+   accepting a blank made the contract a suggestion: a report with no headline
+   and no recommendation passed while claiming to have both. The report turn
+   names the field it refused and asks again. */
 const SUBMIT_REPORT_INPUT = z.object({
-  headline: optionalProse,
-  affected: optionalProse,
+  headline: prose,
+  affected: prose,
   summary: prose,
   timeline: z.array(
     z.object({
@@ -54,8 +58,8 @@ const SUBMIT_REPORT_INPUT = z.object({
       evidenceId: optionalProse,
     }),
   ),
-  impact: optionalProse,
-  recommendation: optionalProse,
+  impact: prose,
+  recommendation: prose,
 });
 
 // Names the fields that failed: the model gets exactly one more attempt, and
@@ -122,15 +126,15 @@ export const SUBMIT_REPORT_TOOL: Tool = {
     const parsed = SUBMIT_REPORT_INPUT.safeParse(input);
     if (!parsed.success) {
       return malformed(
-        `That report could not be recorded - ${fieldErrors(parsed.error)}. A report needs a summary and a timeline array, which may be empty.`,
+        `That report could not be recorded - ${fieldErrors(parsed.error)}. Every field named above is required and none may be blank; the timeline array may be empty.`,
       );
     }
     const { headline, affected, summary, timeline, impact, recommendation } =
       parsed.data;
     return toResult(
       submitReport(ctx.sessionId, {
-        ...(headline !== undefined && { headline }),
-        ...(affected !== undefined && { affected }),
+        headline,
+        affected,
         summary,
         timeline: timeline.map((entry) => ({
           at: entry.at,
@@ -140,8 +144,8 @@ export const SUBMIT_REPORT_TOOL: Tool = {
             evidenceId: entry.evidenceId,
           }),
         })),
-        impact: impact ?? "",
-        recommendation: recommendation ?? "",
+        impact,
+        recommendation,
       }),
     );
   },

@@ -1,4 +1,8 @@
-import type { GatedCall, Hypothesis } from "@nightwarden/shared";
+import type {
+  GatedCall,
+  Hypothesis,
+  SubmittedReport,
+} from "@nightwarden/shared";
 import type { ReportGap } from "../report.js";
 import type { ToolSchema } from "../../llm/types.js";
 
@@ -169,6 +173,15 @@ function sentenceFor(gap: ReportGap): string {
 const RECOVERY_SENTENCE =
   "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the user should do in your recommendation. Do not repeat a write that has already run.";
 
+/* Sent once, mid-run, when a run has read a good deal and settled nothing. Not
+   a repair request: nothing has failed, and the honest answer may well be that
+   it is still narrowing. It states what is true and asks, rather than insisting
+   - a run pushed into recording something it has not tested would record a
+   guess, which is the one thing the record must never hold. */
+export function recordCheck(answeredCalls: number): string {
+  return `You have made ${answeredCalls} tool calls that returned something, and your investigation record is still empty. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
+}
+
 // Sent by the finish gate when a run tries to end with gaps in its record. It
 // names those gaps and nothing else: a model that is one finding short is not
 // told about the four things it did do.
@@ -193,6 +206,44 @@ function writeLine(call: GatedCall): string {
   return `${call.at}  ${call.toolName}${target}  ${call.decision}`;
 }
 
+/* The questions a write-up answers, asked before it is written rather than left
+   to the field descriptions to imply. Each says that nothing is a real answer,
+   because the alternative to saying so is a model inventing a cause to fill a
+   heading - which is the one failure this whole record exists to prevent. */
+const REPORT_RUBRIC = `Account for each of these. "None found" is a complete answer to any of them, and an honest one; never invent something to fill a line.
+
+- The root cause: the underlying condition that made this possible.
+- The trigger: the event that set it off.
+- Contributing factors: what made it worse or more likely without causing it. List every one you found, not just the first.
+- Symptoms: what the user or the services downstream actually saw.
+- What you ruled out: the explanations you tested and rejected, which is what stops the next person repeating your work.
+- Impact: who was affected and for how long.
+- Recommendation: what the user should do now.`;
+
+/* Its own labelled block, because a model shown an unattributed report cannot
+   tell whose words it is reading. It wrote this, and the difference between
+   revising your own work and rewriting a stranger's is the whole point. */
+function previousReportBlock(previous: SubmittedReport): string {
+  const lines = [
+    previous.headline === undefined ? null : `headline: ${previous.headline}`,
+    previous.affected === undefined ? null : `affected: ${previous.affected}`,
+    `summary: ${previous.summary}`,
+    `timeline: ${previous.timeline.length} ${previous.timeline.length === 1 ? "entry" : "entries"}`,
+    previous.impact === "" ? null : `impact: ${previous.impact}`,
+    previous.recommendation === ""
+      ? null
+      : `recommendation: ${previous.recommendation}`,
+  ].filter((line): line is string => line !== null);
+  return `<nightwarden-previous-report written="${previous.submittedAt}">
+You wrote this at the end of your last run on this investigation. Revise it in
+light of what you have since learned: keep what still holds, change what does
+not, and do not start from nothing. What you submit replaces it entirely, so
+anything you leave out is lost.
+
+${lines.join("\n")}
+</nightwarden-previous-report>`;
+}
+
 // The ledger is repeated here rather than left to context: the timeline cites
 // call ids verbatim, and a forty-turn context is a bad place to copy one from.
 export function reportRequest(
@@ -200,6 +251,7 @@ export function reportRequest(
   writes: GatedCall[],
   unrecovered: boolean,
   evidenceIds: Map<string, string> = new Map(),
+  previous: SubmittedReport | null = null,
 ): string {
   // A run that reached here with nothing recorded exhausted the gate's requests.
   // Saying so beats printing an empty heading it might write around.
@@ -210,13 +262,17 @@ export function reportRequest(
           .map((h) => findingLine(h, evidenceIds))
           .join("\n")}`;
   const sections = [
-    "Your investigation is over. Write it up for the user who will read it in the morning.",
+    previous === null
+      ? "Your investigation is over. Write it up for the user who will read it in the morning."
+      : "This investigation has gone further since you last wrote it up. Write it up again, for the user who will read it in the morning.",
     findings,
   ];
+  if (previous !== null) sections.push(previousReportBlock(previous));
   if (writes.length > 0) {
     sections.push(`RELEASED WRITES\n${writes.map(writeLine).join("\n")}`);
   }
   if (unrecovered) sections.push(RECOVERY_SENTENCE);
+  sections.push(REPORT_RUBRIC);
   sections.push(
     "Call SubmitInvestigationReport once. The findings above are rendered beneath what you write, so write only the summary, the timeline, the impact and the recommendation.",
   );

@@ -34,6 +34,14 @@ import { getReport } from "../db/reports.js";
 import { appendTranscriptRows, getTranscriptRows } from "../db/sessions.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
+import {
+  registerRunner,
+  setRunnerManifest,
+  unregisterRunner,
+} from "../ws/fleet.js";
+import { resolveCommand } from "../ws/command-transport.js";
+import { generateRunnerToken } from "../db/runner.js";
+import { manifest } from "./manifest-helper.js";
 import { buildTranscript } from "../session/transcript.js";
 import { useTempDb } from "./temp-db.js";
 
@@ -198,13 +206,22 @@ describe("the investigation record", () => {
     return hypotheses[hypotheses.length - 1]!.id;
   }
 
-  // The report turn's tool, which is never in the toolset: the loop
-  // attaches it alone once the ledger gate has passed.
+  /* The report turn's tool, which is never in the toolset: the loop attaches it
+     alone once the ledger gate has passed. Every field is required, so the
+     filled-in ones a case does not care about come from here and a case that is
+     about a missing field overrides it to blank. */
   async function submit(
     sessionId: string,
     input: Record<string, unknown>,
   ): Promise<{ content: unknown; toolOutcome?: string }> {
-    return executeTool(SUBMIT_REPORT_TOOL, input, {
+    const complete = {
+      headline: "the cache bump raised the memory floor",
+      affected: "web-01",
+      impact: "nine minutes of failed reads",
+      recommendation: "revert PR #482",
+      ...input,
+    };
+    return executeTool(SUBMIT_REPORT_TOOL, complete, {
       sessionId,
       toolUseId: "tu-submit",
       toolCallCeilingMs: 15_000,
@@ -365,7 +382,6 @@ describe("the investigation record", () => {
             evidenceId: "",
           },
         ],
-        impact: "",
         recommendation: "revert it",
       });
 
@@ -395,7 +411,6 @@ describe("the investigation record", () => {
             evidenceId: "tu-invented",
           },
         ],
-        impact: "",
         recommendation: "revert it",
       });
 
@@ -408,25 +423,39 @@ describe("the investigation record", () => {
       expect(submitted.timeline[0]!.evidenceId).toBeUndefined();
     });
 
-    /* A field left out is a thinner report, not a broken one: failing the call
-       would throw away the fields the model did fill in. A field that is present
-       and blank means "none", which is how the wire schema says optional. */
-    it("stores a report that omits the optional prose, and reads a blank as none", async () => {
+    /* Every field is declared required on the schema the model is shown, so a
+       blank one is refused rather than stored as "none". Accepting it made the
+       contract a suggestion: a report claiming a headline and a recommendation
+       it does not have reads as complete to everyone downstream. */
+    it("refuses a blank in a field the schema declares required", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+
+      const refused = await submit(sessionId, {
+        headline: "   ",
+        summary: "the limit was lowered",
+        timeline: [],
+      });
+
+      expect(refused.toolOutcome).toBe("system");
+      expect(String(refused.content)).toContain("headline");
+      expect(getReport(sessionId)?.submitted ?? null).toBeNull();
+    });
+
+    it("stores every field once they are all filled in", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
       await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
 
       await submit(sessionId, {
-        headline: "   ",
         summary: "the limit was lowered",
         timeline: [],
-        impact: "",
-        recommendation: "revert it",
       });
 
       const submitted = getReport(sessionId)!.submitted!;
-      expect(submitted.headline).toBeUndefined();
-      expect(submitted.affected).toBeUndefined();
+      expect(submitted.headline).toBe("the cache bump raised the memory floor");
+      expect(submitted.affected).toBe("web-01");
       expect(submitted.summary).toBe("the limit was lowered");
     });
 
@@ -438,7 +467,6 @@ describe("the investigation record", () => {
       const refused = await submit(sessionId, {
         summary: "",
         timeline: [],
-        impact: "",
         recommendation: "",
       });
 
@@ -463,7 +491,6 @@ describe("the investigation record", () => {
             evidenceId: "tu-2",
           },
         ],
-        impact: "",
         recommendation: "revert PR #482",
       });
 
@@ -560,6 +587,8 @@ describe("the investigation record", () => {
                 id: "tu-submit",
                 name: "SubmitInvestigationReport",
                 input: {
+                  headline: "the worker filled its volume",
+                  affected: "the worker",
                   summary: "the worker ran out of disk",
                   timeline: [],
                   impact: "one job dropped",
@@ -1034,6 +1063,8 @@ describe("the investigation record", () => {
             id: "tu-submit",
             name: "SubmitInvestigationReport",
             input: {
+              headline: "the worker exhausted its memory limit",
+              affected: "the worker",
               summary: "the worker ran out of memory",
               timeline: [],
               impact: "one job dropped",
@@ -1064,12 +1095,12 @@ describe("the investigation record", () => {
       const requests = completionRequests();
       expect(requests).toHaveLength(3);
       expect(requests[0]).toContain("recorded nothing");
-      // Four investigating turns, then both report attempts - the scripted
+      // Four investigating turns, then every report attempt - the scripted
       // model never calls the tool, so the run ends with no report at all.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(6);
+      expect(provider.chat).toHaveBeenCalledTimes(7);
       expect(getReport(sessionId)).toBeUndefined();
 
       // Neither the requests nor the alert briefing NightWarden opened with is
@@ -1205,6 +1236,146 @@ describe("the investigation record", () => {
     /* The same loop entered again, not a second way to make a report. The
        sentence that re-enters is NightWarden's, so a reader who pressed a button
        is never shown words in their own voice that they did not write. */
+    /* A follow-up writes the report again over the same column, so the request
+       has to carry what is being replaced. Without it the model rewrites from a
+       context that may since have been compacted, and a paragraph it wrote an
+       hour ago disappears with nothing to say it ever existed. */
+    it("shows a second run the report it is replacing, as its own prior work", async () => {
+      mockCreateProvider
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("root_cause", "the disk filled up"),
+            { toolUses: [], text: "I am done." },
+            submitTurn("free up the disk"),
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            { toolUses: [], text: "Still full." },
+            submitTurn("add a volume"),
+          ]),
+        );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("revise"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("revise")] });
+      // The first run has nothing to revise, so it is shown nothing.
+      expect(reportRequests()[0]).not.toContain("nightwarden-previous-report");
+
+      await runSession({
+        sessionId,
+        seed: buildSeed(sessionId),
+        userMessage: "is it fixed?",
+      });
+
+      const second = harnessMessages(1).find((m) =>
+        m.includes("nightwarden-previous-report"),
+      );
+      expect(second).toBeDefined();
+      // Its own work, named as such, with the text it is replacing.
+      expect(second).toContain("You wrote this at the end of your last run");
+      expect(second).toContain("free up the disk");
+      expect(getReport(sessionId)!.submitted).toMatchObject({
+        recommendation: "add a volume",
+      });
+    });
+
+    /* A run that has read a great deal and settled nothing is asked about it
+       once, while the results are still close to hand. Counted over calls that
+       answered: a refused call taught the run nothing, so it is no evidence the
+       run should have concluded something by now. */
+    describe("the record check", () => {
+      function connectRunner() {
+        const runnerId = generateRunnerToken("docker", "rc-host").id;
+        const conn = registerRunner({
+          runnerId,
+          platform: "docker",
+          serverName: "rc-host",
+          send: (raw: string) => {
+            const msg = JSON.parse(raw) as {
+              payload: { correlationId: string };
+            };
+            resolveCommand({
+              correlationId: msg.payload.correlationId,
+              success: true,
+              result: [],
+            });
+          },
+          close: () => {},
+        });
+        setRunnerManifest(runnerId, manifest("rc-host"));
+        return conn;
+      }
+
+      // Two answering calls a turn, so the count crosses 8 on the fourth.
+      function readTurn() {
+        return {
+          toolUses: [
+            { id: randomUUID(), name: "ListDockerServices", input: {} },
+            { id: randomUUID(), name: "ListDockerServices", input: {} },
+          ],
+          text: "",
+        };
+      }
+
+      function checks(index = 0): string[] {
+        return harnessMessages(index).filter((m) =>
+          m.includes("your investigation record is still empty"),
+        );
+      }
+
+      it("asks once when the record is still empty, and not before", async () => {
+        const conn = connectRunner();
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            recordTurn("root_cause", "the worker leaks"),
+            { toolUses: [], text: "Done." },
+            submitTurn(),
+          ]),
+        );
+        const sessionId = randomUUID();
+        seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+          alert("record-check"),
+        ]);
+
+        await runSession({ sessionId, alerts: [alert("record-check")] });
+
+        expect(checks()).toHaveLength(1);
+        expect(checks()[0]).toContain("8 tool calls");
+        unregisterRunner(conn);
+      });
+
+      it("says nothing to a run that has already recorded something", async () => {
+        const conn = connectRunner();
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("disproven", "the disk filled"),
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            { toolUses: [], text: "Done." },
+            submitTurn(),
+          ]),
+        );
+        const sessionId = randomUUID();
+        seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+          alert("record-check-quiet"),
+        ]);
+
+        await runSession({ sessionId, alerts: [alert("record-check-quiet")] });
+
+        expect(checks()).toHaveLength(0);
+        unregisterRunner(conn);
+      });
+    });
+
     it("writes the report on a second entry, without speaking as the user", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
@@ -1346,6 +1517,9 @@ describe("the investigation record", () => {
         expect(request).toContain("Nothing can confirm");
       });
 
+      /* The tool refuses the blank field, so nothing is stored and the turn is
+         asked again. The refusal names the field; the request that follows says
+         only that the report is unwritten, which is true either way. */
       it("refuses a write-up that recommends nothing, and asks again", async () => {
         settledRun(submitTurn(""), submitTurn("cap concurrency at one job"));
         const sessionId = randomUUID();
@@ -1367,7 +1541,7 @@ describe("the investigation record", () => {
         });
 
         const retries = harnessMessages().filter((m) =>
-          m.includes("recommends nothing"),
+          m.includes("The report has not been written"),
         );
         expect(retries).toHaveLength(1);
         expect(getReport(sessionId)!.submitted!.recommendation).toBe(
