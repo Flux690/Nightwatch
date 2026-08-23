@@ -15,7 +15,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
       role="group"
       className={cn(
         // The group is the control, so it takes the edge for its input.
-        "group/input-group relative flex h-8 w-full min-w-0 items-center rounded-md border border-input transition-colors has-[[data-slot=input-group-control]:focus-visible]:border-ring has-disabled:bg-surface has-disabled:opacity-50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-2 has-[>[data-align=inline-start]]:[&>input]:pl-2",
+        "group/input-group relative flex h-8 min-w-0 items-center rounded-md border-[0.5px] border-input transition-colors has-[[data-slot=input-group-control]:focus-visible]:border-ring has-disabled:opacity-50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-2 has-[>[data-align=inline-start]]:[&>input]:pl-2",
         className,
       )}
       {...props}
@@ -64,13 +64,17 @@ function InputGroupAddon({
   );
 }
 
+/* The one place a 24px control is right, which is why the Button no longer
+   carries that rung: a control sitting inside a 32px field cannot be 32px
+   itself. `icon` and `default` are the Button's own two, for a composer whose
+   box is as tall as its content and whose actions are the field's own. */
 const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm", {
   variants: {
     size: {
       xs: "h-6 gap-1 rounded-md px-2 [&>svg:not([class*='size-'])]:size-3.5",
-      sm: "",
       "icon-xs": "size-6 rounded-md p-0 has-[>svg]:p-0",
-      "icon-sm": "size-8 p-0 has-[>svg]:p-0",
+      icon: "size-8 p-0 has-[>svg]:p-0",
+      default: "",
     },
   },
   defaultVariants: {
@@ -119,7 +123,7 @@ function InputGroupInput({
     <Input
       data-slot="input-group-control"
       className={cn(
-        "flex-1 rounded-none border-0 bg-transparent disabled:bg-transparent",
+        "flex-1 rounded-none border-0 bg-transparent shadow-none",
         className,
       )}
       {...props}
@@ -135,7 +139,7 @@ function InputGroupTextarea({
     <Textarea
       data-slot="input-group-control"
       className={cn(
-        "flex-1 resize-none rounded-none border-0 bg-transparent py-2 disabled:bg-transparent",
+        "flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none",
         className,
       )}
       {...props}

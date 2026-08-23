@@ -226,7 +226,7 @@ export function LoginPage(): React.JSX.Element | null {
 
   return (
     <div className="flex min-h-screen items-start justify-center p-6 pt-[clamp(96px,18vh,240px)]">
-      <div className="flex w-90 flex-col gap-8">
+      <div className="flex w-login flex-col gap-8">
         <span className="text-lg font-semibold tracking-tight text-foreground">
           NightWarden
         </span>

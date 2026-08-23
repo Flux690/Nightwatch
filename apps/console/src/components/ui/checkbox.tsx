@@ -23,4 +23,25 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   );
 }
 
-export { Checkbox };
+/* The checkbox counterpart of RadioGroupOption: children are the affordance,
+   so a row that already marks itself does not also carry a tick. */
+function CheckboxOption({
+  className,
+  children,
+  ...props
+}: CheckboxPrimitive.Root.Props) {
+  return (
+    <CheckboxPrimitive.Root
+      data-slot="checkbox-option"
+      className={cn(
+        "w-full text-left transition-colors duration-(--duration-fast) disabled:pointer-events-none disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </CheckboxPrimitive.Root>
+  );
+}
+
+export { Checkbox, CheckboxOption };

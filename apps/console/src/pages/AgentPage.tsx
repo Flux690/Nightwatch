@@ -58,7 +58,7 @@ function ChatHistory({ onLeave }: { onLeave: () => void }): React.JSX.Element {
           {/* Every division in this panel is drawn the same way and spaced the
               same, so the New chat entry and one day against the next read as
               one rhythm rather than two. */}
-          {index > 0 && <Separator className="my-1 bg-border-overlay" />}
+          {index > 0 && <Separator className="my-1 bg-border" />}
           {/* A day, written the way it is said. The uppercase mono label is for
               naming a system's own parts, which a Tuesday is not. */}
           <h3 className="m-0 px-2.5 py-1 text-sm font-normal text-muted-foreground">
@@ -176,7 +176,7 @@ export function AgentPage(): React.JSX.Element {
                     <Plus {...ICON_UI} />
                     New chat
                   </Link>
-                  <Separator className="my-1 bg-border-overlay" />
+                  <Separator className="my-1 bg-border" />
                 </>
               )}
               <ChatHistory onLeave={() => setHistoryOpen(false)} />

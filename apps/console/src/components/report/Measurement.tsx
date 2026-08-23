@@ -92,7 +92,7 @@ function Axes({
             x={PAD_L - 8}
             y={scale.y(value) + 4}
             textAnchor="end"
-            className="fill-ink-subtle font-mono text-[11px]"
+            className="fill-ink-subtle font-mono text-xs"
           >
             {read(value)}
           </text>
@@ -108,7 +108,7 @@ function Axes({
           x={scale.x(at)}
           y={H - 10}
           textAnchor={anchor}
-          className="fill-ink-subtle font-mono text-[11px]"
+          className="fill-ink-subtle font-mono text-xs"
         >
           {clockOf(at)}
         </text>
@@ -141,7 +141,7 @@ function AlertMark({
       <text
         x={scale.x(at) + 5}
         y={PAD_T + 10}
-        className="fill-fail font-mono text-[11px]"
+        className="fill-fail font-mono text-xs"
       >
         alert {clockOf(at)}
       </text>

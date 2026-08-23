@@ -15,8 +15,32 @@ import {
 } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/utils";
 
+/* One spelling of the small uppercase label that names a part of a page. It is
+   a class rather than only a component because a few of them label something
+   that is not a section and must not be a heading. */
 export const SECTION_HEADING =
   "font-mono text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground";
+
+/* A section's name, and what the section is for. The lead is where the general
+   case is said once, so no field below has to carry it as well as its own. */
+export function SectionHeading({
+  lead,
+  className,
+  children,
+}: {
+  lead?: string;
+  className?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <h2 className={SECTION_HEADING}>{children}</h2>
+      {lead !== undefined && (
+        <p className="text-sm text-muted-foreground">{lead}</p>
+      )}
+    </div>
+  );
+}
 
 /* One entry per level, root first. The last is where you are and never links;
    a lone entry is the page title, so the chevron appears only on descent. */

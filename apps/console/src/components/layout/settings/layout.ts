@@ -1,15 +1,14 @@
-// One height for every control and one width per kind, applied to the control
-// itself rather than a wrapper: a shared right edge is what makes a column of
-// mixed controls read as ordered, so a pick-from control hugs its own option.
+// One width per kind of control, applied to the control itself rather than a
+// wrapper: a shared right edge is what makes a column of mixed controls read as
+// ordered. A pick-from control is absent because it hugs its own option.
+//
+// One `w-` class and no more: tailwind-merge cannot tell that `w-control` is a
+// width, so a second one beside it survives and source order decides.
 export const CONTROL = {
-  // A pick-from control carries its raised fill from the Select itself; only
-  // its size belongs to the settings row.
-  select: "h-8 w-auto",
-  // A hairline, not a box: at 1px the line outweighs what it bounds and the
-  // field reads as sunken rather than as an edge.
-  text: "h-8 w-72 border-[0.5px]",
+  // Beside a label rather than above it, so content cannot set the width.
+  text: "w-control",
   // Sized to the digits plus its unit, not to the row.
-  number: "h-8 w-24",
+  number: "w-24",
 } as const;
 
 // These values are typed, not nudged one at a time.

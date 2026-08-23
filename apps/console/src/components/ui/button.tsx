@@ -13,28 +13,25 @@ const buttonVariants = cva(
     variants: {
       size: {
         default: "h-8 gap-2 px-4",
-        xs: "h-6 gap-1 px-2 text-sm [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 px-3 text-sm [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-8 gap-2 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        sm: "h-7 gap-1.5 px-3 text-sm [&_svg:not([class*='size-'])]:size-3.5",
         icon: "size-8",
-        "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-7",
-        "icon-lg": "size-9",
       },
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary-hover",
-        /* Defined by its edge, so the surface shows through it and the edge
-           has to read at any depth. An opaque fill and a line rung are both
-           solved for the stage, and this button does not always stand on it. */
+        /* Defined by its edge, so the surface shows through it. Both the edge
+           and the hover re-derive from the ground the button lands on. */
         outline:
-          "border-border-overlay bg-transparent hover:bg-state-hover aria-expanded:bg-state-hover",
+          "border-border bg-transparent hover:bg-state-hover aria-expanded:bg-state-hover",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary-hover aria-expanded:bg-secondary",
+          "bg-secondary text-secondary-foreground shadow-control hover:bg-secondary-hover aria-expanded:bg-secondary",
         ghost: "hover:bg-state-hover aria-expanded:bg-state-hover",
         destructive:
           "bg-destructive-fill text-primary-foreground hover:bg-destructive-fill-hover",
+        /* A neutral lift, not a red one: a fixed tint sinks on any ground
+           lighter than itself, which a menu is. The ink carries the meaning. */
         "destructive-ghost":
-          "text-destructive hover:bg-destructive-tint hover:text-destructive",
+          "text-destructive hover:bg-state-hover hover:text-destructive",
         /* Underlined at rest, not on hover: a link must read as one without
            relying on hue. Cobalt is reserved for hover, per the colour rule. */
         link: "h-auto gap-1 p-0 text-ink-subtle underline decoration-border underline-offset-2 hover:text-primary-ink hover:decoration-primary-ink",
@@ -62,4 +59,4 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
+export { Button };

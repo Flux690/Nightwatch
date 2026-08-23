@@ -6,63 +6,117 @@ import { describe, it, expect } from "vitest";
 // of this package's location however the suite was started.
 const SRC = process.env["CONSOLE_SRC"] ?? "";
 
-/* Every token points at a step, each band is evenly spaced, and every pair
-   clears its WCAG floor. Converted here because a browser reports oklch() back
-   verbatim, and a first prototype's rgb() regex read L, C and H as r, g and b. */
-
-type Step = { L: number; C: number; H: number };
-
 const css = readFileSync(join(SRC, "styles.css"), "utf8");
-const root = css.matchAll(/:root\s*\{([\s\S]*?)\n\}/g);
+
+/* Every declaration in styles.css, by the selector that carries it. A token is
+   read in the context of a ground, because after re-anchoring the same name
+   resolves to a different colour depending on which surface it lands on. */
 const declarations = new Map<string, string>();
-for (const block of root) {
-  for (const m of block[1].matchAll(/--([a-z][-a-z0-9]*):\s*([^;]+);/g)) {
-    declarations.set(m[1], m[2].trim().replace(/\s+/g, " "));
+const groundOverrides = new Map<string, string>();
+
+// Comments are stripped first, or a leading /* … */ is captured as part of the
+// selector and the block it introduces is skipped.
+const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+for (const block of bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  const selector = ((block[1] ?? "").split(";").pop() ?? "").trim();
+  const body = block[2] ?? "";
+  if (!/^:root|\[data-ground/.test(selector)) continue;
+  const scoped = /^\[data-ground="([a-z]+)"\]$/.exec(selector);
+  for (const m of body.matchAll(/--([a-z][-a-z0-9]*):\s*([^;]+);/g)) {
+    const name = m[1] ?? "";
+    const value = (m[2] ?? "").trim().replace(/\s+/g, " ");
+    if (scoped) {
+      if (name === "ground-l" || name === "ground-c") {
+        groundOverrides.set(`${scoped[1] ?? ""}:${name}`, value);
+      }
+      continue;
+    }
+    declarations.set(name, value);
   }
 }
 
-/* A step is an opaque OKLCH triple. Scrim and shadow are black at alpha:
-   depth rather than palette, so they are steps of nothing. */
-const scale = new Map<string, Step>();
-const aliases = new Map<string, string>();
-const mixes = new Map<string, { base: string; toward: string; part: number }>();
-const MIX =
-  /^color-mix\(\s*in oklab,\s*var\(--([a-z][-a-z0-9]*)\),\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%\s*\)$/;
-
-/* An overlay names no base, because a control that can sit on four depths has
-   no one surface to be mixed against. It composites over whatever is beneath. */
-const overlays = new Map<string, { ink: string; alpha: number }>();
-const OVERLAY =
-  /^color-mix\(\s*in srgb,\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%,\s*transparent\s*\)$/;
-/* A scalar declaration: a theme's four inputs and the departures they drive.
-   Resolved here so the test does the arithmetic the browser does. */
-const scalars = new Map<string, number>();
-for (const [name, value] of declarations) {
-  if (/^-?[\d.]+$/.test(value)) scalars.set(name, +value);
+/* A calc() evaluator, because the ladder is arithmetic now: a role is its
+   ground plus a departure times the contrast, and ink is a proportion of the
+   distance to the pole. Anything the browser computes, this has to compute. */
+function evaluate(expr: string, env: Map<string, string>): number {
+  const src = expr.trim();
+  let i = 0;
+  const ws = () => {
+    while (i < src.length && /\s/.test(src[i] ?? "")) i++;
+  };
+  function parseExpr(): number {
+    let value = parseTerm();
+    for (;;) {
+      ws();
+      const op = src[i];
+      if (op !== "+" && op !== "-") return value;
+      i++;
+      const rhs = parseTerm();
+      value = op === "+" ? value + rhs : value - rhs;
+    }
+  }
+  function parseTerm(): number {
+    let value = parseFactor();
+    for (;;) {
+      ws();
+      const op = src[i];
+      if (op !== "*" && op !== "/") return value;
+      i++;
+      const rhs = parseFactor();
+      value = op === "*" ? value * rhs : value / rhs;
+    }
+  }
+  function parseFactor(): number {
+    ws();
+    if (src.startsWith("calc(", i)) {
+      i += 5;
+      const v = parseExpr();
+      ws();
+      i++;
+      return v;
+    }
+    if (src.startsWith("var(", i)) {
+      const close = src.indexOf(")", i);
+      const name = src
+        .slice(i + 4, close)
+        .trim()
+        .replace(/^--/, "");
+      i = close + 1;
+      const ref = env.get(name);
+      if (ref === undefined) throw new Error(`--${name} is not declared`);
+      return evaluate(ref, env);
+    }
+    if (src[i] === "(") {
+      i++;
+      const v = parseExpr();
+      ws();
+      i++;
+      return v;
+    }
+    if (src[i] === "-") {
+      i++;
+      return -parseFactor();
+    }
+    const m = /^-?[\d.]+/.exec(src.slice(i));
+    if (!m) throw new Error(`cannot evaluate "${src}" at ${String(i)}`);
+    i += m[0].length;
+    return Number(m[0]);
+  }
+  return parseExpr();
 }
 
-// var() and calc() over those scalars, with the two operators the ladder uses.
-function scalar(expr: string): number {
-  const resolved = expr
-    .replace(/var\(--([a-z0-9-]+)\)/g, (_, ref: string) =>
-      String(scalars.get(ref) ?? NaN),
-    )
-    .replace(/^calc\((.*)\)$/, "$1")
-    .trim();
-  const sum = resolved.split(/\s+\+\s+/).map((term) =>
-    term
-      .split(/\s*\*\s*/)
-      .map(Number)
-      .reduce((a, b) => a * b, 1),
-  );
-  return sum.reduce((a, b) => a + b, 0);
+interface Step {
+  L: number;
+  C: number;
+  H: number;
 }
 
-// The three slots of an oklch(), split on the spaces between them: a slot may
-// be a calc() carrying spaces and parens of its own.
+/* The three slots of an lch(), split on the spaces between them: a slot may be
+   a calc() carrying spaces and parens of its own. */
 function slots(value: string): string[] | null {
-  const body = /^oklch\((.*)\)$/.exec(value.replace(/\s+/g, " ").trim())?.[1];
-  if (body === undefined || body.includes("/")) return null;
+  const body = /^lch\((.*)\)$/.exec(value.trim())?.[1];
+  if (body === undefined) return null;
   const out: string[] = [];
   let depth = 0;
   let current = "";
@@ -77,131 +131,110 @@ function slots(value: string): string[] | null {
     current += ch;
   }
   if (current) out.push(current);
-  return out.length === 3 ? out : null;
+  return out.length >= 3 ? out.slice(0, 3) : null;
 }
 
-for (const [name, value] of declarations) {
+const GROUNDS = ["ground", "stage", "surface", "card", "popover"] as const;
+type Ground = (typeof GROUNDS)[number];
+
+function envFor(ground: Ground): Map<string, string> {
+  const env = new Map(declarations);
+  for (const name of ["ground-l", "ground-c"]) {
+    const override = groundOverrides.get(`${ground}:${name}`);
+    if (override !== undefined) env.set(name, override);
+  }
+  return env;
+}
+
+function step(name: string, ground: Ground = "stage"): Step {
+  const env = envFor(ground);
+  const seen = new Set<string>();
+  let value = env.get(name);
+  while (value !== undefined) {
+    const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(value);
+    if (!alias) break;
+    const next = alias[1] ?? "";
+    if (seen.has(next)) throw new Error(`--${name} loops through --${next}`);
+    seen.add(next);
+    name = next;
+    value = env.get(next);
+  }
+  if (value === undefined) throw new Error(`--${name} is not declared`);
   const triple = slots(value);
-  if (triple) {
-    const [L, C, H] = triple.map(scalar);
-    if ([L, C, H].every(Number.isFinite)) {
-      scale.set(name, { L: L!, C: C!, H: H! });
-      continue;
-    }
-  }
-  const blend = MIX.exec(value);
-  if (blend) {
-    mixes.set(name, {
-      base: blend[1] ?? "",
-      toward: blend[2] ?? "",
-      part: +(blend[3] ?? 0) / 100,
-    });
-    continue;
-  }
-  const wash = OVERLAY.exec(value);
-  if (wash) {
-    overlays.set(name, { ink: wash[1] ?? "", alpha: +(wash[2] ?? 0) / 100 });
-    continue;
-  }
-  const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(value);
-  if (alias) aliases.set(name, alias[1]);
+  if (!triple) throw new Error(`--${name} is not an lch() step: ${value}`);
+  const [L, C, H] = triple.map((slot) => evaluate(slot, env));
+  return { L: L ?? NaN, C: C ?? NaN, H: H ?? NaN };
 }
 
-/* A mix is evaluated where the browser evaluates it, in OKLab, so the test
-   reads the colour that actually paints rather than an approximation. */
-function blend(x: Step, y: Step, part: number): Step {
-  const polar = ({ L, C, H }: Step) => {
-    const h = (H * Math.PI) / 180;
-    return [L, C * Math.cos(h), C * Math.sin(h)] as const;
-  };
-  const [l1, a1, b1] = polar(x);
-  const [l2, a2, b2] = polar(y);
-  const [L, a, b] = [
-    l1 + (l2 - l1) * part,
-    a1 + (a2 - a1) * part,
-    b1 + (b2 - b1) * part,
-  ];
-  let H = (Math.atan2(b, a) * 180) / Math.PI;
-  if (H < 0) H += 360;
-  return { L, C: Math.hypot(a, b), H };
-}
-
-function step(name: string): Step {
-  const target = aliases.get(name) ?? name;
-  const mix = mixes.get(target);
-  if (mix) return blend(step(mix.base), step(mix.toward), mix.part);
-  const value = scale.get(target);
-  if (!value)
-    throw new Error(`--${name} does not resolve to a step on the scale`);
-  return value;
-}
-
-/* OKLab to linear sRGB, then luminance. Clamped, because a browser clamps too:
-   --status-fail is marginally outside the sRGB gamut and renders at its edge. */
-function luminance({ L, C, H }: Step): number {
-  const h = (H * Math.PI) / 180;
-  const a = C * Math.cos(h);
-  const b = C * Math.sin(h);
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const [r, g, bl] = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((v) => Math.min(1, Math.max(0, v)));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-}
-
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(step(a)), luminance(step(b))].sort(
-    (x, y) => y - x,
-  );
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-// Every gap in a band equals the first one. The value is the theme's; only the
-// evenness is the system's, so a band of two is trivially even and says nothing.
-function expectEvenSteps(group: string[]): void {
-  const gaps = group
-    .slice(1)
-    .map((name, i) => step(name).L - step(group[i] ?? "").L);
-  for (const [i, gap] of gaps.entries()) {
-    expect(gap, `${group[i]} to ${group[i + 1]}`).toBeCloseTo(gaps[0]!, 4);
-  }
-}
-
-const SURFACES = [
-  "sidebar",
-  "background",
-  "card",
-  "secondary",
-  "surface-hover",
-  "surface-active",
+/* CSS Color 4 lch() is D50 Lab, so it is Bradford-adapted to D65 before the
+   sRGB matrix. Getting this wrong reads every surface as black. */
+const D50: [number, number, number] = [
+  0.3457 / 0.3585,
+  1,
+  (1 - 0.3457 - 0.3585) / 0.3585,
 ];
+const D50_TO_D65 = [
+  [0.9554734527042182, -0.023098536874261423, 0.0632593086610217],
+  [-0.028369706963208136, 1.0099954580058226, 0.021041398966943008],
+  [0.012314001688319899, -0.020507696433477912, 1.3303659366080753],
+];
+const XYZ_TO_RGB = [
+  [3.2409699419045226, -1.537383177570094, -0.4986107602930034],
+  [-0.9692436362808796, 1.8759675015077202, 0.04155505740717559],
+  [0.05563007969699366, -0.20397695888897652, 1.0569715142428786],
+];
+const apply = (m: number[][], v: number[]): number[] =>
+  m.map(
+    (r) =>
+      (r[0] ?? 0) * (v[0] ?? 0) +
+      (r[1] ?? 0) * (v[1] ?? 0) +
+      (r[2] ?? 0) * (v[2] ?? 0),
+  );
+
+function channels({ L, C, H }: Step): [number, number, number] {
+  const h = (H * Math.PI) / 180;
+  const fy = (L + 16) / 116;
+  const fx = fy + (C * Math.cos(h)) / 500;
+  const fz = fy - (C * Math.sin(h)) / 200;
+  const d = 6 / 29;
+  const inv = (t: number) => (t > d ? t ** 3 : 3 * d * d * (t - 4 / 29));
+  const xyz = [inv(fx) * D50[0], inv(fy) * D50[1], inv(fz) * D50[2]];
+  const [r, g, b] = apply(XYZ_TO_RGB, apply(D50_TO_D65, xyz)).map((c) => {
+    const s =
+      c <= 0.0031308 ? 12.92 * c : 1.055 * Math.abs(c) ** (1 / 2.4) - 0.055;
+    return Math.min(1, Math.max(0, s));
+  });
+  return [r ?? 0, g ?? 0, b ?? 0];
+}
+
+function luminance(s: Step): number {
+  const [r, g, b] = channels(s).map((c) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
+}
+
+function ratio(a: Step, b: Step): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+}
 
 /* Rendered channel value, which is what the eye reads near black: contrast
-   ratio and OKLCH lightness both carry constants that flatten a doubling. */
-function channel(name: string): number {
-  const { L, C, H } = step(name);
-  const h = (H * Math.PI) / 180;
-  const [a, b] = [C * Math.cos(h), C * Math.sin(h)];
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const g = Math.min(
-    1,
-    Math.max(0, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-  );
-  return Math.round(
-    (g <= 0.0031308 ? 12.92 * g : 1.055 * g ** (1 / 2.4) - 0.055) * 255,
-  );
-}
+   ratio and lightness both carry constants that flatten a doubling. */
+const channel = (name: string, ground: Ground = "stage"): number =>
+  Math.round((channels(step(name, ground))[1] ?? 0) * 255);
 
-describe("the scale", () => {
-  /* The ladder rises away from the anchor and never doubles back. The size of a
-     step is a theme's business; the order is the system's, so only order is
-     asserted here and the contrast floors below carry the rest. */
+const GROUND_TOKEN: Record<Ground, string> = {
+  ground: "n-1",
+  stage: "n-2",
+  surface: "n-3",
+  card: "n-4",
+  popover: "n-5",
+};
+const onOwnGround = (name: string, g: Ground): number =>
+  ratio(step(name, g), step(GROUND_TOKEN[g], g));
+
+describe("the ladder", () => {
   it("rises monotonically away from the anchor", () => {
     for (const [below, above] of [
       ["n-1", "n-2"],
@@ -219,240 +252,250 @@ describe("the scale", () => {
      whole ladder by moving one value. A rung that stops deriving is a rung that
      will be wrong in the next theme. */
   it("derives every surface from the one anchor", () => {
-    const anchor = scalars.get("base-l");
-    expect(anchor, "--base-l").toBeTypeOf("number");
-    expect(step("n-2").L).toBeCloseTo(anchor!, 10);
-    for (const rung of ["n-1", "n-3", "n-4", "n-5"]) {
-      const departure = scalars.get(`d-${rung}`);
-      expect(departure, `--d-${rung}`).toBeTypeOf("number");
-      expect(step(rung).L, rung).toBeCloseTo(
-        anchor! + departure! * scalars.get("contrast")!,
-        10,
-      );
-    }
-  });
-
-  it("keeps every line above every surface, so an edge cannot invert", () => {
-    for (const line of ["line-1", "line-2", "line-3"])
-      for (const n of ["n-1", "n-2", "n-3", "n-4", "n-5"])
-        expect(channel(line), `${line} over ${n}`).toBeGreaterThan(channel(n));
-  });
-
-  /* Evenly spaced, without saying by how much: the gap is a theme's to choose
-     and a band with one uneven rung is the defect. */
-  it("spaces ink evenly, whatever the spacing is", () => {
-    expectEvenSteps(["ink-1", "ink-2", "ink-3"]);
-  });
-
-  it("spaces status tints evenly, whatever the spacing is", () => {
-    expectEvenSteps(["status-fail-tint", "status-fail-wash"]);
-  });
-
-  /* One value per accent: a fill lifts toward white the same way a surface
-     lifts toward ink, so a second hand-picked hex cannot drift from it. */
-  it("lifts each fill toward white for its hover", () => {
-    for (const [fill, hover] of [
-      ["primary", "primary-hover"],
-      ["destructive-fill", "destructive-fill-hover"],
+    const env = envFor("stage");
+    const anchor = evaluate(env.get("base-l") ?? "", env);
+    const contrast = evaluate(env.get("contrast") ?? "", env);
+    expect(step("n-2").L).toBeCloseTo(anchor, 10);
+    for (const [rung, departure] of [
+      ["n-1", "d-ground"],
+      ["n-3", "d-surface"],
+      ["n-4", "d-card"],
+      ["n-5", "d-popover"],
     ] as const) {
-      expect(mixes.get(hover)?.toward, `--${hover}`).toBe("white");
-      expect(step(hover).L).toBeGreaterThan(step(fill).L);
+      const d = evaluate(env.get(departure) ?? "", env);
+      expect(step(rung).L, rung).toBeCloseTo(anchor + d * contrast, 8);
     }
   });
 
-  /* A gradient is a composition of steps, so each of its stops is held to the
-     same rule every other colour is: it names a step, never a value. */
-  it("builds every gradient out of steps", () => {
-    const gradients = [...declarations].filter(([, v]) =>
-      v.startsWith("linear-gradient("),
-    );
-    expect(gradients.length).toBeGreaterThan(0);
-    for (const [name, value] of gradients) {
-      const stops = [...value.matchAll(/var\(--([a-z][-a-z0-9]*)\)/g)];
-      expect(stops.length, `--${name} has no stops`).toBeGreaterThan(1);
-      for (const [, stop] of stops)
-        expect(
-          () => step(stop ?? ""),
-          `--${name} stop --${stop}`,
-        ).not.toThrow();
-    }
-  });
-
-  it("holds every semantic token to a step, a mix or an alias", () => {
-    for (const [name, value] of declarations) {
-      if (scale.has(name) || aliases.has(name) || mixes.has(name)) continue;
-      if (overlays.has(name)) continue;
-      if (value.startsWith("linear-gradient(")) continue;
-      // A theme's inputs and the departures they drive are numbers, not colours.
-      if (scalars.has(name)) continue;
-      expect(value, `--${name} is neither a step, a mix nor an alias`).toMatch(
-        /oklch\(0 0 0 \/ /,
+  /* The rule the whole system rests on: a control, an edge and ink are all
+     departures from the ground they land on, not from the page. A token that
+     resolves identically on every ground has stopped re-anchoring. */
+  it("re-anchors every control, edge and ink per ground", () => {
+    for (const name of [
+      "control",
+      "control-hover",
+      "state-hover",
+      "line-1",
+      "line-2",
+      "line-3",
+      "ink-1",
+      "ink-2",
+      "ink-3",
+    ]) {
+      const seen = GROUNDS.map((g) => step(name, g).L);
+      expect(new Set(seen.map((l) => l.toFixed(4))).size, name).toBe(
+        GROUNDS.length,
       );
     }
-    for (const name of scale.keys()) {
-      expect(name, `--${name} is a raw colour outside the scale`).toMatch(
-        /^(n|line|ink|status|series|cobalt|red|white)(-|$)/,
-      );
-    }
-    for (const [name, target] of aliases) {
-      expect(
-        scale.has(target) || mixes.has(target),
-        `--${name} points at --${target}`,
-      ).toBe(true);
-    }
   });
 
-  /* These shipped pointing at one token, so hovering a selected row said
-     nothing and the two states were indistinguishable. */
-  it("separates the sidebar's hover from its selected fill", () => {
-    const [rest, hover, active] = [
-      "sidebar",
-      "sidebar-hover",
-      "sidebar-active",
-    ];
-    expect(contrast(hover, rest)).toBeGreaterThan(1.05);
-    expect(contrast(active, hover)).toBeGreaterThan(1.1);
-    expect(step(active).L).toBeGreaterThan(step(hover).L);
-  });
-
-  /* Rest ink is dim so lifting it to full on hover is the signal; a bright
-     rest leaves nowhere to travel. */
-  it("keeps the sidebar's rest ink below its lit ink, both above AA", () => {
-    expect(contrast("sidebar-foreground", "sidebar")).toBeGreaterThanOrEqual(
-      4.5,
-    );
-    expect(step("sidebar-foreground").L).toBeLessThan(
-      step("sidebar-hover-foreground").L,
-    );
-    for (const fill of ["sidebar-hover", "sidebar-active"])
-      expect(
-        contrast("sidebar-hover-foreground", fill),
-        `lit ink on ${fill}`,
-      ).toBeGreaterThanOrEqual(7);
-  });
-
-  /* The rule the ladder depends on: a state is relative to the surface it
-     lands on, so it stays right at every depth instead of only one. A state
-     bound to a surface it does not sit on is what makes a hover sink. */
-  it("derives every hover and active state rather than naming a rung", () => {
-    const states = [...declarations.keys()].filter((n) =>
-      /-(hover|active)$/.test(n),
-    );
-    expect(states.length).toBeGreaterThan(0);
-    for (const name of states) {
-      if (name === "primary-hover" || name.includes("fill")) continue;
-      const overlay = overlays.get(name);
-      if (overlay) {
-        expect(overlay.ink, `--${name} washes with the wrong pole`).toBe(
-          "ink-3",
+  /* Chroma is a departure from the ground's own chroma, not a constant. Held
+     flat, a control on a card came out duller than the same control on the
+     stage, which is not what the system it reproduces does. */
+  it("re-anchors chroma per ground, and mixes ink's at half rate", () => {
+    const GROUND_C: Record<Ground, number> = {
+      ground: 0.4,
+      stage: 0.4,
+      surface: 0.85,
+      card: 0.85,
+      popover: 1.3,
+    };
+    for (const [role, departure] of [
+      ["control", "dc-control"],
+      ["control-hover", "dc-control-lit"],
+      ["state-hover", "dc-state"],
+      ["highlight", "dc-highlight"],
+      ["line-1", "dc-line"],
+      ["line-lit", "dc-line-lit"],
+    ] as const) {
+      const env = envFor("stage");
+      const d = evaluate(env.get(departure) ?? "", env);
+      for (const g of GROUNDS) {
+        expect(step(role, g).C, `${role} on ${g}`).toBeCloseTo(
+          GROUND_C[g] + d,
+          8,
         );
+      }
+    }
+    for (const ink of ["ink-1", "ink-2", "ink-3"]) {
+      for (const g of GROUNDS) {
+        expect(step(ink, g).C, `${ink} on ${g}`).toBeCloseTo(
+          1.2 + (GROUND_C[g] - 0.4) / 2,
+          8,
+        );
+      }
+    }
+  });
+
+  it("keeps every line above the ground it is drawn on", () => {
+    for (const line of ["line-1", "line-2", "line-3"]) {
+      for (const g of GROUNDS) {
+        expect(channel(line, g), `${line} on ${g}`).toBeGreaterThan(
+          channel(GROUND_TOKEN[g], g),
+        );
+      }
+    }
+  });
+
+  it("lifts a control off every ground it can stand on", () => {
+    for (const g of GROUNDS) {
+      expect(channel("control", g), `control on ${g}`).toBeGreaterThan(
+        channel(GROUND_TOKEN[g], g),
+      );
+      expect(channel("control-hover", g), `hover on ${g}`).toBeGreaterThan(
+        channel("control", g),
+      );
+    }
+  });
+
+  /* Ink is a proportion of the distance to the pole, never an offset. An
+     additive ink ladder drifts the moment contrast or the base moves. */
+  it("mixes ink toward the pole rather than offsetting it", () => {
+    const env = envFor("stage");
+    for (const [name, t] of [
+      ["ink-1", "t-ink-1"],
+      ["ink-2", "t-ink-2"],
+      ["ink-3", "t-ink-3"],
+    ] as const) {
+      const share = evaluate(env.get(t) ?? "", env);
+      for (const g of GROUNDS) {
+        const groundL = step(GROUND_TOKEN[g], g).L;
+        expect(step(name, g).L, `${name} on ${g}`).toBeCloseTo(
+          groundL + share * (100 - groundL),
+          8,
+        );
+      }
+    }
+  });
+
+  /* Greys read as grey. Our first ladder carried four times this chroma and
+     every dim label came out lavender. */
+  it("keeps a ceiling on ink chroma", () => {
+    for (const name of ["ink-1", "ink-2", "ink-3"]) {
+      expect(step(name).C, name).toBeLessThanOrEqual(2);
+      const [r, , b] = channels(step(name)).map((c) => Math.round(c * 255));
+      expect(Math.abs((b ?? 0) - (r ?? 0)), `${name} tint`).toBeLessThanOrEqual(
+        4,
+      );
+    }
+  });
+
+  it("holds every semantic token to a step or an alias", () => {
+    for (const [name, value] of declarations) {
+      if (/^(d|dc|c|t)-/.test(name) || /^(base|l)-/.test(name)) continue;
+      if (name === "contrast") continue;
+      if (name === "ground-l" || name === "ground-c") continue;
+      if (
+        /^(hue|radius|text|container|ease|duration|font|spacing)/.test(name)
+      ) {
         continue;
       }
-      const mix = mixes.get(name);
-      expect(mix, `--${name} is neither a mix nor a wash`).toBeDefined();
-      expect(mix?.toward, `--${name} mixes toward the wrong pole`).toBe(
-        "ink-3",
-      );
+      if (value.startsWith("linear-gradient(")) continue;
+      if (/lch\(0 0 0 \/ /.test(value) || value.includes("px ")) continue;
+      expect(
+        () => step(name),
+        `--${name} does not resolve to a step`,
+      ).not.toThrow();
     }
   });
 
-  /* A wash's ink sits above the whole surface ramp, so compositing it can only
-     lighten. A rung used this way lifts at one depth and sinks at the next,
-     which put a menu row darker than the menu it opened on. */
-  it("keeps a depth-independent state above every surface it can land on", () => {
-    expect(overlays.size).toBeGreaterThan(0);
-    for (const [name, { ink, alpha }] of overlays) {
-      expect(alpha, `--${name} washes with no ink`).toBeGreaterThan(0);
-      for (const surface of [...SURFACES, "popover", "control", "input"]) {
-        expect(
-          step(ink).L,
-          `--${name} would sink on --${surface}`,
-        ).toBeGreaterThan(step(surface).L);
+  /* A tint is absolute within a polarity, so it cannot be used as a hover on a
+     ground lighter than itself. This is what put a destructive hover darker
+     than the menu it opened on. */
+  it("never hovers onto a fixed rung that its ground can outrun", () => {
+    for (const [, text] of sources(SRC)) {
+      for (const m of text.matchAll(/hover:bg-([a-z0-9-]+)/g)) {
+        expect(m[1], `hover onto a fixed tint in ${m[0]}`).not.toMatch(
+          /-tint$|-wash$/,
+        );
       }
-    }
-  });
-});
-
-/* A chart tells series apart by hue alone, so they have to be equal in every
-   other way, and each has to clear the graphical-object floor on the stage. */
-describe("chart series", () => {
-  const series = [...scale.entries()].filter(([name]) =>
-    name.startsWith("series-"),
-  );
-
-  it("varies hue and nothing else", () => {
-    expect(series.length).toBeGreaterThanOrEqual(4);
-    expect(new Set(series.map(([, step]) => step.L)).size).toBe(1);
-    expect(new Set(series.map(([, step]) => step.C)).size).toBe(1);
-    expect(new Set(series.map(([, step]) => step.H)).size).toBe(series.length);
-  });
-
-  /* Status means something. A line the same hue as ok, warn or fail reads as a
-     healthy or a failing one when it is neither. */
-  it("keeps clear of the hues that carry status", () => {
-    const status = ["status-ok", "status-warn", "status-fail"].map(
-      (name) => scale.get(name)!.H,
-    );
-    for (const [name, step] of series) {
-      for (const hue of status) {
-        expect(
-          Math.abs(step.H - hue),
-          `--${name} sits on a status hue`,
-        ).toBeGreaterThan(25);
-      }
-    }
-  });
-
-  it("clears 3:1 on the stage (WCAG 1.4.11)", () => {
-    for (const [name] of series) {
-      expect(contrast(name, "background"), name).toBeGreaterThanOrEqual(3);
     }
   });
 });
 
 describe("the contrast matrix", () => {
-  it("keeps full ink at 9:1+ on every surface", () => {
-    for (const surface of SURFACES) {
+  /* Measured within a ground, never across two. After re-anchoring, ink inside
+     a menu is the menu's ink; holding it against the page's background tests a
+     pair that never appears on screen. */
+  it("keeps full ink at 9:1+ on its own ground", () => {
+    for (const g of GROUNDS) {
       expect(
-        contrast("foreground", surface),
-        `foreground on ${surface}`,
+        onOwnGround("foreground", g),
+        `foreground on ${g}`,
       ).toBeGreaterThanOrEqual(9);
     }
   });
 
-  it("keeps muted and subtle ink at AA on every surface", () => {
+  it("keeps muted and subtle ink at AA on their own ground", () => {
     for (const ink of ["muted-foreground", "ink-subtle"]) {
-      for (const surface of SURFACES) {
-        expect(
-          contrast(ink, surface),
-          `${ink} on ${surface}`,
-        ).toBeGreaterThanOrEqual(4.5);
+      for (const g of GROUNDS) {
+        expect(onOwnGround(ink, g), `${ink} on ${g}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
       }
     }
   });
 
-  it("keeps status hues at AAA on every surface that carries them", () => {
-    for (const status of ["ok", "wait", "fail", "run"]) {
-      for (const surface of ["sidebar", "background", "card"]) {
+  it("keeps the focus ring at 3:1+ on every ground (WCAG 1.4.11)", () => {
+    for (const g of GROUNDS) {
+      expect(onOwnGround("ring", g), `ring on ${g}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("keeps border-strong at 3:1+ on every ground (WCAG 1.4.11)", () => {
+    for (const g of GROUNDS) {
+      expect(onOwnGround("border-strong", g), `on ${g}`).toBeGreaterThanOrEqual(
+        3,
+      );
+    }
+  });
+
+  it("keeps the input border calm on the ground it is drawn on", () => {
+    for (const g of GROUNDS) {
+      const r = onOwnGround("input", g);
+      expect(r, `input on ${g} lower`).toBeGreaterThanOrEqual(1.1);
+      expect(r, `input on ${g} upper`).toBeLessThanOrEqual(3);
+    }
+  });
+
+  /* Status is absolute within a polarity, so it is held only on the grounds
+     status actually appears on. Text and Base are two different jobs with two
+     different floors: 7:1 for words, 3:1 for a dot. */
+  const STATUS_GROUNDS: Ground[] = ["ground", "stage", "surface", "card"];
+
+  it("keeps status text at AAA where status appears", () => {
+    for (const tone of ["ok", "wait", "fail", "run"]) {
+      for (const g of STATUS_GROUNDS) {
         expect(
-          contrast(status, surface),
-          `${status} on ${surface}`,
-        ).toBeGreaterThanOrEqual(status === "run" ? 4.5 : 7);
+          ratio(step(tone, g), step(GROUND_TOKEN[g], g)),
+          `${tone} on ${g}`,
+        ).toBeGreaterThanOrEqual(tone === "run" ? 4.5 : 7);
+      }
+    }
+  });
+
+  it("keeps a status icon at 3:1 where status appears (WCAG 1.4.11)", () => {
+    for (const base of ["success-base", "warning-base", "destructive-base"]) {
+      for (const g of STATUS_GROUNDS) {
+        expect(
+          ratio(step(base, g), step(GROUND_TOKEN[g], g)),
+          `${base} on ${g}`,
+        ).toBeGreaterThanOrEqual(3);
       }
     }
   });
 
   it("keeps status text at AA on its own tint", () => {
-    const pairs: [string, string][] = [
+    for (const [text, tint] of [
       ["success", "success-tint"],
       ["warning", "warning-tint"],
       ["destructive", "destructive-tint"],
-      ["destructive", "destructive-wash"],
-    ];
-    for (const [text, tint] of pairs) {
-      expect(contrast(text, tint), `${text} on ${tint}`).toBeGreaterThanOrEqual(
-        4.5,
-      );
+      ["destructive", "destructive-tint-hover"],
+    ] as const) {
+      expect(
+        ratio(step(text), step(tint)),
+        `${text} on ${tint}`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -464,32 +507,56 @@ describe("the contrast matrix", () => {
       "destructive-fill-hover",
     ]) {
       expect(
-        contrast("primary-foreground", fill),
-        `primary-foreground on ${fill}`,
+        ratio(step("primary-foreground"), step(fill)),
+        `on ${fill}`,
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it("keeps the focus ring at 3:1+ on canvas, on input and on raised (WCAG 1.4.11)", () => {
-    for (const surface of ["background", "secondary", "card"]) {
-      expect(
-        contrast("ring", surface),
-        `ring on ${surface}`,
-      ).toBeGreaterThanOrEqual(3);
+  it("separates the sidebar's hover from its selected fill", () => {
+    expect(channel("sidebar-active", "ground")).toBeGreaterThan(
+      channel("sidebar-hover", "ground"),
+    );
+    expect(
+      ratio(step("sidebar-foreground", "ground"), step("sidebar", "ground")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/* A chart tells series apart by hue alone, so they have to be equal in every
+   other way, and each has to clear the graphical-object floor on the stage. */
+describe("chart series", () => {
+  const series = [...declarations.keys()].filter((n) => /^series-\d$/.test(n));
+
+  it("varies hue and nothing else", () => {
+    expect(series.length).toBeGreaterThanOrEqual(4);
+    const steps = series.map((n) => step(n));
+    expect(new Set(steps.map((s) => s.L)).size).toBe(1);
+    expect(new Set(steps.map((s) => s.C)).size).toBe(1);
+    expect(new Set(steps.map((s) => s.H)).size).toBe(series.length);
+  });
+
+  /* Status means something. A line the same hue as ok, warn or fail reads as a
+     healthy or a failing one when it is neither. */
+  it("keeps clear of the hues that carry status", () => {
+    const env = envFor("stage");
+    const status = ["hue-green", "hue-yellow", "hue-red"].map((n) =>
+      evaluate(env.get(n) ?? "", env),
+    );
+    for (const name of series) {
+      for (const hue of status) {
+        expect(
+          Math.abs(step(name).H - hue),
+          `--${name} sits on a status hue`,
+        ).toBeGreaterThan(25);
+      }
     }
   });
 
-  it("keeps border-strong at 3:1+ on canvas (WCAG 1.4.11)", () => {
-    expect(
-      contrast("border-strong", "background"),
-      "border-strong on background",
-    ).toBeGreaterThanOrEqual(3);
-  });
-
-  it("keeps the input border calm: between 1.5:1 and 3:1 on a card", () => {
-    const ratio = contrast("input", "card");
-    expect(ratio, "input on card lower bound").toBeGreaterThanOrEqual(1.5);
-    expect(ratio, "input on card upper bound").toBeLessThanOrEqual(3);
+  it("clears 3:1 on the stage (WCAG 1.4.11)", () => {
+    for (const name of series) {
+      expect(ratio(step(name), step("n-2")), name).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 
@@ -605,10 +672,10 @@ describe("shadow", () => {
     expect(css).toContain("--shadow-*: initial;");
   });
 
-  it("spends only the two project tokens", () => {
+  it("spends only the project tokens", () => {
     expectUtilityValues(
       /(?<![-\w])shadow-([^\s"'`]+)/g,
-      ["edge", "raised", "overlay", "none"],
+      ["edge", "raised", "control", "overlay", "none"],
       "shadow",
     );
   });

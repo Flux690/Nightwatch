@@ -159,7 +159,7 @@ export function ChatInput({
       {/* A rung above the sidebar on the surface ladder, which is what reads as
           a control without a border. Held through every state: focus is the
           only thing that colours the edge. */}
-      <InputGroup className="edge-lit rounded-2xl border-transparent bg-secondary shadow-edge has-disabled:bg-secondary has-disabled:opacity-100">
+      <InputGroup className="edge-lit w-full rounded-2xl border border-transparent bg-surface shadow-edge has-disabled:bg-surface has-disabled:opacity-100">
         <InputGroupTextarea
           ref={textareaRef}
           id="chat-textarea"
@@ -195,7 +195,7 @@ export function ChatInput({
                   <InputGroupButton
                     type="button"
                     variant="ghost"
-                    size="sm"
+                    size="default"
                     className="rounded-full px-2 text-primary-ink"
                     aria-label={`Mode: ${MODE_LABEL[mode]}`}
                   >
@@ -216,7 +216,7 @@ export function ChatInput({
             <InputGroupButton
               type="button"
               variant="default"
-              size="icon-sm"
+              size="icon"
               className="rounded-full"
               aria-label="Stop generating"
               onClick={() => sessionId !== null && stop.mutate()}
@@ -228,7 +228,7 @@ export function ChatInput({
             <InputGroupButton
               type="button"
               variant="default"
-              size="icon-sm"
+              size="icon"
               className="rounded-full"
               aria-label="Send message"
               onClick={handleSubmit}

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Textarea } from "@/components/ui/textarea";
+import { SECTION_HEADING } from "@/components/layout/Page";
 import type { ToolCallItem } from "./types.js";
 import { SHELL_TOOLS } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
@@ -97,9 +99,7 @@ export function ApprovalCardPanel({
 
   return (
     <InterruptCard data-testid="approval-card">
-      <p className="text-sm font-semibold tracking-[0.05em] text-muted-foreground uppercase">
-        Needs your approval
-      </p>
+      <p className={SECTION_HEADING}>Needs your approval</p>
 
       <p className="text-base font-semibold">
         {actionLabel(item.toolName, input)}
@@ -115,13 +115,11 @@ export function ApprovalCardPanel({
         </div>
       )}
 
-      {/* Inset rather than outlined: the card is already told apart by sitting a
-          rung above the column, so a border here would be a second grammar. */}
       {command !== null && (
-        <pre className="m-0 overflow-x-auto rounded-md bg-surface px-3 py-2 font-mono text-sm break-words whitespace-pre-wrap">
+        <CodeBlock className="m-0 px-3 py-2 break-words">
           <span className="text-ink-subtle select-none">$ </span>
           {command}
-        </pre>
+        </CodeBlock>
       )}
 
       {/* Counted from this investigation's own transcript, never authored.

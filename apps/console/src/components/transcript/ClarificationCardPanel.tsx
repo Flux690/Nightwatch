@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CheckboxOption } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupOption } from "@/components/ui/radio-group";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { asRecord, stringAt } from "@/lib/toolResult";
-import { cn } from "@/lib/utils";
 import type { ToolCallItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
 
@@ -38,9 +40,39 @@ export function questionOf(input: Record<string, unknown>): {
   };
 }
 
-/* One row per answer: number, label, and what picking it would mean. No tick and
-   no dot - the number is the affordance and the fill is the answer, while role
-   and aria-checked say the same thing to anyone who cannot see either. */
+/* The number is the affordance and the fill is the answer, so the row carries no
+   tick and no dot; selection rides the primitive's own data-checked. */
+const ROW =
+  "flex w-full items-baseline gap-3 rounded-md px-3 py-2 hover:bg-state-hover data-checked:bg-control data-checked:hover:bg-control-hover";
+
+function OptionBody({
+  index,
+  label,
+  description,
+  describedBy,
+}: {
+  index: number;
+  label: string;
+  description?: string;
+  describedBy?: string;
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">
+        {index + 1}
+      </span>
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm">{label}</span>
+        {description && (
+          <span id={describedBy} className="text-sm font-light">
+            {description}
+          </span>
+        )}
+      </span>
+    </>
+  );
+}
+
 function OptionRow({
   index,
   label,
@@ -59,32 +91,38 @@ function OptionRow({
   onPick: () => void;
 }): React.JSX.Element {
   const describedBy = description ? `opt-${index}-desc` : undefined;
+  const body = (
+    <OptionBody
+      index={index}
+      label={label}
+      description={description}
+      describedBy={describedBy}
+    />
+  );
+  if (multiSelect) {
+    return (
+      <CheckboxOption
+        className={ROW}
+        aria-label={label}
+        aria-describedby={describedBy}
+        checked={selected}
+        disabled={disabled}
+        onCheckedChange={onPick}
+      >
+        {body}
+      </CheckboxOption>
+    );
+  }
   return (
-    <button
-      type="button"
-      role={multiSelect ? "checkbox" : "radio"}
-      aria-checked={selected}
+    <RadioGroupOption
+      className={ROW}
+      value={String(index)}
       aria-label={label}
       aria-describedby={describedBy}
       disabled={disabled}
-      onClick={onPick}
-      className={cn(
-        "flex w-full items-baseline gap-3 rounded-md px-3 py-2 text-left transition-colors duration-(--duration-fast)",
-        selected ? "bg-control hover:bg-control-hover" : "hover:bg-state-hover",
-      )}
     >
-      <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">
-        {index + 1}
-      </span>
-      <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm">{label}</span>
-        {description && (
-          <span id={describedBy} className="text-sm font-light">
-            {description}
-          </span>
-        )}
-      </span>
-    </button>
+      {body}
+    </RadioGroupOption>
   );
 }
 
@@ -187,62 +225,79 @@ export function ClarificationCardPanel({
         )}
       </div>
 
-      <div
-        role={multiSelect ? "group" : "radiogroup"}
-        aria-label={question}
-        className="flex flex-col gap-1"
-      >
-        {options.map((opt, i) => (
-          <OptionRow
-            key={`${i}-${opt.label}`}
-            index={i}
-            label={opt.label}
-            description={opt.description}
-            selected={selected.includes(i)}
-            multiSelect={multiSelect}
-            disabled={submitting}
-            onPick={() => pickOption(i)}
-          />
-        ))}
+      {(() => {
+        const rows = (
+          <>
+            {options.map((opt, i) => (
+              <OptionRow
+                key={`${i}-${opt.label}`}
+                index={i}
+                label={opt.label}
+                description={opt.description}
+                selected={selected.includes(i)}
+                multiSelect={multiSelect}
+                disabled={submitting}
+                onPick={() => pickOption(i)}
+              />
+            ))}
 
-        {/* The row becomes the field rather than revealing one beneath it:
-            nothing below moves, which matters for a card pinned above the
-            message box, and the answer stays where its number is. */}
-        {otherOpen ? (
-          <div className="flex w-full items-baseline gap-3 rounded-md bg-control px-3 py-2">
-            <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">
-              {otherIndex + 1}
-            </span>
-            {/* Bare, not the Input primitive, whose height and border fight a
-                box this row owns. The slot is how styles.css drops the focus edge. */}
-            <input
-              ref={otherRef}
-              type="text"
-              data-slot="input-group-control"
-              aria-label="Your own answer"
-              placeholder="Type your answer…"
-              value={otherText}
-              disabled={submitting}
-              onChange={(e) => setOtherText(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                handleSubmit();
-              }}
-              className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted-foreground"
-            />
+            {/* The row becomes the field rather than revealing one beneath it:
+                nothing below moves, which matters for a card pinned above the
+                message box, and the answer stays where its number is. */}
+            {otherOpen ? (
+              <InputGroup className="h-auto w-full border-transparent bg-control py-1">
+                <span className="w-3 shrink-0 pl-3 font-mono text-sm text-ink-subtle tabular-nums">
+                  {otherIndex + 1}
+                </span>
+                <InputGroupInput
+                  ref={otherRef}
+                  aria-label="Your own answer"
+                  placeholder="Type your answer…"
+                  value={otherText}
+                  disabled={submitting}
+                  onChange={(e) => setOtherText(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    handleSubmit();
+                  }}
+                />
+              </InputGroup>
+            ) : (
+              <OptionRow
+                index={otherIndex}
+                label="Other"
+                selected={false}
+                multiSelect={multiSelect}
+                disabled={submitting}
+                onPick={pickOther}
+              />
+            )}
+          </>
+        );
+        return multiSelect ? (
+          <div
+            role="group"
+            aria-label={question}
+            className="flex flex-col gap-1"
+          >
+            {rows}
           </div>
         ) : (
-          <OptionRow
-            index={otherIndex}
-            label="Other"
-            selected={false}
-            multiSelect={multiSelect}
-            disabled={submitting}
-            onPick={pickOther}
-          />
-        )}
-      </div>
+          <RadioGroup
+            aria-label={question}
+            className="flex flex-col gap-1"
+            value={selected[0] !== undefined ? String(selected[0]) : null}
+            onValueChange={(value) => {
+              const picked = Number(value);
+              if (picked === otherIndex) pickOther();
+              else pickOption(picked);
+            }}
+          >
+            {rows}
+          </RadioGroup>
+        );
+      })()}
 
       <div className="flex justify-end">
         <Button

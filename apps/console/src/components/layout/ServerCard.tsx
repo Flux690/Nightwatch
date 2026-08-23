@@ -1,8 +1,12 @@
-import { useState } from "react";
 import type { RunnerRecord } from "@nightwarden/shared";
 import { StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -23,11 +27,10 @@ export function ServerCard({
   runner: RunnerRecord;
   actions?: React.ReactNode;
 }): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
   const online = runner.online;
   const keys = (runner.manifest?.services ?? []).map((entry) => entry.target);
-  const shown = expanded ? keys : keys.slice(0, COLLAPSED_SERVICES);
-  const hidden = keys.length - shown.length;
+  const shown = keys.slice(0, COLLAPSED_SERVICES);
+  const rest = keys.slice(COLLAPSED_SERVICES);
 
   return (
     <Card
@@ -63,22 +66,29 @@ export function ServerCard({
           No services advertised yet.
         </p>
       ) : (
-        <div className="flex flex-col gap-1">
+        <Collapsible className="flex flex-col gap-1">
           {shown.map((key) => (
             <span key={key} className="font-mono text-sm break-all">
               {key}
             </span>
           ))}
-          {hidden > 0 && (
-            <Button
-              variant="link"
-              className="self-start"
-              onClick={() => setExpanded(true)}
-            >
-              {hidden} more
-            </Button>
+          {rest.length > 0 && (
+            <>
+              <CollapsibleContent className="flex flex-col gap-1">
+                {rest.map((key) => (
+                  <span key={key} className="font-mono text-sm break-all">
+                    {key}
+                  </span>
+                ))}
+              </CollapsibleContent>
+              <CollapsibleTrigger
+                render={<Button variant="link" className="self-start" />}
+              >
+                {rest.length} more
+              </CollapsibleTrigger>
+            </>
           )}
-        </div>
+        </Collapsible>
       )}
 
       {actions !== undefined && (

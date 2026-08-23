@@ -221,7 +221,6 @@ export function SessionView({
         createdAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
         investigation: kind === "investigation",
-        severity: null,
         severityLabel: null,
         status: null,
         finding: null,

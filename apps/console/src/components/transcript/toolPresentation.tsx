@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
 import { isTool } from "@nightwarden/shared";
@@ -368,54 +373,54 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
         revealed && "bg-surface-hover",
       )}
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        disabled={running}
-        onClick={() => setOpen(!open)}
-        className="group flex w-full items-baseline gap-2 py-1 text-left"
-      >
-        <span className="shrink-0 font-mono text-sm font-medium">
-          {toolName}
-        </span>
-        {target !== null && (
-          <span className="shrink-0 font-mono text-sm text-ink-subtle">
-            {target}
+      <Collapsible open={open} onOpenChange={setOpen} disabled={running}>
+        <CollapsibleTrigger
+          disabled={running}
+          nativeButton
+          className="group flex w-full items-baseline gap-2 py-1 text-left"
+        >
+          <span className="shrink-0 font-mono text-sm font-medium">
+            {toolName}
           </span>
-        )}
-        {/* Not stretched: the chevron belongs against the text it opens, so the
+          {target !== null && (
+            <span className="shrink-0 font-mono text-sm text-ink-subtle">
+              {target}
+            </span>
+          )}
+          {/* Not stretched: the chevron belongs against the text it opens, so the
             row reads as one phrase rather than as a name and a control held
             apart by however much width the window happens to have. */}
-        <span className={cn("min-w-0 truncate text-sm", tone)}>
-          {running ? (
-            <span data-testid="tool-call-pending" className="animate-pulse">
-              running
-            </span>
-          ) : (
-            line
-          )}
-        </span>
-        {/* Always drawn, dimmed while the call is in flight. Appearing on
+          <span className={cn("min-w-0 truncate text-sm", tone)}>
+            {running ? (
+              <span data-testid="tool-call-pending" className="animate-pulse">
+                running
+              </span>
+            ) : (
+              line
+            )}
+          </span>
+          {/* Always drawn, dimmed while the call is in flight. Appearing on
             completion moved the row's own text, and now that it sits in the
             reading line rather than at the margin, that jump is unmissable. */}
-        <ChevronRight
-          {...ICON_INLINE}
-          aria-hidden="true"
-          className={cn(
-            "shrink-0 self-center text-ink-subtle transition-transform duration-(--duration-base) group-aria-expanded:rotate-90",
-            running && "opacity-40",
-          )}
-        />
-      </button>
+          <ChevronRight
+            {...ICON_INLINE}
+            aria-hidden="true"
+            className={cn(
+              "shrink-0 self-center text-ink-subtle transition-transform duration-(--duration-base) group-aria-expanded:rotate-90",
+              running && "opacity-40",
+            )}
+          />
+        </CollapsibleTrigger>
 
-      {/* No rule and no indent: the body is the evidence the row was opened
+        {/* No rule and no indent: the body is the evidence the row was opened
           for, so nothing here sets it back. Tight above because it belongs to
           the row, looser below because it is finished. */}
-      {open && !running && (
-        <div className="mt-1 mb-4">
-          <ToolBody toolName={toolName} input={input} result={result} />
-        </div>
-      )}
+        {!running && (
+          <CollapsibleContent className="mt-1 mb-4">
+            <ToolBody toolName={toolName} input={input} result={result} />
+          </CollapsibleContent>
+        )}
+      </Collapsible>
     </div>
   );
 }

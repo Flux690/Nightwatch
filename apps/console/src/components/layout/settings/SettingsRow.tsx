@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { SECTION_HEADING } from "@/components/layout/Page";
+import { FieldLabel } from "@/components/ui/field";
+import { SectionHeading } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 
 interface SettingsRowProps {
@@ -32,11 +32,7 @@ export function SettingsRow({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        {/* htmlFor labels an input; the id is what a Select's trigger adopts,
-            since <label for> cannot label a button. */}
-        <Label htmlFor={controlId} id={`${controlId}-label`}>
-          {title}
-        </Label>
+        <FieldLabel htmlFor={controlId}>{title}</FieldLabel>
         {description !== undefined && (
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
@@ -55,7 +51,7 @@ export function SettingsGroup({
 }): React.JSX.Element {
   return (
     <section className="flex flex-col gap-3">
-      {title !== undefined && <h3 className={SECTION_HEADING}>{title}</h3>}
+      {title !== undefined && <SectionHeading>{title}</SectionHeading>}
       <Card className="gap-0 py-0">{children}</Card>
     </section>
   );

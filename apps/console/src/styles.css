@@ -1,5 +1,5 @@
-/* NightWarden Console. Every colour is a step on the scale below, and the
-   semantic tokens under it only ever point at a step. */
+/* NightWarden Console. One anchor, and every other value is a departure from it.
+   The system this reproduces is documented in nightwatch-docs/linear-tokens.md. */
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -9,221 +9,304 @@
 :root {
   color-scheme: dark;
 
-  /* The four inputs a theme is. Override these together and the whole ladder
-     follows; every other value below is a departure from this anchor. */
-  --base-l: 0.182;
-  --base-c: 0.002;
-  --base-h: 270;
-  --contrast: 1;
+  /* The four inputs a theme is. Everything below is relative to these. */
+  --base-l: 5.52;
+  --base-c: 0.4;
+  --base-h: 272;
+  --contrast: 27;
 
-  /* How far each rung sits from the anchor, in lightness at contrast 1. The
-     shape of the ladder, which a theme inherits rather than restates. */
-  --d-n-1: -0.042;
-  --d-n-3: 0.018;
-  --d-n-4: 0.034;
-  --d-n-5: 0.073;
-  --d-line-1: 0.077;
-  --d-line-lit: 0.145;
-  --d-line-2: 0.191;
-  --d-line-3: 0.312;
-  --d-ink-1: 0.508;
-  --d-ink-2: 0.6305;
-  --d-ink-3: 0.753;
+  /* Surface departures, per unit of contrast. One slider moves the whole
+     system and the anchor holds still in the middle. */
+  --d-ground: -0.108333;
+  --d-surface: 0.066667;
+  --d-card: 0.141667;
+  --d-popover: 0.404185;
 
-  /* Chroma per band, scaled by contrast with the lightness so a raised theme
-     keeps its tint instead of washing out. Dimmer ink carries more of it. */
-  --c-line: 0.004;
-  --c-ink-1: 0.012;
-  --c-ink-2: 0.01;
-  --c-ink-3: 0.004;
+  /* The absolute rungs. Only these five are anchored to the base; every
+     control, edge and ink below is anchored to whichever of them it lands on. */
+  --l-ground: calc(var(--base-l) + var(--d-ground) * var(--contrast));
+  --l-stage: var(--base-l);
+  --l-surface: calc(var(--base-l) + var(--d-surface) * var(--contrast));
+  --l-card: calc(var(--base-l) + var(--d-card) * var(--contrast));
+  --l-popover: calc(var(--base-l) + var(--d-popover) * var(--contrast));
 
-  /* Surfaces, each with a job. n-2 is the anchor itself; the ground drops below
-     it and the card and a pick-from control rise above. */
-  --n-1: oklch(
-    calc(var(--base-l) + var(--d-n-1) * var(--contrast))
-      calc(var(--base-c) * var(--contrast)) var(--base-h)
-  );
-  --n-2: oklch(var(--base-l) var(--base-c) var(--base-h));
-  --n-3: oklch(
-    calc(var(--base-l) + var(--d-n-3) * var(--contrast))
-      calc(var(--base-c) * var(--contrast)) var(--base-h)
-  );
-  --n-4: oklch(
-    calc(var(--base-l) + var(--d-n-4) * var(--contrast))
-      calc(var(--base-c) * var(--contrast)) var(--base-h)
-  );
-  --n-5: oklch(
-    calc(var(--base-l) + var(--d-n-5) * var(--contrast))
-      calc(var(--base-c) * var(--contrast)) var(--base-h)
-  );
+  --n-1: lch(var(--l-ground) 0.4 var(--base-h));
+  --n-2: lch(var(--l-stage) var(--base-c) var(--base-h));
+  --n-3: lch(var(--l-surface) 0.85 var(--base-h));
+  --n-4: lch(var(--l-card) 0.85 var(--base-h));
+  --n-5: lch(var(--l-popover) 1.3 var(--base-h));
 
-  /* Lines sit above every surface, so an edge can never be darker than what it
-     lands on. line-3 carries the chart axis at 3:1 on the stage. */
-  --line-1: oklch(
-    calc(var(--base-l) + var(--d-line-1) * var(--contrast))
-      calc(0.003 * var(--contrast)) var(--base-h)
-  );
-  --line-2: oklch(
-    calc(var(--base-l) + var(--d-line-2) * var(--contrast))
-      calc(var(--c-line) * var(--contrast)) var(--base-h)
-  );
-  --line-3: oklch(
-    calc(var(--base-l) + var(--d-line-3) * var(--contrast))
-      calc(var(--c-line) * var(--contrast)) var(--base-h)
-  );
-  --line-lit: oklch(
-    calc(var(--base-l) + var(--d-line-lit) * var(--contrast))
-      calc(var(--c-line) * var(--contrast)) var(--base-h)
-  );
+  /* Departures for anything that sits ON a surface rather than being one.
+     Chroma is a constant per role, not a function of distance or contrast. */
+  --d-control: 0.171444;
+  --d-control-hover: 0.342852;
+  --d-control-active: 0.485704;
+  --d-state-hover: 0.141667;
+  --d-highlight: 0.3;
+  --d-raised: 0.309;
+  --d-line-1: 0.32;
+  --d-line-2: 0.8;
+  --d-line-3: 1.6;
+  --d-line-lit: 0.617519;
 
-  /* Ink. */
-  --ink-1: oklch(
-    calc(var(--base-l) + var(--d-ink-1) * var(--contrast))
-      calc(var(--c-ink-1) * var(--contrast)) var(--base-h)
-  );
-  --ink-2: oklch(
-    calc(var(--base-l) + var(--d-ink-2) * var(--contrast))
-      calc(var(--c-ink-2) * var(--contrast)) var(--base-h)
-  );
-  --ink-3: oklch(
-    calc(var(--base-l) + var(--d-ink-3) * var(--contrast))
-      calc(var(--c-ink-3) * var(--contrast)) var(--base-h)
-  );
+  --dc-control: 0.289;
+  --dc-control-lit: 0.675;
+  --dc-state: 0.45;
+  --dc-highlight: 0.45;
+  --dc-line: 1.08;
+  --dc-line-lit: 1.53;
+  /* Ink takes half the ground's shift, not all of it, and one value serves
+     every ink rung within a ground. Measured, and the one role that does. */
+  --t-ink-c: 0.5;
+  --c-ink-base: 1.2;
 
-  /* Status hues, then their tints at +0.090. */
-  --status-ok: oklch(0.78 0.14 165);
-  --status-warn: oklch(0.8 0.14 82);
-  --status-fail: oklch(0.77 0.15 18);
-  --status-ok-tint: oklch(0.25 0.05 165);
-  --status-warn-tint: oklch(0.25 0.05 82);
-  --status-fail-tint: oklch(0.25 0.05 18);
-  --status-fail-wash: oklch(0.34 0.05 18);
+  /* Ink is a proportional mix toward the light pole, not an additive offset:
+     text has to barely move when the surface under it does. */
+  --t-ink-1: 0.62;
+  --t-ink-2: 0.78;
+  --t-ink-3: 0.8989;
 
-  /* Series on a chart, which are told apart and mean nothing individually. One
-     lightness and one chroma so no line reads as louder than its neighbours,
-     and hues kept clear of the status ones: a green line must not be mistaken
-     for a healthy one. */
-  --series-1: oklch(0.78 0.12 270);
-  --series-2: oklch(0.78 0.12 320);
-  --series-3: oklch(0.78 0.12 220);
-  --series-4: oklch(0.78 0.12 300);
-  --series-5: oklch(0.78 0.12 250);
-  --series-6: oklch(0.78 0.12 200);
+  /* Status hues. Each is one triple; the four steps below derive from it, and
+     Text is pinned at one lightness so seven hues read at one weight. */
+  --hue-green: 141.95;
+  --hue-yellow: 85;
+  --hue-red: 29;
+  --hue-orange: 48;
+  --hue-blue: 267;
+  --hue-teal: 210;
+  --hue-purple: 288.43;
+
+  --green-base: lch(60 64.37 var(--hue-green));
+  --green-text: lch(80 80 var(--hue-green));
+  --green-fill: lch(50 64.37 var(--hue-green));
+  --green-on-fill: lch(100 32.185 var(--hue-green));
+  --green-tint: lch(12.198 12.395 145.838);
+
+  --yellow-base: lch(80 90 var(--hue-yellow));
+  --yellow-text: lch(80 80 var(--hue-yellow));
+  --yellow-fill: lch(50 90 var(--hue-yellow));
+  --yellow-on-fill: lch(100 45 var(--hue-yellow));
+  --yellow-tint: lch(16.956 17.184 83.272);
+
+  --red-base: lch(58 73 var(--hue-red));
+  --red-text: lch(80 80 var(--hue-red));
+  /* Darker than Linear's redBg, which carries its own foreground at 3.89:1. */
+  --red-fill: lch(42 73 var(--hue-red));
+  --red-fill-hover: lch(46 73 var(--hue-red));
+  --red-tint: lch(11.767 15.869 22.59);
+  --red-tint-hover: lch(15 15.869 22.59);
+
+  --orange-base: lch(66 80 var(--hue-orange));
+  --orange-text: lch(80 80 var(--hue-orange));
+  --orange-tint: lch(13.546 16.71 39.039);
+
+  --blue-base: lch(80 70 var(--hue-blue));
+  --blue-text: lch(80 80 var(--hue-blue));
+  --blue-tint: lch(16.956 19.309 267.26);
+
+  --teal-base: lch(67.5 45 var(--hue-teal));
+  --teal-text: lch(80 80 var(--hue-teal));
+  --teal-tint: lch(13.895 10.447 213.218);
+
+  --purple-base: lch(48 59.31 var(--hue-purple));
+  --purple-text: lch(80 80 var(--hue-purple));
+  --purple-tint: lch(9.772 13.365 285.643);
 
   /* One accent, at the two lightnesses physics demands: a fill dark enough to
      carry white and an ink light enough to be read on the dark. */
-  --cobalt-fill: oklch(0.52 0.15 270);
-  --cobalt-ink: oklch(0.7 0.13 270);
-  --red-fill: oklch(0.54 0.17 18);
+  --cobalt-fill: lch(42.686 55.105 284.861);
+  --cobalt-fill-hover: lch(46.5 55.105 284.861);
+  --cobalt-ink: lch(63.991 47.502 279.701);
 
-  --white: oklch(1 0 0);
+  --white: lch(100 0 var(--base-h));
 
-  /* The semantic layer. Each token names a job and points at a step above. */
+  /* Series on a chart, told apart by hue alone, so they match in every other
+     way and stay clear of the hues that carry status. */
+  --series-1: lch(72 45 300);
+  --series-2: lch(72 45 340);
+  --series-3: lch(72 45 260);
+  --series-4: lch(72 45 320);
+  --series-5: lch(72 45 280);
+  --series-6: lch(72 45 240);
 
+  --scrim: lch(0 0 0 / 0.4);
+  --shadow-edge: 0 0.5px 1px 1px lch(0 0 0 / 0.3);
+  /* A line of light on top and a drop beneath, in one property. What makes a
+     control read as sitting on the page rather than cut into it. Linear draws
+     the ring at 0.5px; ours is 1px, which is the one place we depart. */
+  --shadow-control:
+    0 0 0 1px lch(100 0 0 / 0.143), 0 0.5px 1px 1px lch(0 0 0 / 0.3);
+  /* Four low-opacity layers rather than one big blur, which is what lets an
+     edge read soft without the panel under it looking hazy. Measured. */
+  --shadow-overlay:
+    0 3px 8px lch(0 0 0 / 0.125), 0 2px 5px lch(0 0 0 / 0.125),
+    0 1px 1px lch(0 0 0 / 0.125);
+  --shadow-raised: 0 1px 2px lch(0 0 0 / 0.4), 0 4px 16px lch(0 0 0 / 0.3);
+}
+
+/* Which rung an element stands on. A container that changes the ground says so,
+   and everything inside re-derives against it instead of against the page. */
+:root {
+  --ground-l: var(--l-stage);
+  --ground-c: var(--base-c);
+}
+[data-ground="ground"] {
+  --ground-l: var(--l-ground);
+  --ground-c: 0.4;
+}
+[data-ground="surface"] {
+  --ground-l: var(--l-surface);
+  --ground-c: 0.85;
+}
+[data-ground="card"] {
+  --ground-l: var(--l-card);
+  --ground-c: 0.85;
+}
+[data-ground="popover"] {
+  --ground-l: var(--l-popover);
+  --ground-c: 1.3;
+}
+
+/* Declared on every ground, not only on :root, because a custom property
+   substitutes where it is declared - on :root alone these would never re-derive. */
+:root,
+[data-ground] {
+  /* Resolved per ground, so a role's chroma re-anchors with its lightness. */
+  --c-control: calc(var(--ground-c) + var(--dc-control));
+  --c-control-lit: calc(var(--ground-c) + var(--dc-control-lit));
+  --c-state: calc(var(--ground-c) + var(--dc-state));
+  --c-highlight: calc(var(--ground-c) + var(--dc-highlight));
+  --c-line: calc(var(--ground-c) + var(--dc-line));
+  --c-line-lit: calc(var(--ground-c) + var(--dc-line-lit));
+  --c-ink: calc(var(--c-ink-base) + (var(--ground-c) - 0.4) * var(--t-ink-c));
+
+  --control: lch(
+    calc(var(--ground-l) + var(--d-control) * var(--contrast)) var(--c-control)
+      var(--base-h)
+  );
+  --control-hover: lch(
+    calc(var(--ground-l) + var(--d-control-hover) * var(--contrast))
+      var(--c-control-lit) var(--base-h)
+  );
+  --control-active: lch(
+    calc(var(--ground-l) + var(--d-control-active) * var(--contrast))
+      var(--c-control-lit) var(--base-h)
+  );
+  --state-hover: lch(
+    calc(var(--ground-l) + var(--d-state-hover) * var(--contrast))
+      var(--c-state) var(--base-h)
+  );
+  /* The row under the cursor inside a menu, which is a stronger lift than a
+     list row's hover: a menu is read by pointing at it. */
+  --highlight: lch(
+    calc(var(--ground-l) + var(--d-highlight) * var(--contrast))
+      var(--c-highlight) var(--base-h)
+  );
+
+  /* An object standing on the page rather than a rung of it: a message bubble,
+     a copied snippet. Higher than the card, which is a container. */
+  --raised: lch(
+    calc(var(--ground-l) + var(--d-raised) * var(--contrast)) var(--c-state)
+      var(--base-h)
+  );
+
+  --line-1: lch(
+    calc(var(--ground-l) + var(--d-line-1) * var(--contrast)) var(--c-line)
+      var(--base-h)
+  );
+  /* The edge a typed-in box is defined by, which is the whole of what draws
+     it: further out than a divider, and the only thing that says it is a box. */
+  --line-2: lch(
+    calc(var(--ground-l) + var(--d-line-2) * var(--contrast)) var(--c-line)
+      var(--base-h)
+  );
+  --line-3: lch(
+    calc(var(--ground-l) + var(--d-line-3) * var(--contrast)) var(--c-line)
+      var(--base-h)
+  );
+  --line-lit: lch(
+    calc(var(--ground-l) + var(--d-line-lit) * var(--contrast))
+      var(--c-line-lit) var(--base-h)
+  );
+
+  --ink-1: lch(
+    calc(var(--ground-l) + var(--t-ink-1) * (100 - var(--ground-l)))
+      var(--c-ink) var(--base-h)
+  );
+  --ink-2: lch(
+    calc(var(--ground-l) + var(--t-ink-2) * (100 - var(--ground-l)))
+      var(--c-ink) var(--base-h)
+  );
+  --ink-3: lch(
+    calc(var(--ground-l) + var(--t-ink-3) * (100 - var(--ground-l)))
+      var(--c-ink) var(--base-h)
+  );
+}
+
+/* The semantic layer. Each token names a job and points at a step above. */
+:root,
+[data-ground] {
   --background: var(--n-2);
   --foreground: var(--ink-3);
   --card: var(--n-4);
   --card-foreground: var(--ink-3);
-  /* The highest surface in the room, so it clears the card it may open over.
-     Measured against Linear's own popover at L 0.248. */
   --popover: var(--n-5);
   --popover-foreground: var(--ink-3);
-  --secondary: var(--n-3);
-  --secondary-foreground: var(--ink-3);
   --muted: var(--n-3);
   --muted-foreground: var(--ink-2);
   --surface: var(--n-3);
   --ink-subtle: var(--ink-1);
 
-  /* A control you pick from is a raised fill with no border; one you type into
-     takes the card's own fill and is bounded by a line instead. */
-  --control: var(--n-5);
+  /* A button and a message bubble are not the same thing: one is a control that
+     must read as raised on any ground, the other is a quoted surface. */
+  --secondary: var(--control);
+  --secondary-foreground: var(--ink-3);
+  --secondary-hover: var(--control-hover);
 
-  /* A state is a mix against the surface it lands on, never a rung of its own:
-     a fixed rung is right at one depth and wrong at the other four. */
-  --control-hover: color-mix(in oklab, var(--control), var(--ink-3) 4%);
-  /* A card is a static container everywhere else, so it had no hover; a list of
-     them is a list of links, and one of those does. */
-  --card-hover: color-mix(in oklab, var(--card), var(--ink-3) 4%);
-  --secondary-hover: color-mix(in oklab, var(--secondary), var(--ink-3) 4%);
-  --muted-hover: color-mix(in oklab, var(--muted), var(--ink-3) 4%);
-  --surface-hover: color-mix(in oklab, var(--surface), var(--ink-3) 4%);
-  --surface-active: color-mix(in oklab, var(--surface), var(--ink-3) 8%);
-  /* The one state for a control that does not know its own depth. A ghost
-     button and a menu row sit on the stage, a card and a popover in turn, so a
-     rung that lifts on one sinks on the next. Ink at 8% lifts whatever is under
-     it, which is the only form of this that can be right everywhere. */
-  --state-hover: color-mix(in srgb, var(--ink-3) 8%, transparent);
-  /* A control that has to read as raised wherever it is put, filled rather than
-     outlined: there is no rung above the popover to give it, so it lifts off
-     whatever it lands on by the same means every state here does. */
-  --state-raised: color-mix(in srgb, var(--ink-3) 8%, transparent);
-  --state-raised-hover: color-mix(in srgb, var(--ink-3) 14%, transparent);
-  /* A rule has the same problem a state does. The line rungs are solved for the
-     stage and the card, so on the popover - the lightest surface there is - a
-     divider lands within one step of its own ground and disappears. */
-  --border-overlay: color-mix(in srgb, var(--ink-3) 12%, transparent);
+  --card-hover: var(--state-hover);
+  --surface-hover: var(--state-hover);
 
-  /* Cobalt marks what you can act on, and lifts the same way every surface
-     does. Hover is also the pressed appearance. */
   --primary: var(--cobalt-fill);
-  --primary-hover: color-mix(in oklab, var(--primary), var(--white) 8%);
+  --primary-hover: var(--cobalt-fill-hover);
   --primary-foreground: var(--white);
   --primary-ink: var(--cobalt-ink);
   --ring: var(--cobalt-ink);
 
-  /* --input stays calm at 1.5-3:1 on a card, the calm-border split. */
   --border: var(--line-1);
   --border-strong: var(--line-3);
   --input: var(--line-2);
 
-  /* The stage falls to the sidebar's own value at its foot, so the panel reads
-     as lit from above rather than as a flat sheet. */
-  --stage-fall: linear-gradient(var(--n-2) 0%, var(--n-1) 100%);
-  /* A hairline lit at the top and fading down it, the way an edge catches. */
-  --edge-lit: linear-gradient(var(--line-lit), var(--line-1));
-
-  /* Semantic status */
-  --success: var(--status-ok);
-  --warning: var(--status-warn);
-  --destructive: var(--status-fail);
+  --success: var(--green-text);
+  --success-base: var(--green-base);
+  --success-tint: var(--green-tint);
+  --warning: var(--yellow-text);
+  --warning-base: var(--yellow-base);
+  --warning-tint: var(--yellow-tint);
+  --destructive: var(--red-text);
+  --destructive-base: var(--red-base);
+  --destructive-tint: var(--red-tint);
+  --destructive-tint-hover: var(--red-tint-hover);
   --destructive-fill: var(--red-fill);
-  --destructive-fill-hover: color-mix(
-    in oklab,
-    var(--destructive-fill),
-    var(--white) 8%
-  );
-  --success-tint: var(--status-ok-tint);
-  --warning-tint: var(--status-warn-tint);
-  --destructive-tint: var(--status-fail-tint);
-  --destructive-wash: var(--status-fail-wash);
+  --destructive-fill-hover: var(--red-fill-hover);
 
-  /* The same steps under the vocabulary StatusTone reads in. */
   --run: var(--cobalt-ink);
-  --wait: var(--status-warn);
-  --ok: var(--status-ok);
-  --fail: var(--status-fail);
-  --fail-tint: var(--status-fail-tint);
+  --wait: var(--yellow-text);
+  --ok: var(--green-text);
+  --fail: var(--red-text);
 
-  /* Rest is dim and unfilled, hover lifts the ink to full, selected holds that
-     ink on a fill you can see. */
   --sidebar: var(--n-1);
   --sidebar-foreground: var(--ink-1);
-  --sidebar-hover: color-mix(in oklab, var(--sidebar), var(--ink-3) 8%);
+  --sidebar-hover: var(--state-hover);
   --sidebar-hover-foreground: var(--ink-3);
-  --sidebar-active: color-mix(in oklab, var(--sidebar), var(--ink-3) 15%);
+  --sidebar-active: var(--control-hover);
   --sidebar-border: var(--line-1);
 
-  --selection: color-mix(in oklab, var(--n-2), var(--cobalt-ink) 22%);
+  --selection: lch(
+    calc(var(--ground-l) + 0.5 * var(--contrast)) 18 var(--base-h)
+  );
 
-  /* Depth, not palette: black at alpha, carrying no hue of its own. */
-  --scrim: oklch(0 0 0 / 0.4);
-  /* A ring rather than a drop: the spread darkens the surface right at the
-     edge, so a raised panel separates without being lightened further. */
-  --shadow-edge: 0 0.5px 1px 1px oklch(0 0 0 / 0.3);
-  --shadow-overlay:
-    oklch(0 0 0 / 0.5) 0 8px 24px, oklch(0 0 0 / 0.35) 0 2px 6px;
-  --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.4), 0 4px 16px oklch(0 0 0 / 0.3);
+  --stage-fall: linear-gradient(var(--n-2) 0%, var(--n-1) 100%);
+  --edge-lit: linear-gradient(var(--line-lit), var(--line-1));
 }
 
 /* Tailwind's colour utilities, resolving through the semantic layer above. */
@@ -240,20 +323,18 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-state-hover: var(--state-hover);
-  --color-state-raised: var(--state-raised);
-  --color-state-raised-hover: var(--state-raised-hover);
-  --color-border-overlay: var(--border-overlay);
+  --color-highlight: var(--highlight);
+  --color-raised: var(--raised);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted-hover: var(--muted-hover);
   --color-surface: var(--surface);
   --color-surface-hover: var(--surface-hover);
-  --color-surface-active: var(--surface-active);
   --color-control: var(--control);
   --color-control-hover: var(--control-hover);
+  --color-control-active: var(--control-active);
   --color-ink-subtle: var(--ink-subtle);
 
   --color-primary: var(--primary);
@@ -267,20 +348,22 @@
   --color-input: var(--input);
 
   --color-success: var(--success);
+  --color-success-base: var(--success-base);
+  --color-success-tint: var(--success-tint);
   --color-warning: var(--warning);
+  --color-warning-base: var(--warning-base);
+  --color-warning-tint: var(--warning-tint);
   --color-destructive: var(--destructive);
+  --color-destructive-base: var(--destructive-base);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-destructive-fill: var(--destructive-fill);
   --color-destructive-fill-hover: var(--destructive-fill-hover);
-  --color-success-tint: var(--success-tint);
-  --color-warning-tint: var(--warning-tint);
-  --color-destructive-tint: var(--destructive-tint);
-  --color-destructive-wash: var(--destructive-wash);
 
   --color-run: var(--run);
   --color-wait: var(--wait);
   --color-ok: var(--ok);
   --color-fail: var(--fail);
-  --color-fail-tint: var(--fail-tint);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -291,6 +374,7 @@
 
   --color-scrim: var(--scrim);
   --shadow-edge: var(--shadow-edge);
+  --shadow-control: var(--shadow-control);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-raised: var(--shadow-raised);
 }
@@ -329,9 +413,9 @@
   /* Page measures - how wide a page's own column of content runs. A page names
      one of these; nothing else does. */
   --container-page: 920px;
-  /* 640px of content inside the page's own padding: a settings row reads as a
-     line of prose, and three cards across land at Linear's 203px. */
-  --container-form: 688px;
+  /* 672px of content inside the page's own padding, which divides cleanly by
+     the whole spacing scale. */
+  --container-form: 720px;
   /* Content measures - how wide a kind of content reads, wherever it is
      hosted. The conversation keeps its own on the Agent page and inside the
      rail, so neither host states a width on its behalf. */
@@ -340,10 +424,10 @@
   /* How wide prose reads inside the report's own column, which is wider than a
      line of text should run. */
   --container-measure: 660px;
-  /* Form controls, which stay near their label rather than running the column
-     the help text beside them does. One holds an address or a secret, the
-     other a short choice. */
-  --container-control: 480px;
+  /* A field whose value is a URL or a secret takes the column it sits in.
+     These two are for the ones that must not: a control beside its label,
+     where content cannot set the width, and a value that is simply short. */
+  --container-control: 288px;
   --container-control-sm: 240px;
 
   /* Structure - fixed widths of the frame itself, not measures of content. */
@@ -352,6 +436,10 @@
   --container-rail: 420px;
   /* How wide a title runs before it is cut short. */
   --container-title: 448px;
+  /* The one column on a page with no frame around it yet. */
+  --container-login: 360px;
+  /* A short block of explanation standing alone on the stage. */
+  --container-note: 360px;
   --container-sidebar: 250px;
   --container-sidebar-icon: 52px;
   --container-sidebar-sheet: 288px;
@@ -456,11 +544,8 @@
     @apply border-border;
   }
 
-  /* One scrollbar, stated once. The default paints a track, which reads as a
-     pale gutter beside dark content and lights up on hover; a scroller is a
-     hint about position, not a control worth a background. Thin and
-     track-less everywhere, so two columns side by side cannot disagree.
-     `no-scrollbar` is a utility and still wins where a panel wants none. */
+  /* One scrollbar, stated once. A scroller is a hint about position, not a
+     control worth a background, so it is thin and track-less everywhere. */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border-strong) transparent;

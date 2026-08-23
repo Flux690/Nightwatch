@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { ICON_UI } from "@/lib/iconProps";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +34,15 @@ export function CopyableSnippet({
   }
   return (
     <div className={cn("relative", className)}>
-      <pre className="block max-h-60 overflow-auto rounded-sm border border-border bg-card p-3 pr-12 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
+      <CodeBlock
+        className={cn(
+          "max-h-60 border-[0.5px] border-input bg-transparent pr-12",
+          // A single line is a field's value, so it stands in a field's box.
+          text.includes("\n") ? "p-3" : "flex h-7.5 items-center px-3 py-0",
+        )}
+      >
         {text}
-      </pre>
+      </CodeBlock>
       <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
         {actions}
         {copyable && (

@@ -11,7 +11,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsGroup, SettingsRow } from "./SettingsRow";
 import { DurationRow, NumberRow } from "./NumberRow";
-import { CONTROL } from "./layout";
 
 // Both the closed trigger and the open list read from here, so the word an
 // user sees before opening is the same word they pick.
@@ -101,10 +100,7 @@ export function SandboxSection({
               })
             }
           >
-            <SelectTrigger
-              id="settings-sandbox-network"
-              className={CONTROL.select}
-            >
+            <SelectTrigger id="settings-sandbox-network">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -120,7 +116,7 @@ export function SandboxSection({
           <SettingsRow
             controlId="settings-sandbox-allowlist"
             title="Allowed hosts"
-            description="The hosts that proxy will pass through, one per line."
+            description="The hosts the proxy will pass through, one per line."
             stacked
           >
             <Textarea

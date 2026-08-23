@@ -211,7 +211,6 @@ function setupPage({
             createdAt: AGO_MINUTES(row.minutes),
             lastActivityAt: AGO_MINUTES(row.minutes),
             investigation: false,
-            severity: null,
             severityLabel: null,
             status: null,
             finding: null,
@@ -607,7 +606,11 @@ describe("SessionView", () => {
       const rows = await screen.findAllByRole("button", {
         name: /check_service_status|list_processes/,
       });
-      const disclosures = rows.filter((r) => !r.hasAttribute("disabled"));
+      /* aria-disabled, not the native attribute: the trigger stays focusable
+         while it is running, so a keyboard reaches it and is told it is busy. */
+      const disclosures = rows.filter(
+        (r) => r.getAttribute("aria-disabled") !== "true",
+      );
       expect(disclosures).toHaveLength(1);
 
       await userEvent.setup().click(disclosures[0]!);

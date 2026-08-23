@@ -116,7 +116,7 @@ export function ProviderSection({
               onProviderChange((value || null) as AgentConfig["provider"])
             }
           >
-            <SelectTrigger id="settings-provider" className={CONTROL.select}>
+            <SelectTrigger id="settings-provider">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -136,7 +136,7 @@ export function ProviderSection({
         >
           <Input
             id="settings-base-url"
-            className={CONTROL.text}
+            measure="beside"
             disabled={block === null}
             value={
               block?.baseUrl ??
@@ -158,7 +158,7 @@ export function ProviderSection({
             <Input
               id="settings-api-key"
               type="password"
-              className={CONTROL.text}
+              measure="beside"
               disabled={block === null}
               placeholder="Paste API key"
               value={newApiKey}
@@ -171,7 +171,7 @@ export function ProviderSection({
               </span>
               <Button
                 type="button"
-                size="icon-xs"
+                size="icon-sm"
                 variant="ghost"
                 aria-label="Replace API key"
                 onClick={() => setReplacingKey(true)}
@@ -185,7 +185,7 @@ export function ProviderSection({
         <SettingsRow
           controlId="settings-model"
           title="Model"
-          description="Picked from what that endpoint lists."
+          description="One of the models that endpoint lists."
         >
           <Combobox
             items={models.map((m) => m.id)}
@@ -245,7 +245,7 @@ export function ProviderSection({
                 onProviderField("reasoningLevel", value || null)
               }
             >
-              <SelectTrigger id="settings-reasoning" className={CONTROL.select}>
+              <SelectTrigger id="settings-reasoning">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

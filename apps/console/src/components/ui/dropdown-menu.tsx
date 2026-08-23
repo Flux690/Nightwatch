@@ -1,8 +1,6 @@
 "use client";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { CheckIcon } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 
 const DropdownMenu = MenuPrimitive.Root;
@@ -35,6 +33,7 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
+          data-ground="popover"
           className={cn(
             "origin-(--transform-origin) overflow-hidden rounded-xl bg-popover p-1 text-sm text-popover-foreground shadow-overlay ring-1 ring-border data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className,
@@ -62,7 +61,7 @@ function DropdownMenuItem({
       className={cn(
         // Even padding, and the width comes from the longest label: the old
         // right pad reserved room for an indicator this item never carries.
-        "relative flex w-full cursor-default items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap select-none data-highlighted:bg-state-hover data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-highlighted:bg-destructive-tint data-[variant=destructive]:data-highlighted:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex w-full cursor-default items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap select-none data-highlighted:bg-highlight data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-highlighted:bg-destructive-tint data-[variant=destructive]:data-highlighted:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -77,44 +76,9 @@ function DropdownMenuSeparator({
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-border-overlay", className)}
+      className={cn("-mx-1 my-1 h-px bg-border", className)}
       {...props}
     />
-  );
-}
-
-function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
-  return (
-    <MenuPrimitive.RadioGroup
-      data-slot="dropdown-menu-radio-group"
-      {...props}
-    />
-  );
-}
-
-function DropdownMenuRadioItem({
-  className,
-  children,
-  ...props
-}: MenuPrimitive.RadioItem.Props) {
-  return (
-    <MenuPrimitive.RadioItem
-      data-slot="dropdown-menu-radio-item"
-      className={cn(
-        "relative flex w-full cursor-default items-start gap-2 rounded-md py-1 pr-8 pl-2 text-sm select-none data-highlighted:bg-state-hover data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <MenuPrimitive.RadioItemIndicator
-        render={
-          <span className="pointer-events-none absolute top-2 right-2 flex size-4 items-center justify-center" />
-        }
-      >
-        <CheckIcon className="size-4" />
-      </MenuPrimitive.RadioItemIndicator>
-    </MenuPrimitive.RadioItem>
   );
 }
 
@@ -124,6 +88,4 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
 };
