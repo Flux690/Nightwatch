@@ -52,7 +52,7 @@ function connected(over: Partial<MetricsSourceStatus> = {}) {
   return {
     id: "b1",
     kind: "victoriametrics",
-    label: "vm-prod",
+    label: "VictoriaMetrics",
     query: { url: "http://vmselect:8481", hasAuth: false, hasOrgId: false },
     rules: { url: "http://vmalert:8880", hasAuth: false, hasOrgId: false },
     validatedAt: "2026-08-01T00:00:00.000Z",
@@ -85,21 +85,19 @@ describe("MetricsSourcePage", () => {
     vi.unstubAllGlobals();
   });
 
-  // The name is the server's to derive, so the form never asks for one.
-  it("posts both endpoints and asks the user for no name", async () => {
+  /* One product is connected once, so it is addressed by the product's own
+     name and the form has nothing to ask about naming. */
+  it("posts both endpoints, and asks for no name", async () => {
     const user = userEvent.setup();
     const posted = stubApi([]);
     renderPage("victoriametrics");
 
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     await user.type(
       await screen.findByLabelText("Query URL"),
       "http://vmselect:8481/select/0/prometheus",
     );
-    await user.type(
-      screen.getByLabelText("Rules URL (optional)"),
-      "http://vmalert:8880",
-    );
+    await user.type(screen.getByLabelText("Rules URL"), "http://vmalert:8880");
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -110,14 +108,16 @@ describe("MetricsSourcePage", () => {
     });
   });
 
-  /* A supported configuration that costs something specific, so the page says
-     what it costs rather than reporting a plain "Connected". */
-  it("says a source with no rules endpoint can never reach Resolved", async () => {
+  /* A supported configuration that costs something specific, so the page names
+     the path that still works rather than reporting a plain "Connected". */
+  it("says what a source with no rules endpoint costs", async () => {
     stubApi([connected({ rules: null })]);
     renderPage("victoriametrics");
 
     const warning = await screen.findByText(/No rules endpoint/);
-    expect(warning.textContent).toMatch(/will not\s+reach Resolved/);
+    expect(warning.textContent).toMatch(/resolved notification/);
+    // The header names the product, so the address is what identifies the row.
+    expect(screen.getByText("http://vmselect:8481")).toBeInTheDocument();
   });
 
   it("warns that VictoriaMetrics answers nothing for metric metadata", async () => {
@@ -129,15 +129,58 @@ describe("MetricsSourcePage", () => {
     ).toBeInTheDocument();
   });
 
-  // Grafana Cloud hands out an instance id and a token, so the pair has to be
-  // askable as two fields rather than as a header the user encodes themselves.
-  it("offers a username and password pair, which is what Grafana Cloud gives you", async () => {
+  // Grafana Cloud hands out an instance id and a token, so Mimir opens on the
+  // pair rather than on a header the user would encode themselves.
+  it("opens Mimir on the pair Grafana Cloud gives you", async () => {
     stubApi([]);
     renderPage("mimir");
 
-    expect(
-      await screen.findByLabelText("Username (optional)"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Password (optional)")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  });
+
+  /* X-Scope-OrgID is Mimir's alone. VictoriaMetrics carries its tenant in the
+     URL path, and Prometheus and Thanos have no such concept at all. */
+  it("asks for a tenant on Mimir and nowhere else", async () => {
+    stubApi([]);
+    renderPage("mimir");
+    expect(await screen.findByLabelText("Tenant")).toBeInTheDocument();
+
+    cleanup();
+    stubApi([]);
+    renderPage("prometheus");
+    await screen.findByLabelText("Query URL");
+    expect(screen.queryByLabelText("Tenant")).not.toBeInTheDocument();
+  });
+
+  /* One credential reaches the source: the API returns the header and drops a
+     basic pair sent beside it, so the form must never send both. */
+  it("sends only the credential the chosen method names", async () => {
+    const user = userEvent.setup();
+    const posted = stubApi([]);
+    renderPage("mimir");
+
+    await user.type(await screen.findByLabelText("Username"), "123456");
+    await user.type(screen.getByLabelText("Password"), "glc-token");
+    await user.type(
+      screen.getByLabelText("Query URL"),
+      "http://mimir:8080/prometheus",
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Bearer token" }),
+    );
+    await user.type(
+      await screen.findByLabelText("Authorization header"),
+      "Bearer abc",
+    );
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      kind: "mimir",
+      query: { url: "http://mimir:8080/prometheus", authHeader: "Bearer abc" },
+    });
   });
 });

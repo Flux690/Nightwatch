@@ -566,7 +566,9 @@ describe("metrics source routes", () => {
     expect(JSON.parse(res.body).rules).toBeNull();
   });
 
-  it("names a second source of the same kind rather than asking the user to", async () => {
+  /* One connection per product: what you point at is already an aggregate, so
+     a second Prometheus is a mistake to refuse rather than a name to invent. */
+  it("names a source after its product and refuses a second of that kind", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
     const payload = {
       kind: "prometheus",
@@ -583,8 +585,10 @@ describe("metrics source routes", () => {
       payload: { ...payload, query: { url: "http://prom-b:9090" } },
     });
 
+    expect(first.statusCode).toBe(201);
     expect(JSON.parse(first.body).label).toBe("Prometheus");
-    expect(JSON.parse(second.body).label).toBe("Prometheus 2");
+    expect(second.statusCode).toBe(409);
+    expect(JSON.parse(second.body).error).toMatch(/already connected/);
   });
 
   it("refuses to save when the probe fails - envelope error maps to 400, unreachable to 502", async () => {

@@ -140,6 +140,7 @@ export function AddRunnerPage({
 
   return (
     <Page
+      measure="form"
       crumbs={[
         { label: "Integrations", to: "/integrations" },
         { label: copy.plural, to: listPath },
@@ -155,10 +156,10 @@ export function AddRunnerPage({
               Display name (optional)
             </FieldLabel>
             <FieldDescription>
-              This name only tells your runners apart in the console.
+              What tells your runners apart in the console.
             </FieldDescription>
             <Input
-              className="max-w-control"
+              measure="short"
               id="display-name"
               placeholder={
                 platform === "docker" ? "e.g. prod-web-01" : "e.g. prod-cluster"

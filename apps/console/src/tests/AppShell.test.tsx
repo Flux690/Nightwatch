@@ -22,7 +22,6 @@ const SESSION_1: SessionListRow = {
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   investigation: false,
-  severity: null,
   severityLabel: null,
   status: null,
   finding: null,
@@ -50,7 +49,6 @@ function investigationRow(
 const INVESTIGATIONS = [
   // Listed first, and ordered second: "P1" is a word we cannot rank.
   investigationRow("inv-p1", "Checkout latency spike", {
-    severity: null,
     severityLabel: "P1",
     status: "action_required",
     finding: "Raise the pod memory limit",
@@ -58,13 +56,11 @@ const INVESTIGATIONS = [
   // Opened fourteen minutes ago, moved two: the row reads the second.
   investigationRow("inv-crit", "Container memory high", {
     lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    severity: "critical",
     severityLabel: "critical",
     status: "action_required",
     finding: "Waiting on approval",
   }),
   investigationRow("inv-run", "Redis pool exhausted", {
-    severity: "warning",
     severityLabel: "warning",
     status: "investigating",
     finding: "Connection pool starved by the checkout deploy",
@@ -82,7 +78,6 @@ function alertOn(alertType: string, clearedAt: string | null): SessionAlert {
       labels: { alertname: alertType },
       annotations: {},
       alertType,
-      severity: "critical",
       firedAt: "2026-08-19T02:14:00.000Z",
       generatorURL: null,
       values: {},
@@ -148,6 +143,7 @@ function setup({
         json: () =>
           Promise.resolve({
             configured: true,
+            ingestUrl: "http://localhost:3000/api/alerts/ingest",
             lastReceivedAt: new Date().toISOString(),
           }),
       });
@@ -702,17 +698,18 @@ describe("Shell", () => {
       expect(row).not.toHaveTextContent(/critical|warning|info|unknown|—/);
     });
 
-    it("orders a group by severity, an unrankable word sorting last", async () => {
+    /* Nothing reorders within a group. Ranking the sender's own word would put
+       a fleet writing P1 last for using a word we do not recognise. */
+    it("keeps the order the API sent, whatever the severity words are", async () => {
       setup({ path: "/investigations" });
 
-      const critical = await screen.findByRole("link", {
-        name: /Container memory high/,
-      });
-      // The API sent "P1" first; severity is what decides the arrangement.
-      const unranked = screen.getByRole("link", {
+      const first = await screen.findByRole("link", {
         name: /Checkout latency spike/,
       });
-      expect(precedes(critical, unranked)).toBe(true);
+      const second = screen.getByRole("link", {
+        name: /Container memory high/,
+      });
+      expect(precedes(first, second)).toBe(true);
     });
 
     it("opens a row at its own record", async () => {
@@ -744,9 +741,9 @@ describe("Shell", () => {
 
     it("carries its place in the queue and steps to the next record", async () => {
       const user = userEvent.setup();
-      const { router } = setup({ path: "/investigations/inv-crit" });
+      const { router } = setup({ path: "/investigations/inv-p1" });
 
-      // First of four: the critical leads the first group in triage order.
+      // First of four: the group's order is the order the API sent it in.
       expect(await screen.findByText("1 / 4")).toBeInTheDocument();
 
       await user.click(
@@ -754,7 +751,7 @@ describe("Shell", () => {
       );
 
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/investigations/inv-p1");
+        expect(router.state.location.pathname).toBe("/investigations/inv-crit");
       });
       expect(await screen.findByText("2 / 4")).toBeInTheDocument();
       // Nothing navigated back to the list to get there.

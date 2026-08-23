@@ -20,7 +20,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
-import { FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -390,6 +390,7 @@ export function GitHubConnectPage(): React.JSX.Element {
 
   return (
     <Page
+      measure="form"
       crumbs={[
         { label: "Integrations", to: "/integrations" },
         { label: "Connect GitHub" },
@@ -407,13 +408,11 @@ export function GitHubConnectPage(): React.JSX.Element {
           </Alert>
         )}
 
-        <div className="flex flex-col gap-2">
-          <FieldLabel htmlFor="github-token" className="text-base">
-            Personal access token
-          </FieldLabel>
+        <Field>
+          <FieldLabel htmlFor="github-token">Personal access token</FieldLabel>
           <FieldDescription>
-            Create a fine-grained token on GitHub, choose which repository to
-            grant access to, then paste it below.
+            Create a fine-grained token, grant it the one repository, and paste
+            it here.
             <br />
             If your organization blocks fine-grained tokens, create a{" "}
             <a href={CLASSIC_TOKEN_URL} target="_blank" rel="noreferrer">
@@ -447,14 +446,12 @@ export function GitHubConnectPage(): React.JSX.Element {
                   autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="max-w-control"
                 />
                 <Button
-                  size="sm"
                   disabled={token.trim() === "" || validating}
                   onClick={() => void validate()}
                 >
-                  {validating && <Spinner className="size-3" />}
+                  {validating && <Spinner className="size-4" />}
                   Validate
                 </Button>
               </div>
@@ -464,7 +461,7 @@ export function GitHubConnectPage(): React.JSX.Element {
               <CircleCheckIcon {...ICON_UI} className="text-success" />
               <span>{tokenSummaryText()}</span>
               <Button
-                size="xs"
+                size="sm"
                 variant="ghost"
                 className="text-muted-foreground"
                 onClick={() => setChangingToken(true)}
@@ -473,7 +470,7 @@ export function GitHubConnectPage(): React.JSX.Element {
               </Button>
             </div>
           )}
-        </div>
+        </Field>
 
         {error !== null && <LadderAlert error={error} />}
 
@@ -485,69 +482,73 @@ export function GitHubConnectPage(): React.JSX.Element {
           repos !== null &&
           (repos.length === 0 ? (
             <FieldDescription>
-              The token can reach no repositories. If you granted one on GitHub,
-              an organization admin may still need to approve the token -
-              refresh once that is done.
+              The token can reach no repositories. If you granted one owned by
+              an organization, an admin has to approve the token first.
             </FieldDescription>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <FieldLabel>Choose the repository</FieldLabel>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label="Refresh repositories"
-                  disabled={validating || loadingRepos}
-                  onClick={() =>
-                    void (usingFreshToken ? validate() : loadReposForChange())
-                  }
+            /* The Field holds the control and the words about it. The two
+               buttons are actions on the page, and a Field stretches
+               whatever it holds to the width of the column. */
+            <div className="flex flex-col gap-4">
+              <Field>
+                <div className="flex items-center gap-2">
+                  <FieldLabel htmlFor="github-repo">
+                    Choose the repository
+                  </FieldLabel>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Refresh repositories"
+                    disabled={validating || loadingRepos}
+                    onClick={() =>
+                      void (usingFreshToken ? validate() : loadReposForChange())
+                    }
+                  >
+                    <RefreshCw {...ICON_UI} />
+                  </Button>
+                </div>
+                <Combobox
+                  items={repos.map((r) => r.fullName)}
+                  value={selected}
+                  onValueChange={(v) => setSelected(v)}
                 >
-                  <RefreshCw {...ICON_UI} />
-                </Button>
-              </div>
-              <Combobox
-                items={repos.map((r) => r.fullName)}
-                value={selected}
-                onValueChange={(v) => setSelected(v)}
-              >
-                <ComboboxInput
-                  aria-label="Repository"
-                  placeholder="Search repositories"
-                  className="w-180 self-start"
-                />
-                <ComboboxContent>
-                  <ComboboxList>
-                    <ComboboxEmpty>No repositories match.</ComboboxEmpty>
-                    {repos.map((r) => (
-                      <ComboboxItem key={r.fullName} value={r.fullName}>
-                        <span className="min-w-0 truncate font-mono">
-                          {r.fullName}
-                        </span>
-                        {r.private && <MetaText>Private</MetaText>}
-                      </ComboboxItem>
-                    ))}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
+                  <ComboboxInput
+                    id="github-repo"
+                    placeholder="Search repositories"
+                    className="w-full"
+                  />
+                  <ComboboxContent>
+                    <ComboboxList>
+                      <ComboboxEmpty>No repositories match.</ComboboxEmpty>
+                      {repos.map((r) => (
+                        <ComboboxItem key={r.fullName} value={r.fullName}>
+                          <span className="min-w-0 truncate font-mono">
+                            {r.fullName}
+                          </span>
+                          {r.private && <MetaText>Private</MetaText>}
+                        </ComboboxItem>
+                      ))}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+                <FieldDescription>
+                  A repository owned by an organization appears only once an
+                  admin has approved the token. Refresh once that is done.
+                </FieldDescription>
+              </Field>
               {hasMore && (
                 <Button
-                  size="xs"
+                  size="sm"
                   variant="secondary"
                   className="self-start"
                   disabled={loadingMore}
                   onClick={() => void loadMore()}
                 >
-                  {loadingMore && <Spinner className="size-3" />}
+                  {loadingMore && <Spinner className="size-4" />}
                   Load more
                 </Button>
               )}
-              <FieldDescription>
-                Don&apos;t see the repo you granted? If it belongs to an
-                organization, an admin may need to approve your token first -
-                refresh once that is done.
-              </FieldDescription>
               <Button
-                size="sm"
                 className="self-start"
                 disabled={
                   selected === null ||
@@ -558,7 +559,7 @@ export function GitHubConnectPage(): React.JSX.Element {
                   void (usingFreshToken ? connectWithToken() : updateRepoOnly())
                 }
               >
-                {connecting && <Spinner className="size-3" />}
+                {connecting && <Spinner className="size-4" />}
                 {configured ? "Update repository" : "Connect repository"}
               </Button>
             </div>
@@ -568,12 +569,12 @@ export function GitHubConnectPage(): React.JSX.Element {
           <div>
             <Button
               size="sm"
-              variant="outline"
-              className="self-start text-destructive"
+              variant="secondary"
+              className="self-start"
               disabled={disconnecting}
               onClick={() => setConfirmOpen(true)}
             >
-              {disconnecting && <Spinner className="size-3" />}
+              {disconnecting && <Spinner className="size-4" />}
               Disconnect
             </Button>
           </div>

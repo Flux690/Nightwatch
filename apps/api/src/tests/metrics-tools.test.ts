@@ -14,7 +14,6 @@ const ALERT: NormalizedAlert = {
   sourceAlertId: "alert-1",
   labels: {},
   alertType: "OOMKill",
-  severity: "critical",
   firedAt: FIRED_AT,
   annotations: {},
   generatorURL: null,
@@ -482,10 +481,20 @@ describe("metrics tools through the tool dispatch", () => {
       });
     });
 
+    /* One connection per product, so several sources means several products,
+       each addressed by the product's own name. */
     describe("addressing one of several", () => {
+      function connectTwo(): void {
+        connect();
+        connect({
+          kind: "thanos",
+          label: "Thanos",
+          queryUrl: "http://thanos-query:9090",
+        });
+      }
+
       it("refuses to guess which source was meant, and names them", async () => {
-        connect({ label: "prom-prod" });
-        connect({ label: "prom-staging", queryUrl: "http://staging:9090" });
+        connectTwo();
 
         const result = await executeTool(
           findTool("QueryMetrics")!,
@@ -494,19 +503,18 @@ describe("metrics tools through the tool dispatch", () => {
         );
 
         expect(result.toolOutcome).toBe("system");
-        expect(result.content).toContain("prom-prod");
-        expect(result.content).toContain("prom-staging");
+        expect(result.content).toContain("Prometheus");
+        expect(result.content).toContain("Thanos");
         expect(mock.requests).toHaveLength(0);
       });
 
       it("sends the named one, matched however it was capitalised", async () => {
-        connect({ label: "prom-prod" });
-        connect({ label: "prom-staging", queryUrl: "http://staging:9090" });
+        connectTwo();
         mock.result = [];
 
         await executeTool(
           findTool("QueryMetrics")!,
-          { query: "up", metricsSource: "PROM-STAGING" },
+          { query: "up", metricsSource: "THANOS" },
           mintSession(ALERT),
         );
 

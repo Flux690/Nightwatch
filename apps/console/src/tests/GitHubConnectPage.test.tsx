@@ -216,7 +216,7 @@ describe("GitHubConnectPage - onboarding (not yet connected)", () => {
     ).not.toBeInTheDocument();
     // The description above the field stays, per the field's own label.
     expect(
-      screen.getByText(/choose which repository to grant access to/i),
+      screen.getByText(/grant it the one repository/i),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Change" }));

@@ -179,8 +179,9 @@ function setup(
   return { fetchMock, qc, view };
 }
 
-function cardFor(title: string): HTMLElement {
-  return screen.getByRole("button", { name: title });
+/* The whole row is the link, so there is no button to find. */
+function rowFor(title: string): HTMLElement {
+  return screen.getByRole("link", { name: title });
 }
 
 function categoryHeadings(): string[] {
@@ -213,7 +214,7 @@ describe("IntegrationsPage", () => {
       await screen.findByText("GitHub");
       await waitFor(() => {
         expect(
-          within(cardFor("GitHub")).getByText("Connected"),
+          within(rowFor("GitHub")).getByText("Connected"),
         ).toBeInTheDocument();
       });
       expect(categoryHeadings()).toEqual([
@@ -232,12 +233,12 @@ describe("IntegrationsPage", () => {
       setup();
 
       await screen.findByText("GitHub");
-      const card = within(cardFor("GitHub"));
+      const card = within(rowFor("GitHub"));
       expect(card.queryByText("Not connected")).not.toBeInTheDocument();
       expect(card.queryByText("Connected")).not.toBeInTheDocument();
       expect(card.getByText(/draft pull request/i)).toBeInTheDocument();
 
-      await user.click(cardFor("GitHub"));
+      await user.click(rowFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
@@ -250,11 +251,11 @@ describe("IntegrationsPage", () => {
       await screen.findByText("GitHub");
       await waitFor(() => {
         expect(
-          within(cardFor("GitHub")).getByText("Connected"),
+          within(rowFor("GitHub")).getByText("Connected"),
         ).toBeInTheDocument();
       });
 
-      await user.click(cardFor("GitHub"));
+      await user.click(rowFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
@@ -274,7 +275,7 @@ describe("IntegrationsPage", () => {
       setup({ runners: [] });
 
       await screen.findByText("Kubernetes clusters");
-      await user.click(cardFor("Kubernetes clusters"));
+      await user.click(rowFor("Kubernetes clusters"));
 
       expect(
         await screen.findByText(/kubernetes clusters destination/i),
@@ -287,10 +288,10 @@ describe("IntegrationsPage", () => {
 
       expect(await screen.findByText("1 host")).toBeInTheDocument();
       expect(
-        within(cardFor("Kubernetes clusters")).queryByText(/^\d+ cluster/),
+        within(rowFor("Kubernetes clusters")).queryByText(/^\d+ cluster/),
       ).not.toBeInTheDocument();
 
-      await user.click(cardFor("Docker hosts"));
+      await user.click(rowFor("Docker hosts"));
       expect(
         await screen.findByText(/docker hosts destination/i),
       ).toBeInTheDocument();
@@ -304,12 +305,12 @@ describe("IntegrationsPage", () => {
 
       await screen.findByText("Prometheus Alertmanager");
       expect(
-        within(cardFor("Prometheus Alertmanager")).queryByText(
+        within(rowFor("Prometheus Alertmanager")).queryByText(
           /receiving|waiting/i,
         ),
       ).not.toBeInTheDocument();
 
-      await user.click(cardFor("Prometheus Alertmanager"));
+      await user.click(rowFor("Prometheus Alertmanager"));
       expect(
         await screen.findByText(/alertmanager destination/i),
       ).toBeInTheDocument();
@@ -327,7 +328,7 @@ describe("IntegrationsPage", () => {
         lastReceivedAt: new Date().toISOString(),
       });
       const receiving = await screen.findByText("Receiving");
-      expect(receiving).toHaveClass("text-success");
+      expect(receiving).toHaveClass("text-ok");
     });
 
     /* Two senders are two credentials and two deliveries. A shared status would
@@ -343,13 +344,11 @@ describe("IntegrationsPage", () => {
       await screen.findByText("Grafana Alerting");
       await waitFor(() => {
         expect(
-          within(cardFor("Prometheus Alertmanager")).getByText("Receiving"),
+          within(rowFor("Prometheus Alertmanager")).getByText("Receiving"),
         ).toBeInTheDocument();
       });
       expect(
-        within(cardFor("Grafana Alerting")).getByText(
-          "Waiting for first alert",
-        ),
+        within(rowFor("Grafana Alerting")).getByText("Waiting for first alert"),
       ).toBeInTheDocument();
     });
   });
@@ -373,10 +372,10 @@ describe("IntegrationsPage", () => {
       await screen.findByText("Prometheus");
       await waitFor(() => {
         expect(
-          within(cardFor("Prometheus")).getByText("Connected"),
+          within(rowFor("Prometheus")).getByText("Connected"),
         ).toBeInTheDocument();
       });
-      await user.click(cardFor("Prometheus"));
+      await user.click(rowFor("Prometheus"));
       expect(
         await screen.findByText(/prometheus destination/i),
       ).toBeInTheDocument();
@@ -387,7 +386,7 @@ describe("IntegrationsPage", () => {
       await screen.findByText("Grafana Loki");
       await waitFor(() => {
         expect(
-          within(cardFor("Grafana Loki")).getByText("Connected"),
+          within(rowFor("Grafana Loki")).getByText("Connected"),
         ).toBeInTheDocument();
       });
     });

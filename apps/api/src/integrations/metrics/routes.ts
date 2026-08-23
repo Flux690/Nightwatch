@@ -1,15 +1,13 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { isMetricsSourceKind } from "@nightwarden/shared";
-import type {
-  MetricsSourceKind,
-  MetricsSourceStatus,
-} from "@nightwarden/shared";
+import type { MetricsSourceStatus } from "@nightwarden/shared";
 import { requireSession } from "../../auth/session.js";
 import {
   deleteMetricsSource,
   getMetricsSourceRow,
   listMetricsSourceRows,
+  metricsSourceOfKind,
   saveMetricsSource,
 } from "../../db/metrics.js";
 import { logger } from "../../logger.js";
@@ -43,20 +41,6 @@ const ConnectSchema = z.object({
   // error: without it the investigation can never confirm the alert cleared.
   rules: EndpointSchema.optional(),
 });
-
-/* Derived, never asked for: the product's own name is unique until a second of
-   the same kind is connected, and then it is that name with a number. */
-function availableName(kind: MetricsSourceKind): string {
-  const taken = new Set(
-    listMetricsSourceRows().map((row) => row.label.toLowerCase()),
-  );
-  const base = METRICS_PRESETS[kind].label;
-  if (!taken.has(base.toLowerCase())) return base;
-  for (let n = 2; ; n++) {
-    const candidate = `${base} ${n}`;
-    if (!taken.has(candidate.toLowerCase())) return candidate;
-  }
-}
 
 function statusPayload(): MetricsSourceStatus[] {
   const rows = new Map(listMetricsSourceRows().map((r) => [r.id, r]));
@@ -106,7 +90,15 @@ export async function registerMetricsRoutes(
         return reply.code(400).send({ error: parsed.error.message });
       }
       const { kind, query, rules } = parsed.data;
-      const name = availableName(kind);
+      const name = METRICS_PRESETS[kind].label;
+      /* One connection per product, because the thing you point at is already
+         an aggregate: Prometheus is scaled by putting Thanos or Mimir in front
+         of it, not by listing every replica here. */
+      if (metricsSourceOfKind(kind) !== null) {
+        return reply.code(409).send({
+          error: `${name} is already connected. Disconnect it first.`,
+        });
+      }
       try {
         await instantQuery(endpointFrom(query, name, kind), "up");
         if (rules !== undefined) {

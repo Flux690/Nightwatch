@@ -133,12 +133,12 @@ describe("AlertSourcePage", () => {
     const { fetchMock } = setup({ configured: false });
 
     const generateButton = await screen.findByRole("button", {
-      name: /generate credential/i,
+      name: /generate secret/i,
     });
-    // Viewing the setup never creates a secret, and the block carries a
-    // placeholder rather than a live one - it is safe to copy anywhere.
-    expect(screen.getByText(/receivers:/)).toBeInTheDocument();
-    expect(screen.getByText(/paste your credential here/)).toBeInTheDocument();
+    /* Viewing never mints. The URL is knowable before any secret exists, and
+       so is the scheme, which the setup sentence carries. */
+    expect(screen.getByText(/alerts\/ingest/)).toBeInTheDocument();
+    expect(screen.getByText(/Bearer/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/integrations/alerting/alertmanager/credential",
       expect.objectContaining({ method: "POST" }),
@@ -148,8 +148,6 @@ describe("AlertSourcePage", () => {
 
     await screen.findByText(new RegExp(ROTATED_TOKEN));
     expect(screen.getByText(/not shown again/i)).toBeInTheDocument();
-    // The block still carries the placeholder: the secret lives on its own.
-    expect(screen.getByText(/paste your credential here/)).toBeInTheDocument();
     // Mid-setup is steps, not a status report: no waiting badge yet.
     expect(
       screen.queryByText(/waiting for first alert/i),
@@ -161,7 +159,7 @@ describe("AlertSourcePage", () => {
     setup({ configured: false });
 
     await user.click(
-      await screen.findByRole("button", { name: /generate credential/i }),
+      await screen.findByRole("button", { name: /generate secret/i }),
     );
     await screen.findByText(new RegExp(ROTATED_TOKEN));
 
@@ -178,7 +176,7 @@ describe("AlertSourcePage", () => {
       screen.queryByRole("button", { name: /show token/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /rotate credential/i }),
+      screen.getByRole("button", { name: /^rotate$/i }),
     ).toBeInTheDocument();
   });
 
@@ -196,8 +194,13 @@ describe("AlertSourcePage", () => {
     setup({ kind: "grafana", configured: true });
     await screen.findByText(/waiting for first alert/i);
     expect(screen.getByText(/Contact points/)).toBeInTheDocument();
-    // A contact point is a form, so no alertmanager.yml is offered.
-    expect(screen.queryByText(/receivers:/)).not.toBeInTheDocument();
+    /* Two rows, named in English. What Grafana calls the boxes they go in is
+       said once, in the sentence above them, not three times as a path. */
+    expect(screen.getByText("Webhook URL")).toBeInTheDocument();
+    expect(screen.getByText("Secret")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Authorization header scheme set to Bearer/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Custom Payload empty/)).toBeInTheDocument();
     expect(
       screen.getByText(/Disable resolved message off/),
@@ -219,9 +222,7 @@ describe("AlertSourcePage", () => {
     setup({ configured: true, lastReceivedAt: "2026-07-17T01:00:00.000Z" });
 
     // The consequence lives in the dialog; nothing mints until confirmed.
-    await user.click(
-      await screen.findByRole("button", { name: /rotate credential/i }),
-    );
+    await user.click(await screen.findByRole("button", { name: /^rotate$/i }));
     expect(
       await screen.findByText(/stops delivering until you paste/i),
     ).toBeInTheDocument();

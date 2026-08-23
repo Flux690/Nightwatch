@@ -27,66 +27,66 @@ export const INTEGRATION_CATALOG: Record<IntegrationSlug, IntegrationIdentity> =
       label: "Docker hosts",
       logo: "/logos/docker.svg",
       description:
-        "Read container state, logs and stats, and restart a service on approval.",
+        "Read container state, logs and stats, and restart a container when you approve it.",
     },
     kubernetes: {
       label: "Kubernetes clusters",
       logo: "/logos/kubernetes.svg",
       description:
-        "Read pod state, events and logs, and roll a deployment on approval.",
+        "Read pod state, events and logs, and restart a workload when you approve it.",
     },
     alertmanager: {
       label: "Prometheus Alertmanager",
       logo: "/logos/prometheus.svg",
       description:
-        "Forward the alerts that open an investigation the moment one fires.",
+        "Open an investigation the moment Alertmanager fires, and close it when the alert clears.",
     },
     grafana: {
       label: "Grafana Alerting",
       logo: "/logos/grafana.svg",
       description:
-        "Forward alerts from Grafana's own alerting, through a webhook contact point.",
+        "Open an investigation the moment Grafana Alerting fires, and close it when the alert clears.",
     },
     prometheus: {
       label: "Prometheus",
       logo: "/logos/prometheus.svg",
       description:
-        "Query the Prometheus you already run to confirm a symptom and chart what backs it.",
+        "Query metrics to confirm a symptom, chart the series behind it, and check whether the rule still fires.",
     },
     victoriametrics: {
       label: "VictoriaMetrics",
       logo: "/logos/victoriametrics.svg",
       description:
-        "Query VictoriaMetrics, single-node or cluster, and read vmalert's rules.",
+        "Query metrics from vmsingle or vmselect, and read alerting rules from vmalert.",
     },
     mimir: {
       label: "Grafana Mimir",
       logo: "/logos/mimir.svg",
       description:
-        "Query Grafana Mimir, self-hosted or as Grafana Cloud Metrics.",
+        "Query metrics from self-hosted Mimir or Grafana Cloud Metrics, one tenant at a time.",
     },
     thanos: {
       label: "Thanos",
       logo: "/logos/thanos.svg",
       description:
-        "Query Thanos and read the rules it aggregates from your rulers.",
+        "Query metrics across every store behind Thanos, and read the rules it aggregates.",
     },
     amp: {
       label: "Amazon Managed Prometheus",
       logo: "/logos/amp.svg",
       description:
-        "Query Amazon Managed Service for Prometheus, signed with your AWS credentials.",
+        "Query metrics from an Amazon Managed Prometheus workspace, signed with your AWS credentials.",
     },
     loki: {
       label: "Grafana Loki",
       logo: "/logos/loki.svg",
       description:
-        "Search your logs for the errors behind an alert and quote them as evidence.",
+        "Read the log lines around an alert and quote them in the report as evidence.",
     },
     github: {
       label: "GitHub",
       logo: "/logos/github.svg",
       description:
-        "Read the code behind a failure, verify a fix, and open a draft pull request.",
+        "Read the repository, verify a fix in a sandbox, and open a draft pull request.",
     },
   };

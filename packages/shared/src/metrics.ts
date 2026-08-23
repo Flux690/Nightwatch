@@ -41,6 +41,14 @@ export interface MetricsEndpointInput {
   sessionToken?: string;
 }
 
+/* One connect request. A product is connected once, so it is addressed by the
+   product's own name and there is nothing here to name it. */
+export interface MetricsConnectInput {
+  kind: MetricsSourceKind;
+  query: MetricsEndpointInput;
+  rules?: MetricsEndpointInput;
+}
+
 // Never the credential itself: a status says what is configured, not its value.
 export interface MetricsEndpointStatus {
   url: string;
@@ -51,7 +59,7 @@ export interface MetricsEndpointStatus {
 export interface MetricsSourceStatus {
   id: string;
   kind: MetricsSourceKind;
-  // What the user called it, and what a tool call names in `metricsSource`.
+  // The product's own name, and what a tool call names in `metricsSource`.
   label: string;
   query: MetricsEndpointStatus;
   /* Null when no rules endpoint is configured, which the console says out loud.

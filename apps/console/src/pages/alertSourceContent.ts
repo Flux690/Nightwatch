@@ -1,71 +1,38 @@
 import type { AlertSourceKind } from "@nightwarden/shared";
 
-// One value the user copies into the sender, on its own so a live credential
-// never has to travel inside a block someone might paste into a ticket.
-export interface AlertSourceField {
-  label: string;
-  value: string;
-}
-
+/* What differs between senders is where you paste these and what the sender
+   calls its fields. The two values themselves are the same for both, so the
+   page draws one set of rows and only the wording around them changes. */
 export interface AlertSourceContent {
-  setupStep: string;
-  confirmStep: string;
-  fields: (ingestUrl: string) => AlertSourceField[];
-  // Only for a sender whose setup is a file to edit. The credential is a
-  // placeholder here, never the real one.
-  template?: (ingestUrl: string) => { label: string; text: string };
+  // Where these go, and anything the sender asks for that is not one of them.
+  where: string;
   warnings: string[];
   rotateDescription: string;
-}
-
-const CREDENTIAL_PLACEHOLDER = "<paste your credential here>";
-
-function alertmanagerTemplate(ingestUrl: string): {
-  label: string;
-  text: string;
-} {
-  return {
-    label: "Copy Alertmanager receiver",
-    text: [
-      "receivers:",
-      "  - name: nightwarden",
-      "    webhook_configs:",
-      `      - url: '${ingestUrl}'`,
-      "        http_config:",
-      "          authorization:",
-      "            type: Bearer",
-      `            credentials: '${CREDENTIAL_PLACEHOLDER}'`,
-    ].join("\n"),
-  };
 }
 
 export const ALERT_SOURCE_CONTENT: Record<AlertSourceKind, AlertSourceContent> =
   {
     alertmanager: {
-      setupStep: "1. Add this receiver to your alertmanager.yml",
-      confirmStep: "2. Reload Alertmanager",
-      fields: (ingestUrl) => [{ label: "Ingest URL", value: ingestUrl }],
-      template: alertmanagerTemplate,
+      where:
+        "Add a webhook receiver to your alertmanager.yml with the URL and secret below, set http_config.authorization.type to Bearer, and point a route at it.",
       warnings: [
         "Leave send_resolved at its default of true. It is how an investigation learns the alert stopped firing, and without it nothing reaches Resolved.",
       ],
       rotateDescription:
-        "The current credential stops working immediately, and your Alertmanager stops delivering until you paste the new one into the receiver.",
+        "The current secret stops working immediately, and your Alertmanager stops delivering until you paste the new one into the receiver.",
     },
     grafana: {
-      setupStep:
-        "1. In Grafana, go to Alerting - Contact points - Add contact point, choose Webhook, and fill in these values",
-      confirmStep: "2. Save the contact point and route an alert to it",
-      // A form, not a file, so there is nothing to paste as a block.
-      fields: (ingestUrl) => [
-        { label: "URL", value: ingestUrl },
-        { label: "Authorization scheme", value: "Bearer" },
-      ],
+      where:
+        "In Grafana, go to Alerting, then Contact points, then Add contact point, and choose Webhook. Paste the URL and secret below, with the Authorization header scheme set to Bearer.",
       warnings: [
         "Leave Optional Webhook settings - Custom Payload empty. A custom payload replaces the request body, and NightWarden reads Grafana's default one.",
         "Leave Disable resolved message off. The resolved notification is how an investigation learns the alert stopped firing.",
       ],
       rotateDescription:
-        "The current credential stops working immediately, and Grafana stops delivering until you paste the new one into the contact point.",
+        "The current secret stops working immediately, and Grafana stops delivering until you paste the new one into the contact point.",
     },
   };
+
+/* A secret is 4 characters of prefix and 43 of base64url. The masked form runs
+   the same length so nothing on the page moves when it is saved. */
+export const SECRET_MASK = "•".repeat(47);

@@ -153,6 +153,7 @@ export function RunnerListPage({
 
   return (
     <Page
+      measure="form"
       crumbs={[
         { label: "Integrations", to: "/integrations" },
         { label: copy.plural },
@@ -210,13 +211,13 @@ export function RunnerListPage({
 
       {!isLoading && !isError && connected.length > 1 && (
         <Field className="mb-3">
-          <FieldLabel id="runner-sort-label">Sort by</FieldLabel>
+          <FieldLabel htmlFor="runner-sort">Sort by</FieldLabel>
           <Select
             items={SORT_LABEL}
             value={sortField}
             onValueChange={(value) => handleSort(value as SortField)}
           >
-            <SelectTrigger id="runner-sort" className="max-w-control-sm">
+            <SelectTrigger id="runner-sort">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -268,7 +269,7 @@ export function RunnerListPage({
               actions={
                 <Button
                   variant="outline"
-                  size="xs"
+                  size="sm"
                   disabled={removing === runner.token}
                   aria-label={`Remove ${runnerDisplayName(runner)}`}
                   onClick={() => void handleRemove(runner.token)}

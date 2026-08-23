@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import type {
   AlertSourceKind,
   GitHubIntegrationStatus,
@@ -9,18 +9,20 @@ import type {
 } from "@nightwarden/shared";
 import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
-import { Page, SECTION_HEADING } from "@/components/layout/Page";
-import { cn } from "@/lib/utils";
+import { Page, SectionHeading } from "@/components/layout/Page";
+import { Card } from "@/components/ui/card";
+import { StatusText } from "@/components/ui/status";
+import { IntegrationLogo } from "@/components/layout/IntegrationHeader";
 import { apiFetch } from "@/api/client";
 import { INTEGRATION_CATALOG } from "./integrationCatalog";
 
 // Named for what a connection gives an investigation. A section appears with
-// its first card.
+// its first row.
 const CATEGORIES = ["Alerting", "Metrics", "Logs", "Fleet", "Code"] as const;
 
 type Category = (typeof CATEGORIES)[number];
 
-interface IntegrationCard {
+interface IntegrationRow {
   title: string;
   description: string;
   category: Category;
@@ -32,46 +34,32 @@ interface IntegrationCard {
   statusVariant?: "success" | "muted";
 }
 
-function CatalogCard({
-  card,
-  onOpen,
-}: {
-  card: IntegrationCard;
-  onOpen: () => void;
-}): React.JSX.Element {
+/* A full-width row, not a tile. The whole row is the link, so there is no
+   Connect button duplicating the one action it already has. */
+function CatalogRow({ row }: { row: IntegrationRow }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      aria-label={card.title}
-      onClick={onOpen}
-      className="flex h-39 flex-col gap-3 rounded-lg p-4 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
-    >
-      <span className="flex items-center gap-2">
-        {/* The square is white because vendor logos are drawn for light
-            ground; anything monochrome inherits dark ink from it. */}
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-white text-background">
-          <img src={card.logo} alt="" className="size-5" />
+    <li className="not-last:border-b not-last:border-border">
+      <Link
+        to={row.to}
+        aria-label={row.title}
+        className="flex items-start gap-3 px-4 py-3 no-underline transition-colors hover:bg-card-hover"
+      >
+        <IntegrationLogo logo={row.logo} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-sm leading-tight font-medium text-foreground">
+            {row.title}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            {row.description}
+          </span>
         </span>
-        <span className="min-w-0 text-sm leading-tight font-medium">
-          {card.title}
-        </span>
-      </span>
-      <span className="line-clamp-3 text-sm text-muted-foreground">
-        {card.description}
-      </span>
-      {card.status !== null && (
-        <span
-          className={cn(
-            "mt-auto text-sm",
-            card.statusVariant === "muted"
-              ? "text-muted-foreground"
-              : "text-success",
-          )}
-        >
-          {card.status}
-        </span>
-      )}
-    </button>
+        {row.status !== null && (
+          <StatusText tone={row.statusVariant === "muted" ? "muted" : "ok"}>
+            {row.status}
+          </StatusText>
+        )}
+      </Link>
+    </li>
   );
 }
 
@@ -94,7 +82,7 @@ function useAlertSource(kind: AlertSourceKind): AlertSourceStatus | undefined {
 function alertSourceCard(
   kind: AlertSourceKind,
   status: AlertSourceStatus | undefined,
-): IntegrationCard {
+): IntegrationRow {
   const identity = INTEGRATION_CATALOG[kind];
   return {
     title: identity.label,
@@ -113,8 +101,6 @@ function alertSourceCard(
 }
 
 export function IntegrationsPage(): React.JSX.Element {
-  const navigate = useNavigate();
-
   const { data: github } = useQuery<GitHubIntegrationStatus>({
     queryKey: ["github-integration"],
     queryFn: () =>
@@ -131,8 +117,8 @@ export function IntegrationsPage(): React.JSX.Element {
   const alertmanager = useAlertSource("alertmanager");
   const grafana = useAlertSource("grafana");
 
-  // One query for every source: the grid draws a card per product and each
-  // says how many of that product are connected.
+  // One query for every source: the list draws a row per product, and each
+  // says whether that product is connected.
   const { data: metrics } = useQuery<MetricsSourceStatus[]>({
     queryKey: ["metrics-sources"],
     queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
@@ -151,7 +137,7 @@ export function IntegrationsPage(): React.JSX.Element {
   function platformCard(
     platform: "docker" | "kubernetes",
     noun: string,
-  ): IntegrationCard {
+  ): IntegrationRow {
     const identity = INTEGRATION_CATALOG[platform];
     const count = connectedRunners.filter(
       (r) => r.platform === platform,
@@ -166,17 +152,17 @@ export function IntegrationsPage(): React.JSX.Element {
     };
   }
 
-  const cards: IntegrationCard[] = [
+  const rows: IntegrationRow[] = [
     platformCard("docker", "host"),
     platformCard("kubernetes", "cluster"),
     alertSourceCard("alertmanager", alertmanager),
     alertSourceCard("grafana", grafana),
-    ...METRICS_SOURCE_KINDS.map((kind): IntegrationCard => {
+    ...METRICS_SOURCE_KINDS.map((kind): IntegrationRow => {
       const identity = INTEGRATION_CATALOG[kind];
-      const connected = (metrics ?? []).filter((b) => b.kind === kind);
+      const source = (metrics ?? []).find((b) => b.kind === kind);
       /* A source with no rules endpoint is connected and still cannot confirm
-         a recovery, so the card says which rather than a flat "Connected". */
-      const blind = connected.filter((b) => b.rules === null).length;
+         a recovery, so the row says which rather than a flat "Connected". */
+      const blind = source !== undefined && source.rules === null;
       return {
         title: identity.label,
         description: identity.description,
@@ -184,12 +170,12 @@ export function IntegrationsPage(): React.JSX.Element {
         logo: identity.logo,
         to: `/integrations/metrics/${kind}`,
         status:
-          connected.length === 0
+          source === undefined
             ? null
-            : blind > 0
+            : blind
               ? "Connected, no rules endpoint"
               : "Connected",
-        statusVariant: blind > 0 ? "muted" : "success",
+        statusVariant: blind ? "muted" : "success",
       };
     }),
     {
@@ -214,20 +200,18 @@ export function IntegrationsPage(): React.JSX.Element {
     <Page crumbs={[{ label: "Integrations" }]} measure="form">
       <div className="flex flex-col gap-8">
         {CATEGORIES.map((category) => {
-          const inCategory = cards.filter((c) => c.category === category);
+          const inCategory = rows.filter((r) => r.category === category);
           if (inCategory.length === 0) return null;
           return (
             <section key={category} className="flex flex-col gap-3">
-              <h2 className={SECTION_HEADING}>{category}</h2>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-                {inCategory.map((card) => (
-                  <CatalogCard
-                    key={card.title}
-                    card={card}
-                    onOpen={() => void navigate({ to: card.to })}
-                  />
-                ))}
-              </div>
+              <SectionHeading>{category}</SectionHeading>
+              <Card className="gap-0 py-0">
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {inCategory.map((row) => (
+                    <CatalogRow key={row.title} row={row} />
+                  ))}
+                </ul>
+              </Card>
             </section>
           );
         })}

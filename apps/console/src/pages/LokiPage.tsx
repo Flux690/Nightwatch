@@ -73,6 +73,7 @@ export function LokiPage(): React.JSX.Element {
 
   return (
     <Page
+      measure="form"
       crumbs={[
         { label: "Integrations", to: "/integrations" },
         { label: "Loki" },
@@ -90,14 +91,13 @@ export function LokiPage(): React.JSX.Element {
 
         {status && !status.configured && (
           <section className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Where NightWarden reads log lines from. It dials this from its own
+              machine, so the address has to be reachable from there.
+            </p>
             <Field>
               <FieldLabel htmlFor="loki-url">Loki URL</FieldLabel>
-              <FieldDescription>
-                NightWarden dials this from its own machine, so it must be
-                reachable from there.
-              </FieldDescription>
               <Input
-                className="max-w-control"
                 id="loki-url"
                 placeholder="http://loki.internal:3100"
                 value={url}
@@ -105,14 +105,11 @@ export function LokiPage(): React.JSX.Element {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="loki-auth">
-                Authorization header (optional)
-              </FieldLabel>
+              <FieldLabel htmlFor="loki-auth">Authorization header</FieldLabel>
               <FieldDescription>
-                Add this only if your Loki sits behind authentication.
+                The whole header value, scheme included.
               </FieldDescription>
               <Input
-                className="max-w-control"
                 id="loki-auth"
                 type="password"
                 placeholder="Bearer ..."
@@ -121,14 +118,13 @@ export function LokiPage(): React.JSX.Element {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="loki-org">Tenant ID (optional)</FieldLabel>
+              <FieldLabel htmlFor="loki-org">Tenant</FieldLabel>
               <FieldDescription>
-                Multi-tenant Loki needs a tenant here; single-tenant Loki does
-                not.
+                The tenant to read, sent as X-Scope-OrgID.
               </FieldDescription>
               <Input
-                className="max-w-control"
                 id="loki-org"
+                measure="short"
                 placeholder="my-tenant"
                 value={orgId}
                 onChange={(e) => setOrgId(e.currentTarget.value)}
@@ -168,7 +164,7 @@ export function LokiPage(): React.JSX.Element {
             )}
             <div className="flex items-center gap-2">
               <Button
-                size="xs"
+                size="sm"
                 variant="secondary"
                 onClick={() => setConfirmDisconnect(true)}
               >

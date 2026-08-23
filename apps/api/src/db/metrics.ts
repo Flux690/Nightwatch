@@ -3,7 +3,7 @@ import {
   allIntegrations,
   deleteIntegrationById,
   integrationById,
-  integrationsOfKind,
+  integrationOfKind,
   putIntegration,
   type IntegrationRow,
 } from "./integrations.js";
@@ -66,8 +66,12 @@ export function getMetricsSourceRow(id: string): MetricsSourceRow | null {
   return row === null || !isMetricsRow(row) ? null : toSource(row);
 }
 
-export function countMetricsSourcesOfKind(kind: MetricsSourceKind): number {
-  return integrationsOfKind(kind).length;
+// One product is connected once; the connect route is what enforces it.
+export function metricsSourceOfKind(
+  kind: MetricsSourceKind,
+): MetricsSourceRow | null {
+  const row = integrationOfKind(kind);
+  return row === null ? null : toSource(row);
 }
 
 export interface MetricsSourceInput {

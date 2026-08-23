@@ -3,248 +3,470 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
 import type {
+  MetricsConnectInput,
+  MetricsEndpointInput,
   MetricsSourceKind,
   MetricsSourceStatus,
-  MetricsEndpointInput,
 } from "@nightwarden/shared";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MetaText, StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Page } from "@/components/layout/Page";
+import { Page, SectionHeading } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
+import { IntegrationWarnings } from "@/components/layout/IntegrationWarnings";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
-import { METRICS_SOURCE_CONTENT } from "./metricsSourceContent";
+import {
+  AUTH_LABEL,
+  METRICS_SOURCE_CONTENT,
+  QUERY_LEAD,
+  RULES_LEAD,
+  type AuthMethod,
+} from "./metricsSourceContent";
 import { INTEGRATION_CATALOG } from "./integrationCatalog";
-import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
-// A superset draft rather than a discriminated union: one state shape, one
-// onChange signature, regardless of kind. Only AMP reads the four AWS fields;
-// toInput picks which half of the draft it sends.
-interface EndpointDraft {
-  url: string;
-  authHeader: string;
-  basicUsername: string;
-  basicPassword: string;
-  orgId: string;
+/* One draft per endpoint. The method decides which fields travel, so a
+   credential the user switched away from is never sent beside the one they
+   chose - the API keeps the first it finds and drops the rest silently. */
+interface Credential {
+  method: AuthMethod;
+  bearer: string;
+  username: string;
+  password: string;
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
   sessionToken: string;
 }
 
-const EMPTY: EndpointDraft = {
-  url: "",
-  authHeader: "",
-  basicUsername: "",
-  basicPassword: "",
-  orgId: "",
+const emptyCredential = (method: AuthMethod): Credential => ({
+  method,
+  bearer: "",
+  username: "",
+  password: "",
   accessKeyId: "",
   secretAccessKey: "",
   region: "",
   sessionToken: "",
-};
+});
 
-// Only what the user filled in travels: an empty field is not a credential.
-function toInput(
-  draft: EndpointDraft,
-  kind: MetricsSourceKind,
+const trim = (v: string): string => v.trim();
+
+function endpointOf(
+  url: string,
+  credential: Credential,
+  orgId: string,
 ): MetricsEndpointInput {
-  if (kind === "amp") {
-    return {
-      url: draft.url.trim(),
-      ...(draft.accessKeyId.trim() && {
-        accessKeyId: draft.accessKeyId.trim(),
-      }),
-      ...(draft.secretAccessKey.trim() && {
-        secretAccessKey: draft.secretAccessKey.trim(),
-      }),
-      ...(draft.region.trim() && { region: draft.region.trim() }),
-      ...(draft.sessionToken.trim() && {
-        sessionToken: draft.sessionToken.trim(),
-      }),
-    };
+  const tenant = trim(orgId) === "" ? {} : { orgId: trim(orgId) };
+  switch (credential.method) {
+    case "bearer":
+      return {
+        url: trim(url),
+        ...(trim(credential.bearer) && { authHeader: trim(credential.bearer) }),
+        ...tenant,
+      };
+    case "basic":
+      return {
+        url: trim(url),
+        ...(trim(credential.username) && {
+          basicUsername: trim(credential.username),
+        }),
+        ...(trim(credential.password) && {
+          basicPassword: trim(credential.password),
+        }),
+        ...tenant,
+      };
+    case "aws":
+      return {
+        url: trim(url),
+        ...(trim(credential.accessKeyId) && {
+          accessKeyId: trim(credential.accessKeyId),
+        }),
+        ...(trim(credential.secretAccessKey) && {
+          secretAccessKey: trim(credential.secretAccessKey),
+        }),
+        ...(trim(credential.region) && { region: trim(credential.region) }),
+        ...(trim(credential.sessionToken) && {
+          sessionToken: trim(credential.sessionToken),
+        }),
+      };
+    case "none":
+      return { url: trim(url), ...tenant };
   }
-  return {
-    url: draft.url.trim(),
-    ...(draft.authHeader.trim() && { authHeader: draft.authHeader.trim() }),
-    ...(draft.basicUsername.trim() && {
-      basicUsername: draft.basicUsername.trim(),
-    }),
-    ...(draft.basicPassword.trim() && {
-      basicPassword: draft.basicPassword.trim(),
-    }),
-    ...(draft.orgId.trim() && { orgId: draft.orgId.trim() }),
-  };
 }
 
-function EndpointFields({
+function CredentialFields({
   idPrefix,
-  draft,
+  credential,
   onChange,
-  authHelp,
 }: {
   idPrefix: string;
-  draft: EndpointDraft;
-  onChange: (next: EndpointDraft) => void;
-  authHelp: string;
-}): React.JSX.Element {
-  return (
-    <>
+  credential: Credential;
+  onChange: (next: Credential) => void;
+}): React.JSX.Element | null {
+  const set = (patch: Partial<Credential>): void =>
+    onChange({ ...credential, ...patch });
+
+  if (credential.method === "none") return null;
+
+  if (credential.method === "bearer") {
+    return (
       <Field>
-        <FieldLabel htmlFor={`${idPrefix}-auth`}>
-          Authorization header (optional)
+        <FieldLabel htmlFor={`${idPrefix}-bearer`}>
+          Authorization header
         </FieldLabel>
-        <FieldDescription>{authHelp}</FieldDescription>
-        <Input
-          className="max-w-control"
-          id={`${idPrefix}-auth`}
-          type="password"
-          placeholder="Bearer ..."
-          value={draft.authHeader}
-          onChange={(e) =>
-            onChange({ ...draft, authHeader: e.currentTarget.value })
-          }
-        />
-      </Field>
-      <div className="flex max-w-control gap-3">
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-user`}>
-            Username (optional)
-          </FieldLabel>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-user`}
-            value={draft.basicUsername}
-            onChange={(e) =>
-              onChange({ ...draft, basicUsername: e.currentTarget.value })
-            }
-          />
-        </Field>
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-pass`}>
-            Password (optional)
-          </FieldLabel>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-pass`}
-            type="password"
-            value={draft.basicPassword}
-            onChange={(e) =>
-              onChange({ ...draft, basicPassword: e.currentTarget.value })
-            }
-          />
-        </Field>
-      </div>
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-org`}>Tenant (optional)</FieldLabel>
         <FieldDescription>
-          Mimir requires a tenant when multi-tenancy is on.
+          The whole header value, scheme included.
         </FieldDescription>
         <Input
-          className="max-w-control"
-          id={`${idPrefix}-org`}
-          value={draft.orgId}
-          onChange={(e) => onChange({ ...draft, orgId: e.currentTarget.value })}
+          id={`${idPrefix}-bearer`}
+          type="password"
+          placeholder="Bearer ..."
+          value={credential.bearer}
+          onChange={(e) => set({ bearer: e.currentTarget.value })}
+        />
+      </Field>
+    );
+  }
+
+  if (credential.method === "basic") {
+    /* One credential, so one row: a pair entered together and sent together
+       reads as two unrelated questions when it is stacked. */
+    return (
+      <div className="flex flex-wrap gap-4">
+        <Field className="w-auto">
+          <FieldLabel htmlFor={`${idPrefix}-user`}>Username</FieldLabel>
+          <Input
+            id={`${idPrefix}-user`}
+            measure="short"
+            value={credential.username}
+            onChange={(e) => set({ username: e.currentTarget.value })}
+          />
+        </Field>
+        <Field className="w-auto">
+          <FieldLabel htmlFor={`${idPrefix}-pass`}>Password</FieldLabel>
+          <Input
+            id={`${idPrefix}-pass`}
+            type="password"
+            measure="short"
+            value={credential.password}
+            onChange={(e) => set({ password: e.currentTarget.value })}
+          />
+        </Field>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-access-key`}>
+          Access key ID
+        </FieldLabel>
+        <Input
+          id={`${idPrefix}-access-key`}
+          measure="short"
+          placeholder="AKIA..."
+          value={credential.accessKeyId}
+          onChange={(e) => set({ accessKeyId: e.currentTarget.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-secret-key`}>
+          Secret access key
+        </FieldLabel>
+        <Input
+          id={`${idPrefix}-secret-key`}
+          type="password"
+          value={credential.secretAccessKey}
+          onChange={(e) => set({ secretAccessKey: e.currentTarget.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-region`}>Region</FieldLabel>
+        <Input
+          id={`${idPrefix}-region`}
+          measure="short"
+          placeholder="us-east-1"
+          value={credential.region}
+          onChange={(e) => set({ region: e.currentTarget.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-session-token`}>
+          Session token
+        </FieldLabel>
+        <FieldDescription>Only for temporary STS credentials.</FieldDescription>
+        <Input
+          id={`${idPrefix}-session-token`}
+          type="password"
+          value={credential.sessionToken}
+          onChange={(e) => set({ sessionToken: e.currentTarget.value })}
         />
       </Field>
     </>
   );
 }
 
-// AMP signs every request instead of carrying a header, so it takes AWS
-// credentials in place of EndpointFields' header/basic-auth pair.
-function AmpCredentialFields({
-  idPrefix,
-  draft,
+function AuthPicker({
+  id,
+  methods,
+  help,
+  value,
   onChange,
-  authHelp,
 }: {
-  idPrefix: string;
-  draft: EndpointDraft;
-  onChange: (next: EndpointDraft) => void;
-  authHelp: string;
-}): React.JSX.Element {
+  id: string;
+  methods: AuthMethod[];
+  help: string;
+  value: AuthMethod;
+  onChange: (next: AuthMethod) => void;
+}): React.JSX.Element | null {
+  // A product that offers one way in is not asking a question.
+  if (methods.length < 2) return null;
+  const items = Object.fromEntries(methods.map((m) => [m, AUTH_LABEL[m]]));
   return (
-    <>
-      <div className="flex max-w-control gap-3">
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-access-key`}>
-            Access key ID
-          </FieldLabel>
-          <FieldDescription>{authHelp}</FieldDescription>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-access-key`}
-            value={draft.accessKeyId}
-            onChange={(e) =>
-              onChange({ ...draft, accessKeyId: e.currentTarget.value })
-            }
-          />
-        </Field>
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-secret-key`}>
-            Secret access key
-          </FieldLabel>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-secret-key`}
-            type="password"
-            value={draft.secretAccessKey}
-            onChange={(e) =>
-              onChange({ ...draft, secretAccessKey: e.currentTarget.value })
-            }
-          />
-        </Field>
-      </div>
-      <div className="flex max-w-control gap-3">
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-region`}>Region</FieldLabel>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-region`}
-            placeholder="us-east-1"
-            value={draft.region}
-            onChange={(e) =>
-              onChange({ ...draft, region: e.currentTarget.value })
-            }
-          />
-        </Field>
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${idPrefix}-session-token`}>
-            Session token (optional)
-          </FieldLabel>
-          <Input
-            className="max-w-control"
-            id={`${idPrefix}-session-token`}
-            type="password"
-            value={draft.sessionToken}
-            onChange={(e) =>
-              onChange({ ...draft, sessionToken: e.currentTarget.value })
-            }
-          />
-        </Field>
-      </div>
-    </>
+    <Field>
+      <FieldLabel htmlFor={id}>Authentication</FieldLabel>
+      {help !== "" && <FieldDescription>{help}</FieldDescription>}
+      <Select
+        items={items}
+        value={value}
+        onValueChange={(next) => onChange(next as AuthMethod)}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {methods.map((m) => (
+            <SelectItem key={m} value={m}>
+              {AUTH_LABEL[m]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
-function CredentialFields(props: {
-  kind: MetricsSourceKind;
-  idPrefix: string;
-  draft: EndpointDraft;
-  onChange: (next: EndpointDraft) => void;
-  authHelp: string;
+function ConnectForm({ kind }: { kind: MetricsSourceKind }): React.JSX.Element {
+  const content = METRICS_SOURCE_CONTENT[kind];
+  const identity = INTEGRATION_CATALOG[kind];
+  const queryClient = useQueryClient();
+  const defaultMethod = content.auth[0] ?? "none";
+
+  const [queryUrl, setQueryUrl] = useState("");
+  const [queryCredential, setQueryCredential] = useState(
+    emptyCredential(defaultMethod),
+  );
+  const [orgId, setOrgId] = useState("");
+  const [rulesUrl, setRulesUrl] = useState("");
+  const [sameCredential, setSameCredential] = useState(true);
+  const [rulesCredential, setRulesCredential] = useState(
+    emptyCredential(defaultMethod),
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const connect = useMutation({
+    mutationFn: () => {
+      const body: MetricsConnectInput = {
+        kind,
+        query: endpointOf(queryUrl, queryCredential, orgId),
+        // Absent rather than empty: a source with no rules endpoint is a
+        // supported configuration, and the row above says what it costs.
+        ...(trim(rulesUrl) !== "" && {
+          rules: endpointOf(
+            rulesUrl,
+            sameCredential ? queryCredential : rulesCredential,
+            orgId,
+          ),
+        }),
+      };
+      return apiFetch<MetricsSourceStatus>("/api/integrations/metrics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
+    onMutate: () => setError(null),
+    onSuccess: async () => {
+      toast.success(`${identity.label} connected`);
+      await queryClient.invalidateQueries({ queryKey: ["metrics-sources"] });
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiError ? err.message : "Could not reach the API",
+      ),
+  });
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-4">
+        <SectionHeading lead={QUERY_LEAD}>Querying</SectionHeading>
+        <Field>
+          <FieldLabel htmlFor="metrics-query-url">Query URL</FieldLabel>
+          {content.queryHelp !== "" && (
+            <FieldDescription>{content.queryHelp}</FieldDescription>
+          )}
+          <Input
+            id="metrics-query-url"
+            placeholder={content.queryPlaceholder}
+            value={queryUrl}
+            onChange={(e) => setQueryUrl(e.currentTarget.value)}
+          />
+        </Field>
+        <AuthPicker
+          id="metrics-query-auth"
+          methods={content.auth}
+          help={content.authHelp}
+          value={queryCredential.method}
+          onChange={(method) =>
+            setQueryCredential({ ...queryCredential, method })
+          }
+        />
+        <CredentialFields
+          idPrefix="metrics-query"
+          credential={queryCredential}
+          onChange={setQueryCredential}
+        />
+        {content.tenant && (
+          <Field>
+            <FieldLabel htmlFor="metrics-tenant">Tenant</FieldLabel>
+            <FieldDescription>
+              The tenant to query, sent as X-Scope-OrgID.
+            </FieldDescription>
+            <Input
+              id="metrics-tenant"
+              measure="short"
+              value={orgId}
+              onChange={(e) => setOrgId(e.currentTarget.value)}
+            />
+          </Field>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <SectionHeading lead={RULES_LEAD}>Recovery</SectionHeading>
+        <Field>
+          <FieldLabel htmlFor="metrics-rules-url">Rules URL</FieldLabel>
+          <FieldDescription>{content.rulesHelp}</FieldDescription>
+          <Input
+            id="metrics-rules-url"
+            placeholder={content.rulesPlaceholder}
+            value={rulesUrl}
+            onChange={(e) => setRulesUrl(e.currentTarget.value)}
+          />
+        </Field>
+        {trim(rulesUrl) !== "" && (
+          <>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="metrics-rules-same"
+                checked={sameCredential}
+                onCheckedChange={(next) => setSameCredential(next === true)}
+              />
+              <Label htmlFor="metrics-rules-same">
+                Use the same credentials
+              </Label>
+            </Field>
+            {!sameCredential && (
+              <>
+                <AuthPicker
+                  id="metrics-rules-auth"
+                  methods={content.auth}
+                  help=""
+                  value={rulesCredential.method}
+                  onChange={(method) =>
+                    setRulesCredential({ ...rulesCredential, method })
+                  }
+                />
+                <CredentialFields
+                  idPrefix="metrics-rules"
+                  credential={rulesCredential}
+                  onChange={setRulesCredential}
+                />
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      <IntegrationWarnings warnings={content.warnings} />
+
+      {error !== null && (
+        <Alert variant="destructive">
+          <AlertTitle>Could not connect</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <Button
+        className="self-start"
+        disabled={trim(queryUrl) === "" || connect.isPending}
+        onClick={() => connect.mutate()}
+      >
+        {connect.isPending && <Spinner className="size-4" />}
+        Connect
+      </Button>
+    </div>
+  );
+}
+
+function ConnectedSource({
+  source,
+  onRemove,
+}: {
+  source: MetricsSourceStatus;
+  onRemove: () => void;
 }): React.JSX.Element {
-  return props.kind === "amp" ? (
-    <AmpCredentialFields {...props} />
-  ) : (
-    <EndpointFields {...props} />
+  return (
+    /* The header above names the product, so the address is what identifies
+       this connection - the same line Loki's connected state shows. */
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium">{source.query.url}</p>
+        <StatusText tone="ok">Connected</StatusText>
+        {source.query.hasAuth && <MetaText>Auth</MetaText>}
+        {source.query.hasOrgId && <MetaText>Tenant</MetaText>}
+      </div>
+      {source.rules === null ? (
+        /* Said here rather than discovered at 3am: this is the difference
+           between an investigation that can close itself and one that cannot. */
+        <p className="flex items-start gap-2 text-sm text-warning">
+          <TriangleAlert {...ICON_UI} className="shrink-0" />
+          <span>
+            No rules endpoint. This source reaches Resolved only when your alert
+            source sends a resolved notification.
+          </span>
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Rules: {source.rules.url}
+        </p>
+      )}
+      <Button
+        size="sm"
+        variant="secondary"
+        className="self-start"
+        onClick={onRemove}
+      >
+        Disconnect
+      </Button>
+    </div>
   );
 }
 
@@ -253,47 +475,18 @@ export function MetricsSourcePage({
 }: {
   kind: MetricsSourceKind;
 }): React.JSX.Element {
-  const content = METRICS_SOURCE_CONTENT[kind];
   const identity = INTEGRATION_CATALOG[kind];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [query, setQuery] = useState<EndpointDraft>(EMPTY);
-  const [rules, setRules] = useState<EndpointDraft>(EMPTY);
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const { data: sources, isLoading } = useQuery<MetricsSourceStatus[]>({
     queryKey: ["metrics-sources"],
     queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
   });
 
-  const mine = (sources ?? []).filter((b) => b.kind === kind);
-
-  const connect = useMutation({
-    mutationFn: () =>
-      apiFetch<MetricsSourceStatus>("/api/integrations/metrics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind,
-          query: toInput(query, kind),
-          // Absent rather than empty: a source with no rules endpoint is a
-          // supported configuration, and the card says what it costs.
-          ...(rules.url.trim() !== "" && { rules: toInput(rules, kind) }),
-        }),
-      }),
-    onMutate: () => setConnectError(null),
-    onSuccess: async () => {
-      setQuery(EMPTY);
-      setRules(EMPTY);
-      toast.success(`${identity.label} connected`);
-      await queryClient.invalidateQueries({ queryKey: ["metrics-sources"] });
-    },
-    onError: (err) =>
-      setConnectError(
-        err instanceof ApiError ? err.message : "Could not reach the API",
-      ),
-  });
+  // One per product, so this is the connection rather than one of several.
+  const connected = (sources ?? []).find((source) => source.kind === kind);
 
   const disconnect = useMutation({
     mutationFn: (id: string) =>
@@ -313,6 +506,7 @@ export function MetricsSourcePage({
 
   return (
     <Page
+      measure="form"
       crumbs={[
         { label: "Integrations", to: "/integrations" },
         { label: identity.label },
@@ -328,139 +522,25 @@ export function MetricsSourcePage({
           </div>
         )}
 
-        {mine.length > 0 && (
-          <section className="flex flex-col gap-4">
-            {mine.map((source) => (
-              <div key={source.id} className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{source.label}</p>
-                  <StatusText tone="ok">Connected</StatusText>
-                  {source.query.hasAuth && <MetaText>Auth</MetaText>}
-                  {source.query.hasOrgId && <MetaText>{`Tenant`}</MetaText>}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {source.query.url}
-                </p>
-                {source.rules === null ? (
-                  /* Said on the card rather than discovered at 3am: this is the
-                     difference between an investigation that can close itself
-                     and one that never can. */
-                  <p className="flex items-start gap-2 text-sm text-warn">
-                    <TriangleAlert {...ICON_UI} className="shrink-0" />
-                    <span>
-                      No rules endpoint. Investigations cannot confirm an alert
-                      stopped firing through this source, so they will not reach
-                      Resolved on their own.
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Rules: {source.rules.url}
-                  </p>
-                )}
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  className="self-start"
-                  onClick={() => setConfirmRemove(source.id)}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            ))}
-          </section>
+        {connected !== undefined && (
+          <ConnectedSource
+            source={connected}
+            onRemove={() => setConfirmRemove(true)}
+          />
         )}
 
-        <section className="flex flex-col gap-4">
-          <h2 className="text-sm font-medium">
-            {mine.length > 0 ? "Connect another" : "Connect"}
-          </h2>
-
-          {content.warnings.map((warning) => (
-            <Alert key={warning}>
-              <TriangleAlert {...ICON_UI} />
-              <AlertDescription>{warning}</AlertDescription>
-            </Alert>
-          ))}
-
-          <Field>
-            <FieldLabel htmlFor="metrics-query-url">Query URL</FieldLabel>
-            <FieldDescription>{content.queryHelp}</FieldDescription>
-            <Input
-              className="max-w-control"
-              id="metrics-query-url"
-              placeholder={content.queryPlaceholder}
-              value={query.url}
-              onChange={(e) =>
-                setQuery({ ...query, url: e.currentTarget.value })
-              }
-            />
-          </Field>
-          <CredentialFields
-            kind={kind}
-            idPrefix="metrics-query"
-            draft={query}
-            onChange={setQuery}
-            authHelp={content.authHelp}
-          />
-
-          <Field>
-            <FieldLabel htmlFor="metrics-rules-url">
-              Rules URL (optional)
-            </FieldLabel>
-            <FieldDescription>{content.rulesHelp}</FieldDescription>
-            <Input
-              className="max-w-control"
-              id="metrics-rules-url"
-              placeholder={content.rulesPlaceholder}
-              value={rules.url}
-              onChange={(e) =>
-                setRules({ ...rules, url: e.currentTarget.value })
-              }
-            />
-          </Field>
-          {rules.url.trim() !== "" && (
-            <CredentialFields
-              kind={kind}
-              idPrefix="metrics-rules"
-              draft={rules}
-              onChange={setRules}
-              authHelp={
-                kind === "amp"
-                  ? "The rules endpoint often wants its own IAM credential."
-                  : "The rules endpoint often wants its own credential - on Grafana Cloud a service account token rather than the metrics one."
-              }
-            />
-          )}
-
-          {connectError !== null && (
-            <Alert variant="destructive">
-              <AlertTitle>Could not connect</AlertTitle>
-              <AlertDescription>{connectError}</AlertDescription>
-            </Alert>
-          )}
-
-          <Button
-            className="self-start"
-            disabled={query.url.trim() === "" || connect.isPending}
-            onClick={() => connect.mutate()}
-          >
-            {connect.isPending && <Spinner className="size-4" />}
-            Connect
-          </Button>
-        </section>
+        {connected === undefined && !isLoading && <ConnectForm kind={kind} />}
       </div>
 
       <ConfirmDialog
-        open={confirmRemove !== null}
-        onOpenChange={(open) => !open && setConfirmRemove(null)}
+        open={confirmRemove}
+        onOpenChange={setConfirmRemove}
         title={`Disconnect ${identity.label}?`}
         description="Investigations lose metric evidence from this source until it is reconnected."
         confirmLabel="Disconnect"
         destructive
         onConfirm={() => {
-          if (confirmRemove !== null) disconnect.mutate(confirmRemove);
-          setConfirmRemove(null);
+          if (connected !== undefined) disconnect.mutate(connected.id);
         }}
       />
     </Page>
