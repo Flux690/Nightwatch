@@ -41,7 +41,6 @@ describe("parseAlertmanager", () => {
     expect(parsed).toMatchObject({
       sourceAlertId: "fp-1",
       alertType: "HighCPU",
-      severity: "warning",
       firedAt: "2026-06-21T10:00:00Z",
     });
     // The labels are the whole record of what the alert named; nothing is derived
@@ -49,28 +48,17 @@ describe("parseAlertmanager", () => {
     expect(parsed?.labels).toMatchObject({ alertname: "HighCPU" });
   });
 
-  // Calling an unrecognized word "info" would state a severity nobody wrote.
-  it("normalizes the conventional words and leaves anything else unknown", () => {
+  /* Nothing is ranked or rewritten. A fleet writing P1 is recorded as P1, the
+     same as one writing critical, because the word is the sender's. */
+  it("keeps every severity word verbatim, whatever it is", () => {
     const sev = (s: string | undefined) =>
       parseAlertmanager({
         alerts: [alert({ labels: { alertname: "X", severity: s } })],
-      }).firing[0]?.severity;
-    expect(sev("error")).toBe("critical");
-    expect(sev("critical")).toBe("critical");
-    expect(sev("warn")).toBe("warning");
-    expect(sev("info")).toBe("info");
-    expect(sev("page")).toBeNull();
-    expect(sev("P1")).toBeNull();
-    expect(sev(undefined)).toBeNull();
-  });
-
-  // The word survives verbatim even when the normalized rank cannot read it.
-  it("keeps the severity label verbatim whatever it normalizes to", () => {
-    const [parsed] = parseAlertmanager({
-      alerts: [alert({ labels: { alertname: "X", severity: "P1" } })],
-    }).firing;
-    expect(parsed?.labels["severity"]).toBe("P1");
-    expect(parsed?.severity).toBeNull();
+      }).firing[0]?.labels["severity"];
+    for (const word of ["error", "critical", "warn", "info", "page", "P1"]) {
+      expect(sev(word)).toBe(word);
+    }
+    expect(sev(undefined)).toBeUndefined();
   });
 
   it("throws only when the envelope itself is not an alerts array", () => {

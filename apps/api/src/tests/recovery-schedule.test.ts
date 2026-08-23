@@ -34,7 +34,6 @@ describe("how often an open condition is asked about", () => {
           labels: {},
           annotations: {},
           alertType: "HighMemory",
-          severity: "warning",
           firedAt: new Date(openedAt).toISOString(),
           generatorURL: null,
           values: {},

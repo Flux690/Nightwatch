@@ -796,7 +796,6 @@ describe("durable approval interrupts", () => {
       sourceAlertId: `crit-022-${randomUUID()}`,
       labels: {},
       alertType: "ContainerDown",
-      severity: "critical",
       firedAt: new Date().toISOString(),
       annotations: {},
       generatorURL: null,

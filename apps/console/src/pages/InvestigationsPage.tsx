@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Telescope } from "lucide-react";
 import type { SessionListRow } from "@nightwarden/shared";
 
-import { Page, SECTION_HEADING } from "@/components/layout/Page";
+import { Page, SectionHeading } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
@@ -106,7 +106,7 @@ function QueueBand({ queue }: { queue: QueueState }): React.JSX.Element | null {
 function NothingYet(): React.JSX.Element {
   return (
     <div className="flex flex-1 items-center justify-center">
-      <div className="flex max-w-form flex-col gap-4">
+      <div className="flex max-w-note flex-col gap-4">
         <Telescope
           aria-hidden
           className="size-12 text-ink-subtle"
@@ -205,9 +205,9 @@ export function InvestigationsPage(): React.JSX.Element {
               >
                 {/* An eyebrow, not a filled band: the band's fill was the value
                     a row hovers to, so it read as a row under the cursor. */}
-                <h2 className={`${SECTION_HEADING} mb-2 px-3`}>
+                <SectionHeading className="mb-2 px-3">
                   {STATUS_LABEL[group.status]}
-                </h2>
+                </SectionHeading>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0">
                   {group.rows.map((row) => (
                     <InvestigationRow

@@ -69,7 +69,6 @@ const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
   labels: {},
   alertType: "ContainerDown",
-  severity: "critical",
   firedAt: "2026-06-13T00:00:00.000Z",
   annotations: {},
   generatorURL: null,
@@ -600,7 +599,6 @@ describe("API-local session store", () => {
       it("never resolves an alert carrying labels the rules API cannot have", async () => {
         const sessionId = labelledInvestigation({
           alertname: "ContainerDown",
-          severity: "critical",
           container: "payments-api",
           cluster: "prod-eu",
           monitor: "primary",
@@ -799,12 +797,10 @@ describe("API-local session store", () => {
         {
           ...alert,
           sourceAlertId: randomUUID(),
-          severity: null,
           labels: { severity: "P1" },
         },
       ]);
       expect(rowOf(m.sessionId)).toMatchObject({
-        severity: null,
         severityLabel: "P1",
       });
     });

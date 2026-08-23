@@ -50,7 +50,6 @@ function alert(sourceAlertId: string): NormalizedAlert {
     sourceAlertId,
     labels: {},
     alertType: "HighMemory",
-    severity: "warning",
     firedAt: new Date().toISOString(),
     annotations: {},
     generatorURL: null,

@@ -27,7 +27,6 @@ const alert: NormalizedAlert = {
   sourceAlertId: "src-crash",
   labels: {},
   alertType: "ContainerDown",
-  severity: "critical",
   firedAt: "2026-06-13T00:00:00.000Z",
   annotations: {},
   generatorURL: null,

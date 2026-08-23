@@ -112,7 +112,6 @@ export function listSessionPage(
         lastActivityAt: source.lastActivityAt,
         title: source.title,
         investigation,
-        severity: source.alerts[0]?.alert.severity ?? null,
         severityLabel: source.alerts[0]?.alert.labels["severity"] ?? null,
         status,
         finding: investigation ? deriveFinding(source, status) : null,

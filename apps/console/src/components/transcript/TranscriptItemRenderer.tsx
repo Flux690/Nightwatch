@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Message } from "@/components/ui/message";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { MetaText } from "@/components/ui/status";
 import type {
   TranscriptItem,
   ThinkingItem,
@@ -37,11 +38,8 @@ function UserTurn({
       }
       data-testid="user-turn"
     >
-      <Bubble variant="secondary">
-        {/* A bubble is raised content on the stage, so it takes the raised
-            rung. The secondary fill lifts four points off the ground, which
-            reads as flat rather than as a thing sitting on it. */}
-        <BubbleContent className="bg-card! text-base whitespace-pre-wrap">
+      <Bubble variant="card">
+        <BubbleContent className="text-base whitespace-pre-wrap">
           {text}
         </BubbleContent>
       </Bubble>
@@ -64,7 +62,7 @@ function ErrorNotice({ text }: { text: string }): React.JSX.Element {
     <div
       role="status"
       data-testid="error-notice"
-      className="animate-in fade-in flex flex-col gap-1 rounded-md border border-fail bg-fail-tint px-3 py-2 duration-(--duration-slow)"
+      className="animate-in fade-in flex flex-col gap-1 rounded-md border border-fail bg-destructive-tint px-3 py-2 duration-(--duration-slow)"
     >
       <span className="text-sm font-medium text-fail">The run stopped</span>
       <p className="m-0 text-sm whitespace-pre-wrap">{text}</p>
@@ -83,13 +81,12 @@ function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
       className="animate-in fade-in flex items-center gap-3 py-1 text-sm duration-(--duration-slow)"
     >
       <span aria-hidden className="h-px w-6 shrink-0 bg-border" />
+      {/* A word, and an uncoloured one. Severity is whatever the sender called
+          it, so a tone here would be our reading of their vocabulary. */}
       <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-muted-foreground">
-        <span
-          aria-hidden
-          className={`size-1.5 rounded-full ${
-            item.severity === "critical" ? "bg-fail" : "bg-muted-foreground"
-          }`}
-        />
+        {item.severityLabel !== null && (
+          <MetaText>{item.severityLabel}</MetaText>
+        )}
         <span className="font-medium text-foreground">{item.alertType}</span>
         <span>fired during this run</span>
       </span>

@@ -14,9 +14,8 @@ const RESOLVED = "2026-07-21T12:30:00.000Z";
 
 const ALERT: NormalizedAlert = {
   sourceAlertId: "alert-1",
-  labels: { service: "payments-worker" },
+  labels: { service: "payments-worker", severity: "P1" },
   alertType: "ContainerRestarting",
-  severity: "critical",
   firedAt: "2026-07-21T12:00:00.000Z",
   annotations: {},
   generatorURL: null,
@@ -28,7 +27,6 @@ const INJECTED_ALERT: NormalizedAlert = {
   sourceAlertId: "alert-2",
   labels: { service: "api" },
   alertType: "HighLatency",
-  severity: "warning",
   firedAt: "2026-07-21T12:20:00.000Z",
   annotations: {},
   generatorURL: null,
@@ -641,7 +639,8 @@ describe("ReportPanel", () => {
 
   it("shows the alert before the agent has recorded anything", () => {
     render(panel({ evidence: [], report: null, alerts: [onSession(ALERT)] }));
-    expect(screen.getByText("Critical")).toBeInTheDocument();
+    // The sender's own word, not a rank: P1 used to render as nothing.
+    expect(screen.getByText("P1")).toBeInTheDocument();
     expect(screen.getByText("ContainerRestarting")).toBeInTheDocument();
     expect(screen.getByText(/service=payments-worker/)).toBeInTheDocument();
   });

@@ -208,7 +208,9 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
   // Dropped rather than stated as null: an unrankable word is still in the
   // labels below, where the model reads it as the user wrote it.
   const severityLine =
-    alert.severity === null ? "" : `\nseverity: ${alert.severity}`;
+    alert.labels["severity"] === undefined
+      ? ""
+      : `\nseverity: ${alert.labels["severity"]}`;
   // Absent renders an empty section, never a different alert.
   const condition = conditionFrom(alert.generatorURL);
   const conditionLine =

@@ -13,7 +13,6 @@ const ALERT: NormalizedAlert = {
   sourceAlertId: "alert-1",
   labels: { severity: "critical", service: "payments-worker" },
   alertType: "ContainerRestarting",
-  severity: "critical",
   firedAt: "2026-07-21T12:00:00.000Z",
   annotations: {},
   generatorURL: null,

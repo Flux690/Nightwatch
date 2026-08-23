@@ -1,8 +1,4 @@
-import type {
-  AlertGroupContext,
-  AlertSeverity,
-  NormalizedAlert,
-} from "./alerts.js";
+import type { AlertGroupContext, NormalizedAlert } from "./alerts.js";
 import type { MessagePart, NativeEnvelope } from "./messages.js";
 import type { TranscriptItem } from "./transcript.js";
 
@@ -30,9 +26,7 @@ export type SessionRunStatus =
 export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;
   investigation: boolean;
-  // The rank, for ordering. Null when the label named a word we cannot rank.
-  severity: AlertSeverity | null;
-  // The label's own word, for rendering. Null when the alert carries no label.
+  // Whatever the sender called it, verbatim. Null when it carried no label.
   severityLabel: string | null;
   status: SessionRunStatus | null;
   // One line answering the question the status raises, drawn from the system's

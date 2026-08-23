@@ -154,7 +154,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       sourceAlertId: `crit-${randomUUID()}`,
       labels: {},
       alertType: "ContainerDown",
-      severity: "critical",
       firedAt: new Date().toISOString(),
       annotations: {},
       generatorURL: null,

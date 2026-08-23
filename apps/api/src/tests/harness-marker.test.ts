@@ -64,7 +64,6 @@ function alertCarrying(annotation: string): NormalizedAlert {
     sourceAlertId: `alert-${randomUUID()}`,
     labels: { alertname: "HighMemory", service: "web-01" },
     alertType: "HighMemory",
-    severity: "critical",
     firedAt: new Date().toISOString(),
     annotations: { description: annotation },
     generatorURL: null,

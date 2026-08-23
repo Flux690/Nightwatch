@@ -423,7 +423,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   log.info(
     {
       alertLabels: alert?.labels ?? null,
-      severity: alert?.severity ?? null,
       isChat: alert == null,
     },
     "investigation started",
@@ -1003,7 +1002,7 @@ function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
     alerts
       .map(
         (a) =>
-          `- [${a.alertType}] ${formatLabels(a.labels)} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
+          `- [${a.alertType}] ${formatLabels(a.labels)} (${a.labels["severity"] ?? "no severity"}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
       )
       .join("\n")
   );

@@ -1,4 +1,3 @@
-import type { AlertSeverity } from "./alerts.js";
 import type { ApprovalStatus } from "./approvals.js";
 import type { ToolOutcome } from "./messages.js";
 
@@ -100,7 +99,8 @@ export interface AlertArrivedItem {
   kind: "alert_arrived";
   id: string;
   alertType: string;
-  severity: AlertSeverity | null;
+  // Whatever the sender called it, verbatim. Null when it carried no label.
+  severityLabel: string | null;
 }
 
 // Where the provider summarised everything above to fit its window. The

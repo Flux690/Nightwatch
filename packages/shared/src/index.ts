@@ -1,6 +1,5 @@
 export type {
   AlertGroupContext,
-  AlertSeverity,
   AlertSourceKind,
   NormalizedAlert,
 } from "./alerts.js";
@@ -95,6 +94,7 @@ export type {
   AmpCredential,
   MetricsSourceKind,
   MetricsSourceStatus,
+  MetricsConnectInput,
   MetricsEndpointInput,
   MetricsEndpointStatus,
   MetricsErrorCode,

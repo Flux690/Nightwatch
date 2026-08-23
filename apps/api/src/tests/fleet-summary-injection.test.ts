@@ -57,7 +57,6 @@ function makeAlert(service: string): NormalizedAlert {
       "com.docker.compose.service": service,
     },
     alertType: "HighCPU",
-    severity: "warning",
     firedAt: new Date().toISOString(),
     annotations: {},
     generatorURL: null,

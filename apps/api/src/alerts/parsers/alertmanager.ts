@@ -69,7 +69,6 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
       labels,
       annotations: toStringMap(alert["annotations"]),
       alertType: labels["alertname"] ?? "unknown",
-      severity: normalizeSeverity(labels["severity"]),
       firedAt,
       // Kept verbatim: what it means is read where it is rendered, so parsing
       // still stamps nothing derived onto an alert.
@@ -158,13 +157,4 @@ function toStringMap(value: unknown): Record<string, string> {
     if (typeof v === "string") out[k] = v;
   }
   return out;
-}
-
-// Alertmanager reserves no values, so a word outside the conventional ones is
-// one we cannot rank rather than the lowest rank there is.
-function normalizeSeverity(s: string | undefined): NormalizedAlert["severity"] {
-  if (s === "critical" || s === "error") return "critical";
-  if (s === "warning" || s === "warn") return "warning";
-  if (s === "info") return "info";
-  return null;
 }

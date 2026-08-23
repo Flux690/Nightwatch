@@ -286,7 +286,6 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
           sourceAlertId: fingerprint,
           labels: {},
           alertType: "HighCPU",
-          severity: "warning",
           firedAt: "2026-07-07T03:00:00.000Z",
           annotations: {},
           generatorURL: null,

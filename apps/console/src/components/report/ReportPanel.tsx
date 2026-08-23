@@ -11,6 +11,7 @@ import type {
 } from "@nightwarden/shared";
 import { leadingHypothesis, rankHypotheses } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
+import { SECTION_HEADING } from "@/components/layout/Page";
 import { StatusText, type StatusTone } from "@/components/ui/status";
 import { elapsed } from "@/lib/time";
 import { CitationChip } from "./CitationChip.js";
@@ -93,8 +94,12 @@ function AlertBand({
         {alerts.map(({ alert, clearedAt }) => (
           <li key={`${alert.sourceAlertId}-${alert.firedAt}`}>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              {alert.severity === "critical" && (
-                <span className="text-sm text-fail">Critical</span>
+              {/* The sender's own word, uncoloured. Ranking it here would show
+                  a fleet labelling alerts P1 nothing at all. */}
+              {alert.labels["severity"] !== undefined && (
+                <span className="text-sm text-ink-subtle">
+                  {alert.labels["severity"]}
+                </span>
               )}
               <span className="text-base font-medium">{alert.alertType}</span>
               <span className="ml-auto flex shrink-0 items-baseline gap-2 text-sm">
@@ -409,9 +414,7 @@ export function ReportPanel({
     if (cited.length === 0) return null;
     return (
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <span className="mr-1 font-mono text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-          Sources
-        </span>
+        <span className={cn("mr-1", SECTION_HEADING)}>Sources</span>
         {cited.map((entry) => (
           <CitationChip
             key={entry.toolUseId}

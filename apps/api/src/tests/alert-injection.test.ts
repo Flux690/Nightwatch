@@ -138,7 +138,6 @@ function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
     sourceAlertId,
     labels: {},
     alertType: "HighCPU",
-    severity: "warning",
     firedAt: firedAt ?? new Date().toISOString(),
     annotations: {},
     generatorURL: null,
