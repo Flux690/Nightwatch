@@ -33,7 +33,7 @@ console["Console<br/>Report · Sessions Queue<br/>Chat · Approval Cards · Sett
 %% Code
 github["GitHub<br/>Draft Pull Requests"]
 
-monitoring -- POST /alerts/ingest --> api
+monitoring -- POST /api/alerts/ingest --> api
 console -- Ask a question --> api
 api -- WebSocket --> runner
 api -- REST + SSE --> console
@@ -396,7 +396,7 @@ itself a finding.
 - **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one. A fleet-level read with no runner named answers for every runner at once, each answer attributed.
 - **No external infrastructure.** All durable state is one SQLite file in the state directory.
-- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Those same four are queryable as metrics sources - one client and a preset each, because they all speak the Prometheus API - and you can connect several at once, including two of the same kind. Nothing to rip out - NightWarden plugs into the stack you already run.
+- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Those same four are queryable as metrics sources - one client and a preset each, because they all speak the Prometheus API - and you can connect several products at once, one connection each: what you point at is already an aggregate, so a second Prometheus is a mistake to refuse rather than a name to invent. Nothing to rip out - NightWarden plugs into the stack you already run.
 - **A rules endpoint of its own.** Recovery is confirmed by asking whether the rule that fired still holds, and the address serving that is not always the one you query: vmalert on VictoriaMetrics, your Grafana stack on Grafana Cloud, a separate ruler on a microservices Mimir. Each connection names its own, with its own credential, so recovery verification works on the products people actually deploy rather than only on single-binary Prometheus.
 
 ## Getting started
@@ -610,7 +610,7 @@ There is no variable naming the platform. A runner is a Docker runner or a Kuber
 
 `pnpm dev` is all you need for day-to-day work; it runs every app from source with live reload, so there is no build step involved.
 
-To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/alerts/ingest` endpoint, which drives an investigation end to end on your machine.
+To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/api/alerts/ingest` endpoint, which drives an investigation end to end on your machine.
 
 Three checks gate every change, across every package:
 
@@ -657,6 +657,8 @@ apps/
       session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
                         transcript.ts projects stored messages into the render-ready items the console draws,
                         list.ts derives each session's row (its status word, severity)
+      verification/     whether an alert's condition has actually cleared: the reconciler's
+                        schedule, and sources/ for each way of asking
       ws/               runner registry/routing, command transport
       dispatcher.ts     single entry point for every investigation, and the run pool's promotions
       run-pool.ts       how many runs may be in flight, counted per pool from the session rows
@@ -679,13 +681,18 @@ apps/
       auth/             login and owner-password setup
       components/
         ui/             shadcn-style primitives (Base UI under the hood)
-        layout/         the one sidebar and its collapse, the sessions list, settings modal, wizard chrome
+        layout/         the page frame and its breadcrumb, the one sidebar and its collapse,
+                        the resizable chat rail, the wizard's stepper, integration page chrome,
+                        settings/ for the rows each settings tab is built from
         report/         the rendered report: its prose, the timeline, each claim and the
                         drawing of every call it cites, by the kind that call declares
         transcript/     transcript dispatcher + per-card panels
-      hooks/            shared console event-stream (SSE) provider, attention counter, per-session report
-      lib/              shared client helpers (theme, utils, toast, time, icon/status variants)
-      pages/            login, fleet, add-server wizard, agent + investigation pages, integration config pages
+      hooks/            shared console event-stream (SSE) provider, the session and session-list
+                        readers, per-session report, config, and the viewport tier the shell reads
+      lib/              shared client helpers: class merging, toast, relative time, icon props,
+                        markdown for a copied chat or report, the investigation queue's ordering
+      pages/            login, the two fleet lists, add-runner wizard, agent + investigation pages,
+                        settings, and one page per integration with its copy beside it
 packages/
   runner-transport/     Everything about talking to NightWarden, shared by both runners
     src/
