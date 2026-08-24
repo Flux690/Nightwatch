@@ -60,9 +60,8 @@ export function useSessions(kind: SessionKind): UseSessionsResult {
 
   const first = query.data?.pages[0];
   return {
-    // In the order received: the API owns the sort of the set. Arranging what
-    // is on screen - the status groups and severity within them - is the
-    // page's, because status is derived from a dispatcher SQL cannot see.
+    // The API owns the sort of the set; the page arranges what is on screen,
+    // because status is derived from a dispatcher SQL cannot see.
     sessions: dedupe(query.data?.pages.flatMap((page) => page.rows) ?? []),
     investigationTotal: first?.investigationTotal ?? 0,
     isLoading: query.isLoading,

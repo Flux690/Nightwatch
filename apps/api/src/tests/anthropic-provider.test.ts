@@ -331,9 +331,8 @@ describe("AnthropicProvider", () => {
       expect(sent.betas).toBeUndefined();
     });
 
-    /* Anthropic rejects a message with an empty content array, so stripping the
-       only block out of one has to remove the message rather than empty it. The
-       turn answered no tool call, so nothing below it is left dangling. */
+    // An empty content array is rejected, so stripping the only block has to
+    // remove the message. The turn answered no call, so nothing dangles.
     it("drops a turn that held nothing but the summary, rather than sending an empty message", async () => {
       const sent = await sentFor(BASE_CONFIG, [
         {

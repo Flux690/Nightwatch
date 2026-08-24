@@ -1,9 +1,8 @@
 import { Card } from "@/shared/ui/card";
 import { cn } from "@/shared/lib/utils";
 
-/* The raised state of a tool call, not a kind of its own. Depth rather than an
-   outline, one rung above the bubbles and the message box, so it is found by
-   sitting higher than the column rather than by another border. */
+// Depth rather than an outline, one rung above the bubbles, so it is found by
+// sitting higher than the column rather than by another border.
 export function InterruptCard({
   className,
   ...props

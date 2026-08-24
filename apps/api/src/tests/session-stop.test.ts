@@ -175,9 +175,8 @@ describe("POST /sessions/:id/stop", () => {
       ),
     ).toBe(false);
 
-    /* And the list says a person ended it. Without the stop being recorded this
-       row falls through to Inconclusive, which names a conclusion the run
-       reached - blaming the agent for a decision the user made. */
+    // Without the stop recorded this falls through to Inconclusive, which names
+    // a conclusion the run reached rather than a decision the user made.
     const row = listSessionPage(50, 0).rows.find(
       (r) => r.sessionId === sessionId,
     );

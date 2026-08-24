@@ -17,9 +17,8 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   );
 }
 
-/* <label for> cannot label a button, so a trigger with an id adopts the
-   `${htmlFor}-label` FieldLabel publishes. It hugs the option it shows: a
-   picker stretched to the column promises a choice as wide as the field. */
+// <label for> cannot label a button, so a trigger with an id adopts the
+// `${htmlFor}-label` FieldLabel publishes. It hugs the option it shows.
 function SelectTrigger({
   className,
   size = "default",

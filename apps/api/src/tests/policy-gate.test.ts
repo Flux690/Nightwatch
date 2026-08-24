@@ -35,9 +35,8 @@ const CLARIFICATION_OPTIONS = [
   },
 ];
 
-/* The gate the product is built on, asserted from the registry rather than tool
-   by tool: a write that reaches a production machine waits for a human. A tool
-   added with the wrong policy passes every other test in this suite. */
+// Asserted from the registry rather than tool by tool: a tool added with the
+// wrong policy passes every other test in this suite.
 describe("policy-gate: no runner write runs unapproved", () => {
   it("gates every write that leaves the API for a machine", () => {
     const runnerWrites = TOOL_REGISTRY.filter(

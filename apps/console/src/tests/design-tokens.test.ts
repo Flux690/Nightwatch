@@ -970,9 +970,8 @@ describe("spacing", () => {
   });
 });
 
-/* Measured at the shipping base a literal is correct by construction, so that
-   base cannot tell a departure from a colour that happens to look right. Run
-   the load-bearing relationships again on a base sharing nothing with ours. */
+// At the shipping base a literal is correct by construction, so run the
+// load-bearing relationships again on a base sharing nothing with ours.
 describe("on a base it has never been shown", () => {
   const OTHER = {
     "base-l": "7",

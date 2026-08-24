@@ -205,9 +205,8 @@ describe("OpenRouterProvider", () => {
     expect(callArgs.response_format).toBeUndefined();
   });
 
-  /* The OpenAI family requires every property in `required` under strict, with
-     an optional one typed as a union with null. Our schemas are written the
-     honest way, so a wrong transform here 400s every request on this provider. */
+  // Our schemas are written the honest way, so a wrong transform here 400s
+  // every request on this provider.
   it("widens optional properties to nullable and requires them all under strict", async () => {
     mockFinalChatCompletion.mockResolvedValueOnce({
       choices: [

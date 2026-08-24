@@ -3,9 +3,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/shared/lib/utils";
 
-/* Centred in the stage on both axes, contents ranged left. It claims the space
-   left over below the header, so it re-centres itself when the sidebar opens or
-   closes. No fill and no edge: there is nothing here worth bounding. */
+// Claims the space left below the header, so it re-centres when the sidebar
+// moves. No fill and no edge: there is nothing here worth bounding.
 function Empty({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

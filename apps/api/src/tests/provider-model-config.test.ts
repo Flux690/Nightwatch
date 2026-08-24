@@ -643,9 +643,8 @@ describe("provider/model config seam", () => {
       expect(models[0]?.reasoning?.defaultLevel).toBe("medium");
     });
 
-    /* Found against the live gateway: a free model published a completion
-       ceiling equal to its whole context, we sent it as max_tokens, and every
-       request was refused for asking for one token more than the window. */
+    // A free model published a ceiling equal to its whole context, so sending
+    // it as max_tokens asked for one token more than the window.
     it("OpenRouter: reads a ceiling equal to the window as no ceiling at all", async () => {
       useOpenRouter();
       stubFetch(() =>

@@ -600,9 +600,8 @@ describe("TranscriptItemRenderer", () => {
 
       act(() => revealToolCall("tu-logs"));
 
-      // The named row is marked and stays shut: the reader has already read the
-      // output under the claim and came here for the steps around it, which
-      // expanding would push off screen. The neighbour is untouched.
+      // Marked and left shut: the reader came for the steps around it, which
+      // expanding would push off screen.
       await waitFor(() => {
         expect(logs).toHaveAttribute("data-revealed");
       });

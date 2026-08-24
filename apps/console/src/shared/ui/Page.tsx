@@ -15,9 +15,8 @@ import {
 } from "@/shared/ui/breadcrumb";
 import { cn } from "@/shared/lib/utils";
 
-/* One spelling of the small uppercase label that names a part of a page. It is
-   a class rather than only a component because a few of them label something
-   that is not a section and must not be a heading. */
+// A class as well as a component, because a few of these label something that
+// is not a section and must not be a heading.
 export const SECTION_HEADING =
   "font-mono text-xs font-medium uppercase tracking-caps text-muted-foreground";
 

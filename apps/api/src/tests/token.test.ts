@@ -303,9 +303,8 @@ describe("Runner token lifecycle (issue 038)", () => {
       });
     });
 
-    // The row decided the platform at onboarding; the manifest says which binary
-    // actually dialled in. A disagreement is a real user error - the Docker
-    // install line pasted into a cluster - so it is refused, not half-served.
+    // A disagreement is a real user error, the Docker install line pasted into
+    // a cluster, so it is refused rather than half-served.
     it("refuses a runner whose manifest contradicts its row", async () => {
       const mint = await nw.server.inject({
         method: "POST",

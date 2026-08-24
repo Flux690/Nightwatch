@@ -1,8 +1,7 @@
 import type { TranscriptItem } from "@nightwarden/shared";
 
-/* The conversation as something to paste into a document or an issue: what was
-   said, and nothing else. Thinking is collapsed on screen for the same reason it
-   is absent here, and a tool call is work rather than a turn. */
+// What was said and nothing else: thinking is absent for the reason it is
+// collapsed on screen, and a tool call is work rather than a turn.
 export function chatToMarkdown(
   title: string,
   transcript: TranscriptItem[],

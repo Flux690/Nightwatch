@@ -14,9 +14,8 @@ export interface MergeInput {
   lastEchoText: string | null;
 }
 
-/* The fetch can return the persisted user turn before any event is heard for a
-   new session. If the last user turn already carries the echoed text, drawing
-   the echo as well would double it. */
+// The fetch can return the persisted user turn before any event is heard, so
+// drawing the echo as well would double it.
 function echoAlreadyPersisted(
   persisted: TranscriptItem[],
   pendingEcho: string,

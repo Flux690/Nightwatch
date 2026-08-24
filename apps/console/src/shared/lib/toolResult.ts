@@ -1,6 +1,5 @@
-// A tool result is a JSON string on the wire and an object on a live card, so
-// one place asks the question and a malformed result is handled once. The lone
-// assertion below stands because JSON.parse returns `any`.
+// A JSON string on the wire and an object on a live card, so one place asks
+// and a malformed result is handled once.
 export function asRecord(value: unknown): Record<string, unknown> | null {
   let parsed = value;
   if (typeof parsed === "string") {

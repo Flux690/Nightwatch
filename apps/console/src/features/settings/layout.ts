@@ -1,6 +1,5 @@
-// One `w-` class per control, on the control rather than a wrapper: a shared
-// right edge is what orders a column, and tailwind-merge cannot dedupe two
-// because it does not know `w-control` is a width.
+// One `w-` class per control, on the control rather than a wrapper:
+// tailwind-merge cannot dedupe two, not knowing `w-control` is a width.
 export const CONTROL = {
   // Beside a label rather than above it, so content cannot set the width.
   text: "w-control",

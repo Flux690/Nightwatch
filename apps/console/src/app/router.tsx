@@ -114,9 +114,8 @@ const indexRoute = createRoute({
   },
 });
 
-// The layout follows the route and nothing else. What a session is decides its
-// route when it is created, so nothing ever crosses between the two families and
-// no conversation has to survive the crossing.
+// What a session is decides its route when it is created, so nothing crosses
+// between the two families and nothing has to survive the crossing.
 const agentRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agent",

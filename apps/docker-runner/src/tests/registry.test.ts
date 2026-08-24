@@ -5,9 +5,8 @@ import { createDispatchRegistry } from "../commands/registry.js";
 describe("createDispatchRegistry", () => {
   const registry = createDispatchRegistry();
 
-  /* Both directions against the shared list, which is what makes this able to
-     fail: a tool added there with no handler here, and a handler here answering
-     to a name the build does not declare. */
+  // Both directions against the shared list: a tool added there with no
+  // handler here, and a handler answering to a name the build never declares.
   it("serves every Docker and host command the build declares, and no other", () => {
     for (const name of DOCKER_TOOL_NAMES) {
       expect(registry.has(name), name).toBe(true);

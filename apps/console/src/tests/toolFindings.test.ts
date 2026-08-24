@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { findingFor } from "@/features/session/transcript/toolFindings";
 
-// A corpus, not a set of examples: every shape below was captured from a real
-// runner during the Redis OOM dry run. A formatter that drifts from the shape
-// its tool actually returns fails here rather than silently rendering nothing.
+// A corpus, not examples: every shape was captured from a real runner, so a
+// formatter that drifts fails here rather than silently rendering nothing.
 
 describe("findingFor", () => {
   it("is null while a call is still running", () => {

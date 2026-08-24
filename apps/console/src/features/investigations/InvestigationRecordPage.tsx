@@ -184,9 +184,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
         { label: title },
       ]}
       measure="none"
-      /* One bar, so the rail's edge runs the full height of the stage. The menu
-         sits against the name because it acts on the record; the stepper and
-         rail toggle are right-aligned because they do not. */
+      // One bar, so the rail's edge runs the full height of the stage. The
+      // menu sits against the name because it acts on the record.
       beside={
         <>
           <DropdownMenu>

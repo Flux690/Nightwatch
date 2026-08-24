@@ -109,9 +109,8 @@ function Axes({
   );
 }
 
-// Where the alert fired, which is what makes the shape either side of it mean
-// something. Drawn only from the alert's own timestamp; a threshold is not in
-// any result we hold, so none is invented.
+// Drawn only from the alert's own timestamp: a threshold is in no result we
+// hold, so none is invented.
 function AlertMark({
   at,
   scale,

@@ -16,9 +16,8 @@ export function useConfig(): AgentConfig | undefined {
   return data;
 }
 
-// A value that is valid on its own writes as soon as it is committed, so there
-// is nothing to save and nothing to discard. A rejected write puts the previous
-// value back rather than leaving the screen claiming something it did not save.
+// A value valid on its own writes when committed, so there is nothing to save.
+// A rejected write puts the previous value back rather than claiming success.
 export function useConfigAutosave(): (patch: ConfigPatch) => void {
   const queryClient = useQueryClient();
   const { mutate } = useMutation<

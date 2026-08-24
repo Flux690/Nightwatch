@@ -19,9 +19,8 @@ import { registerWsRoutes } from "../fleet/server.js";
 import { mountApi } from "./api-server.js";
 import { useTempDb } from "./temp-db.js";
 
-/* One walk of the whole surface, so the route added tomorrow is covered and a
-   missing guard fails here. A route not named below has to refuse an anonymous
-   caller; these are public because they hand out or verify a credential. */
+// One walk of the whole surface, so tomorrow's route is covered. A route not
+// named below has to refuse an anonymous caller.
 const PUBLIC: ReadonlyArray<{ route: string; why: string }> = [
   {
     route: "POST /api/setup",

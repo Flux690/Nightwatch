@@ -963,9 +963,8 @@ describe("Kubernetes runner command handlers", () => {
       expect(result.note).toContain("carry no timestamp");
     });
 
-    /* Not only for speed: a busy namespace unfiltered is thousands of events,
-       which reaches the API over the wire and is refused whole at the result
-       ceiling, so the tool answers nothing at exactly the wrong moment. */
+    // A busy namespace unfiltered is thousands of events, refused whole at the
+    // result ceiling, so the tool answers nothing at the wrong moment.
     it("asks the apiserver to narrow by type before the wire", async () => {
       mockCoreApi.listNamespacedEvent.mockResolvedValue({ items: [] });
 

@@ -1,6 +1,5 @@
-/* Scroll and mark, never open: the reader came for position. An event rather
-   than shared state, because the report and the transcript are siblings with no
-   common owner and a "reveal this id" prop would outlive the interaction. */
+// Scroll and mark, never open. An event rather than shared state, because the
+// two are siblings with no common owner.
 
 const EVENT = "nw:reveal-tool-call";
 

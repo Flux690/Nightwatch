@@ -23,9 +23,8 @@ const alertVariants = cva(
   },
 );
 
-/* The icon is the component's, not the call site's: it says the same thing the
-   variant says, so leaving it to be passed in is one more way for a box to end
-   up looking unlike the box beside it. */
+// The icon says what the variant says, so passing it in is one more way for a
+// box to end up looking unlike the box beside it.
 const ICON: Record<AlertVariant, typeof TriangleAlert> = {
   destructive: CircleAlert,
   warning: TriangleAlert,

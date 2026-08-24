@@ -25,9 +25,8 @@ import {
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 
-/* One wired world: a database, a login, a server on a port, and runners that
-   answer. It decides nothing - what a runner replies is the test's own, passed
-   in as `answer` - so a test still reads as what it is asserting. */
+// It decides nothing: what a runner replies is the test's own, passed in as
+// `answer`, so a test still reads as what it is asserting.
 
 type Registrar = (instance: FastifyInstance) => Promise<void>;
 

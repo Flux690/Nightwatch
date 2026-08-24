@@ -1,6 +1,5 @@
-/* Neither read nor write may throw: localStorage is absent in a private window
-   and its contents are user-editable, so a missing store and a garbage value are
-   both ordinary inputs. A lost preference is cheap; a blank console is not. */
+// Neither read nor write may throw: a missing store and a garbage value are
+// both ordinary. A lost preference is cheap, a blank console is not.
 
 export function readStoredNumber(key: string, fallback: number): number {
   try {

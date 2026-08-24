@@ -217,9 +217,8 @@ describe("mid-run alert injection (loop seam)", () => {
     // by the report turn, which parks on this gate like any other.
     await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
 
-    // The alert is on the session's own row, and the user sees it as an
-    // alert marking where the ground moved - not as prose they appear to have
-    // written. The instruction sent to the model is drawn for nobody.
+    // The user sees an alert marking where the ground moved, never prose they
+    // appear to have written. The instruction to the model is drawn for nobody.
     expect(
       getSession(sessionId)?.alerts.map((a) => a.alert.sourceAlertId),
     ).toEqual(["primary-mr", "injected-mr"]);

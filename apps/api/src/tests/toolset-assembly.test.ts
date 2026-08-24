@@ -73,9 +73,8 @@ describe("toolset assembly by fleet capabilities", () => {
     });
     afterAll(() => cleanupDb());
 
-    // Platform comes from the runner's row, so it is known the instant a socket
-    // authenticates. There is no handshake window in which the fleet's platforms
-    // are unknown, which is what the old probe-and-report manifest created.
+    // Platform comes from the runner's row, so there is no handshake window in
+    // which the fleet's platforms are unknown.
     it("knows a runner's platform from the moment it connects, before any manifest", () => {
       expect(connectedPlatforms()).toEqual(new Set([]));
 

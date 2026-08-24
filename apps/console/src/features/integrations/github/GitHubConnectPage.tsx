@@ -168,9 +168,8 @@ function PreflightWarning({ issue }: { issue: string }): React.JSX.Element {
   );
 }
 
-/* The picker and the words about it. Refresh sits beside the label rather than
-   under the list, because the reason to press it - an admin has just approved
-   the token - is the reason the list is wrong. */
+// Refresh sits beside the label rather than under the list, because the reason
+// to press it is the reason the list is wrong.
 function RepoCombobox({
   repos,
   selected,

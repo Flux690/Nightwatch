@@ -29,9 +29,8 @@ export function seedAlertSession(
   openSessionForGroup(meta, groupKey);
 }
 
-/* Opens an alert investigation the way promotion does: the row and its alerts
-   exist before anything dispatches into it. dispatch() refuses a session nothing
-   has written, so a test that skips this is testing a shape ingest cannot reach. */
+// The row and its alerts exist before anything dispatches into it, so a test
+// that skips this is testing a shape ingest cannot reach.
 export function dispatchAlertSession(
   sessionId: string,
   alerts: NormalizedAlert[],

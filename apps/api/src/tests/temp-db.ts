@@ -21,9 +21,8 @@ export function useTempDb(): () => void {
   };
 }
 
-// The run gate refuses without an LLM, so an installed system is the baseline for
-// every seam downstream of it. Re-call after stubbing a different NIGHTWARDEN_SECRET_KEY: the
-// stored key is encrypted with whichever one was live when it was written.
+// The run gate refuses without an LLM, so this is the baseline. Re-call after
+// stubbing a new key: the stored one is encrypted with whichever was live.
 export function configureTestLLM(): void {
   updateProvider("anthropic", { model: "test-model", apiKey: "test-api-key" });
   updateConfig({ provider: "anthropic" });

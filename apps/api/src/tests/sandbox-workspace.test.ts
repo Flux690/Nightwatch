@@ -505,9 +505,8 @@ describe("workspace lifecycle", () => {
     vi.useRealTimers();
 
     await waitFor(() => warn.mock.calls.length > 0);
-    /* The container is disposable and a running one with no session is waste,
-       so it always goes. The checkout holds commits that exist nowhere else, so
-       it always stays, and boot salvage is what retries the push. */
+    // The container is disposable, so it always goes. The checkout holds
+    // commits that exist nowhere else, so it always stays.
     expect(dockerState.removed).toHaveLength(1);
     expect(existsSync(join(workspacesDir, sessionId))).toBe(true);
   });

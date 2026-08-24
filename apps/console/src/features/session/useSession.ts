@@ -4,9 +4,8 @@ import type { ConsoleEvent, SessionDetail } from "@nightwarden/shared";
 import { apiFetch } from "@/shared/api/client";
 import { useConsoleEvents } from "@/shared/events/ConsoleEventsProvider.js";
 
-// Anything that can change what this answers. The recovery sweep clears an
-// alert and publishes REPORT_UPDATED, and the alert list lives here, not on the
-// report, so without this an open record never learns the condition recovered.
+// The alert list lives here rather than on the report, so without this an open
+// record never learns that the condition recovered.
 const REFRESHES: ReadonlySet<ConsoleEvent["type"]> = new Set([
   "REPORT_UPDATED",
   "RUN_FINISHED",

@@ -87,9 +87,8 @@ describe("GET /runners/install", () => {
       expect(res.body).toContain("registry.internal/dr:1.2");
     });
 
-    /* Compose writes "" for every variable the user left unset, so an empty
-       override is the ordinary case rather than an odd one. Treating it as a
-       value would serve an empty image name and the pull would fail on the host. */
+    // Compose writes "" for every unset variable, so treating an empty override
+    // as a value would serve an empty image name.
     it("falls back to the default when the override is empty", async () => {
       vi.stubEnv("NIGHTWARDEN_DOCKER_RUNNER_IMAGE", "");
       vi.stubEnv("NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE", "");

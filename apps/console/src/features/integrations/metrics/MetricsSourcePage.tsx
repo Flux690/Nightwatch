@@ -40,9 +40,8 @@ import {
 } from "./content";
 import { INTEGRATION_CATALOG } from "../catalog";
 
-/* One draft per endpoint. The method decides which fields travel, so a
-   credential the user switched away from is never sent beside the one they
-   chose - the API keeps the first it finds and drops the rest silently. */
+// The method decides which fields travel, so a credential the user switched
+// away from is never sent beside the one they chose.
 interface Credential {
   method: AuthMethod;
   bearer: string;

@@ -210,9 +210,8 @@ describe("durable approval interrupts", () => {
     // Interrupt row is gone from DB after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    // The report route reports what RAN, sourced from the executor's own log
-    // rather than anything the model wrote. A report must exist for the route
-    // to answer, but the actions beside it are independent of its contents.
+    // A report must exist for the route to answer, but the actions beside it
+    // are independent of what it says.
     seedCompleteReport(sessionId);
     const reportRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,

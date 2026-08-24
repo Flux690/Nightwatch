@@ -351,9 +351,8 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
       ? "rejected"
       : undefined,
   );
-  /* The one row that names its input rather than its result. What was asked is
-     what a reader scanning back is looking for, and the answer is one click
-     away in the body, where the exchange reads whole. */
+  // The one row naming its input rather than its result: what was asked is
+  // what a reader scanning back is looking for.
   const line = isTool(toolName, "AskUserQuestion")
     ? clipLine(inputString(input, "question") ?? "")
     : summary;

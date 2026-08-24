@@ -3,9 +3,8 @@ import { Input as InputPrimitive } from "@base-ui/react/input";
 
 import { cn } from "@/shared/lib/utils";
 
-/* How wide the box is is a fact about the value, not about the page: an
-   address or a secret runs as long as its column, and a tenant or a region
-   never will, so a box sized for one promises room the other cannot use. */
+// Width is a fact about the value, not the page: a box sized for a secret
+// promises room a tenant or a region can never use.
 const MEASURE = {
   column: "w-full",
   beside: "w-control",

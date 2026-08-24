@@ -4,9 +4,8 @@ import { Button } from "@/shared/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { revealToolCall } from "@/features/session/transcript/revealToolCall";
 
-/* The one shape a citation takes, wherever the report names a call. A bordered
-   pill so it reads as a control at rest without spending hue, and the arrow
-   because it leaves the page you are on for the transcript. */
+// A bordered pill so it reads as a control at rest without spending hue, and
+// an arrow because it leaves this page for the transcript.
 export function CitationChip({
   toolUseId,
   toolName,

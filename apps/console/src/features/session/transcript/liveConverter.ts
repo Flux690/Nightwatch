@@ -15,9 +15,8 @@ function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   return items;
 }
 
-// Whether the live tail is actively producing output the user can see: streamed
-// reasoning with real text, streamed answer text, or an in-flight tool card. When
-// false during a run, nothing is on screen yet, so the working animation shows.
+// False during a run means nothing is on screen yet, which is what puts the
+// working animation there.
 export function hasActiveStream(items: TranscriptItem[]): boolean {
   const last = items[items.length - 1];
   if (!last) return false;

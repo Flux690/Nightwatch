@@ -117,9 +117,8 @@ describe("LoginPage", () => {
     });
   });
 
-  /* The reserved-height slot is gone: with nothing wrong there is no live
-     region in the tree at all, and an error is bound to the field that caused
-     it rather than floating above the heading. */
+  // With nothing wrong there is no live region in the tree at all, and an
+  // error binds to the field that caused it.
   it("mounts no error region until there is an error, then binds it to its field", async () => {
     const user = userEvent.setup();
     setup({ ownerExists: false });

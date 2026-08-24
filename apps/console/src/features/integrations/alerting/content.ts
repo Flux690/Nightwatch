@@ -1,8 +1,7 @@
 import type { AlertSourceKind } from "@nightwarden/shared";
 
-/* What differs between senders is where you paste these and what the sender
-   calls its fields. The two values themselves are the same for both, so the
-   page draws one set of rows and only the wording around them changes. */
+// The two values are the same for both senders, so the page draws one set of
+// rows and only the wording around them changes.
 export interface AlertSourceContent {
   // Where these go, and anything the sender asks for that is not one of them.
   where: string;

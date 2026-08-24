@@ -1,8 +1,7 @@
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 
-/* One box for everything a product will not do unless you go and check it.
-   Stacked as a box each, two of them read as two unrelated problems; the set
-   is one warning about one screen, so it is drawn once and lists its items. */
+// One box, because stacked as a box each two of them read as two unrelated
+// problems when the set is one warning about one screen.
 export function IntegrationWarnings({
   warnings,
 }: {

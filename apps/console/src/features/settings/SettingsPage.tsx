@@ -270,9 +270,8 @@ export function SettingsPage(): React.JSX.Element {
     }
   }
 
-  /* Only the provider block can be lost, so only it asks - and only where it
-     can actually be lost. The four tabs are one component behind one route, so
-     a tab change keeps the draft in memory and there is nothing to discard. */
+  // Only the provider block can be lost, and only on the way out: the four
+  // tabs are one component, so a tab change keeps the draft in memory.
   const blocker = useBlocker({
     shouldBlockFn: ({ next }) => !staysInSettings(next.pathname),
     disabled: !providerDirty,

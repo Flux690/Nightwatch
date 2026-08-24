@@ -32,9 +32,8 @@ function Row({
   label: string;
   children: React.ReactNode;
 }): React.JSX.Element {
-  /* Not a Field: a Field stretches whatever it holds to the column, which is
-     right for an input and wrong for the button that stands where the secret
-     will be. The label is the Field's own, so the wording matches. */
+  // Not a Field: a Field stretches what it holds to the column, which is right
+  // for an input and wrong for the button standing where the secret will be.
   return (
     <div className="flex flex-col gap-2">
       <FieldTitle>{label}</FieldTitle>
