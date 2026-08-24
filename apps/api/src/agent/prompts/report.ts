@@ -167,22 +167,19 @@ function sentenceFor(gap: ReportGap): string {
   }
 }
 
-/* A write ran and nothing has been recommended. Asks for a recommendation rather
-   than another attempt: repeating a write that did not work is the failure this
-   gate catches, and a record ending with neither leaves the user nothing. */
+// Asks for a recommendation rather than another attempt: repeating a write
+// that did not work is the failure this gate exists to catch.
 const RECOVERY_SENTENCE =
   "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the user should do in your recommendation. Do not repeat a write that has already run.";
 
-/* Sent once, mid-run, when a run has read a good deal and settled nothing. It
-   asks rather than insists: a run pushed into recording something it has not
-   tested records a guess, which is what the record must never hold. */
+// Asks rather than insists: a run pushed into recording something it has not
+// tested records a guess, which the record must never hold.
 export function recordCheck(answeredCalls: number): string {
   return `You have made ${answeredCalls} tool calls that returned something, and your investigation record is still empty. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
 }
 
-// Sent by the finish gate when a run tries to end with gaps in its record. It
-// names those gaps and nothing else: a model that is one finding short is not
-// told about the four things it did do.
+// Names the gaps and nothing else: a model one finding short is not told
+// about the four things it did do.
 export function completionRequest(gaps: ReportGap[]): string {
   return [
     "Your investigation record is not finished.",

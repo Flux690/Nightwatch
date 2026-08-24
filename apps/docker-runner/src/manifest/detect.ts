@@ -29,9 +29,8 @@ export async function buildDockerManifest(): Promise<DockerManifest> {
   };
 }
 
-// os.hostname() inside a container is the container id unless --hostname was passed,
-// and this string becomes the address the model types into `runner`. Host /proc is
-// already mounted for the host metrics, so the real name costs no new mount.
+// os.hostname() in a container is the container id, and this string becomes the
+// address the model types into `runner`. Host /proc costs no new mount.
 async function detectHostname(): Promise<string> {
   try {
     const name = (

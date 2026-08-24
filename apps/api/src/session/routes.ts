@@ -152,23 +152,20 @@ export async function registerSessionRoutes(
           .code(409)
           .send({ error: "session is running: stop it before deleting" });
       }
-      /* Left behind, the container keeps running and the idle sweep pushes to the
-         user's repository for a session they deleted. Awaited, not fired and
-         forgotten: a delete is rare, and a truthful 204 beats a fast one. */
+      // Left behind, the idle sweep pushes to the user's repository for a
+      // session they deleted. Awaited, because a truthful 204 beats a fast one.
       await teardown(sessionId, "deleted");
       deleteSession(sessionId);
-      /* A suspended session holds a seat, and deleting it is the one way that
-         seat is freed without a run ending - so nothing else would notice, and
-         a waiting alert would sit there until the next delivery arrived. */
+      // The one way a seat frees without a run ending, so nothing else would
+      // notice and a waiting alert would sit until the next delivery.
       publishQueueChanged();
       dispatcher.promoteQueued();
       return reply.code(204).send();
     },
   );
 
-  /* No body: the sentence sent to the model is the server's, kept beside the
-     other prompts rather than composed by whoever pressed the button. The same
-     loop and the same tool, entered again - not a second way to make a report. */
+  // No body: the sentence is the server's, kept beside the other prompts
+  // rather than composed by whoever pressed the button.
   fastify.post<{ Params: { id: string } }>(
     "/sessions/:id/report/retry",
     { preHandler: requireSession },
@@ -253,9 +250,8 @@ export async function registerSessionRoutes(
       // Declared here and never again. Nothing infers it later - not the agent
       // mid-conversation, and not the harness from what the run recorded.
       const investigation = kind === "investigation";
-      /* Refused rather than queued, because someone is watching: an alert was
-         answered 200 and has nobody to tell, a person would see a spinner with no
-         end. Only new work is checked; a resume already holds its seat. */
+      // Refused rather than queued, because someone is watching and would get
+      // a spinner with no end. A resume already holds its seat.
       if (!hasSeat(investigation)) {
         return reply.code(503).send({
           error: investigation

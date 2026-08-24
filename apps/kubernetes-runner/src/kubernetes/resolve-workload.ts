@@ -83,8 +83,8 @@ export async function resolveWorkloadKind(
   return null;
 }
 
-// Resolve a durable workload identity to the live pod and container at exec time, fail-fast: writes/exec
-// require a Running pod; a multi-container pod needs the caller's `container`, else a not-running result lists the choices, never guessing.
+// Fail-fast: a write needs a Running pod, and a multi-container pod needs the
+// caller's `container`, so a not-running result lists the choices.
 export async function resolveWorkload(
   coreApi: k8s.CoreV1Api,
   appsApi: k8s.AppsV1Api,

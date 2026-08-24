@@ -1,6 +1,5 @@
-// An approval has exactly two outcomes. A rejection carries the user's
-// comment back to the agent, which is what redirects the work, so there is no
-// third "added context" outcome for the agent to read as success.
+// Two outcomes only: a rejection carries the user's comment back, so there is
+// no third "added context" for the agent to read as success.
 export type ApprovalStatus =
   "pending" | "approved" | "rejected" | "answered" | "continued";
 

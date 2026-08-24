@@ -49,23 +49,20 @@ function slugify(text: string): string {
   return slug.length > 0 ? slug : "incident";
 }
 
-// Pure function of the session row, so any resume recomputes the identical branch and
-// openPullRequest finds its existing PR instead of opening a second one. The alert type
-// is decoration, for a human scanning the branch list.
+// Pure in the session row, so a resume recomputes the identical branch and
+// openPullRequest finds its PR instead of opening a second one.
 function branchNameFor(sessionId: string): string {
   const alert = getSession(sessionId)?.alerts[0]?.alert ?? null;
   const slug = alert === null ? "chat" : slugify(alert.alertType);
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
 
-// Calling one of these on a path is what lets a later Edit touch it. Named
-// beside the tools themselves, because a transcript records a call and not the
-// side effect it had on a workspace that no longer exists.
+// Named beside the tools themselves, because a transcript records a call and
+// not the effect it had on a workspace that no longer exists.
 const PATH_UNLOCKING_TOOLS: ReadonlySet<string> = new Set(["Read", "Write"]);
 
-/* Rebuilt from the session's own transcript, so a re-provisioned workspace does
-   not make the model read files it already read. A call that recorded an outcome
-   did not answer cleanly, and only a clean answer showed the model anything. */
+// Rebuilt from the transcript, so a re-provisioned workspace does not make the
+// model reread. Only a clean answer showed it anything.
 function readPathsFor(sessionId: string): string[] {
   const rows = getTranscriptRows(sessionId);
   // Any outcome at all means the call did not answer cleanly, `partial`
@@ -187,9 +184,8 @@ function corrective(err: unknown): {
   };
 }
 
-// Generic in what the tool returns: every failure here answers with a string, so
-// a caller that needs to read its own result back can tell the two apart instead
-// of re-deriving the shape it just produced.
+// Every failure answers with a string, so a caller reading its own result back
+// can tell the two apart without re-deriving the shape.
 async function runRepoTool<T>(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<T>,

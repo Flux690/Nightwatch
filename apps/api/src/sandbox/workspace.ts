@@ -71,9 +71,8 @@ export interface WorkspaceOptions {
       patch: { title: string; body: string },
     ): Promise<void>;
   };
-  /* A workspace is re-provisioned whenever one is not live, and without this the
-     model's next edit is refused for a file its own context says it read. The
-     host supplies them: it has the transcript, the sandbox has no history. */
+  // Supplied by the host, which has the transcript: without them the next edit
+  // is refused for a file the model's own context says it read.
   readPaths?(): string[];
   onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
@@ -172,9 +171,8 @@ async function installDependencies(
       return `Dependencies were installed when this sandbox was created: \`${plan.command}\` exited 0.`;
     }
     const tail = capOutput(result.output).text.slice(-2000);
-    // Log the output tail too, not just the exit code: it names the blocked host
-    // (allowlist) or the failing binary (platform mismatch) so the user can
-    // tell the two apart. The tail carries merged stdout+stderr.
+    // The tail names the blocked host or the failing binary, so a user can tell
+    // an allowlist refusal from a platform mismatch.
     options.log?.warn(
       { sessionId, command: plan.command, exitCode: result.exitCode, tail },
       "sandbox dependency install failed",
@@ -190,9 +188,8 @@ async function installDependencies(
   }
 }
 
-/* The same rule the teardown obeys, on the one other path that removes a
-   checkout. Best-effort by nature: no repo here at all is the ordinary case,
-   and every failure means the folder was already beyond saving. */
+// Best-effort by nature: no repo here at all is the ordinary case, and every
+// failure means the folder was already beyond saving.
 async function pushLeftovers(
   dir: string,
   options: WorkspaceOptions,
@@ -232,9 +229,8 @@ async function provisionEntry(
 ): Promise<Entry> {
   const dir = join(options.workspacesDir, sessionId);
   const homeDir = homeDirFor(dir);
-  // A leftover dir (crash, reaped container) would break the clone; the branch
-  // is the durable state, so a fresh clone is always correct - but only once
-  // what is here has reached it, since a push that failed left the only copy.
+  // The branch is the durable state, so a fresh clone is correct once what is
+  // here has reached it: a push that failed left the only copy.
   await pushLeftovers(dir, options);
   await rm(dir, { recursive: true, force: true });
   await rm(homeDir, { recursive: true, force: true });
@@ -367,9 +363,8 @@ export async function withWorkspace<T>(
 // others mean the session is going whether that work finishes or not.
 export type TeardownReason = "idle" | "deleted" | "disconnected";
 
-/* One rule, no modes: never drop a checkout without trying to push it, and if the
-   push fails keep the checkout and destroy the container anyway. The container is
-   cheap to recreate; the work is not. */
+// Never drop a checkout without trying to push it, and if the push fails keep
+// the checkout anyway: the container is cheap to recreate, the work is not.
 export async function teardown(
   sessionId: string,
   reason: TeardownReason,

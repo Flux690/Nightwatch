@@ -43,9 +43,8 @@ function requirePendingHumanInput(sessionId: string) {
   return pending;
 }
 
-// The interrupt names the gated call; the transcript says what it was, and the
-// two are written in one transaction. A miss here is a contradiction, not a
-// case to carry forward with an empty tool name.
+// Both are written in one transaction, so a miss here is a contradiction
+// rather than a case to carry forward with an empty tool name.
 function requireGatedCall(
   sessionId: string,
   toolUseId: string,
@@ -60,9 +59,8 @@ function requireGatedCall(
   return call;
 }
 
-/* A compare-and-swap, so a failure means someone else holds it - a live request,
-   or a process that died holding it. Age tells them apart. "stale" is why the
-   claim is never cleared at boot: the write may already have run. */
+// A compare-and-swap, so a failure means someone else holds it and age tells
+// a live request from a dead one. Never cleared at boot: the write may have run.
 function claim(sessionId: string, claimedAt: string | null): "held" | "stale" {
   if (claimPendingHumanInput(sessionId)) return "held";
   const heldForMs =
@@ -96,9 +94,8 @@ function unpause(
   ensureDeleted(sessionId);
 
   const resolvedAt = new Date().toISOString();
-  /* The one place that knows a person was asked, so the one place that can say
-     so. Stamped here rather than at each call site above: every path through
-     this function had a human at the end of it, and none of the others did. */
+  // Stamped here rather than at each call site: every path through this
+  // function had a human at the end of it, and no other path did.
   const gatedResult: ToolResult = { ...answer, humanDecision: status };
   // Read off the result rather than passed beside it: how a call went belongs
   // to the call, and two ways to say it is one way to say two things.
@@ -131,9 +128,8 @@ function unpause(
   const resumed = [...completedResults, gatedResult];
   dispatcher.dispatch({
     sessionId,
-    /* Every call in the suspended turn is still unanswered in the transcript -
-       the results are in this dispatch, not the record - so the seed is told to
-       keep the turn that made them rather than unwinding past it. */
+    // The results are in this dispatch rather than the record, so the seed
+    // keeps the turn that made them instead of unwinding past it.
     seed: buildSeed(
       sessionId,
       resumed.map((r) => r.tool_use_id),
@@ -264,9 +260,8 @@ export async function respondToPendingHumanInput(
     );
   }
 
-  // Only what is true: the user said no. Why is in their comment or it is
-  // unknown, and inferring a motive from the alert's severity hands the agent
-  // one nobody gave. A rejection redirects the work, so this asks what next.
+  // Only what is true: the user said no. Inferring a motive from severity
+  // would hand the agent one nobody gave, so this asks what to do next.
   const gatedResult: ToolResult = {
     tool_use_id: pending.toolUseId,
     content: `The user rejected this call, so it did not run and nothing on the system changed. ${
@@ -274,9 +269,8 @@ export async function respondToPendingHumanInput(
         ? `They said: "${answer}". Take that into account`
         : "They gave no reason. Take the rejection itself as the signal"
     }, then continue the investigation with a different approach. Do not call this tool again with the same arguments.`,
-    /* No outcome: the tool never ran, so there is nothing to say about how it
-       behaved. That a person chose this is said by humanDecision, which unpause
-       stamps - it is a fact about them, not about the tool. */
+    // No outcome: the tool never ran. That a person chose this is a fact about
+    // them, which humanDecision carries.
     is_error: true,
   };
   logger.info({ sessionId, tool: call.name }, "rejected");

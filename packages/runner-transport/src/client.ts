@@ -38,8 +38,8 @@ const MANIFEST_REFRESH_TIMEOUT_MS = 5000;
 
 const MANIFEST_REFRESH_INTERVAL_MS = 30_000;
 
-// Three missed server ping intervals (30s each). A silently dead path (NAT expiry, no FIN) never
-// errors the socket on its own - sends just buffer - so silence from the API is the only reliable death signal on this side.
+// Three missed server pings. A silently dead path never errors the socket on
+// its own, so silence from the API is the only reliable death signal here.
 const PING_WATCHDOG_MS = 90_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -184,9 +184,8 @@ export function startWebSocketClient(options: TransportOptions): () => void {
       armWatchdog(ws!);
     });
 
-    // A ping is the only proof the API means to keep this connection, which is why
-    // it clears the backoff. Opening is not enough: a runner accepted and then
-    // rejected opens every time, and resetting there pins it to the first rung.
+    // The only proof the API means to keep this connection. Opening is not
+    // enough: a runner accepted then rejected opens every time.
     ws.on("ping", () => {
       retryCount = 0;
       armWatchdog(ws!);

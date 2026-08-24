@@ -26,9 +26,8 @@ export function targetKeyFromInput(
   return typeof target === "string" ? target : null;
 }
 
-/* The only place a tool call becomes an item, called by both the transcript
-   fetch and the live stream so the two cannot differ. It chooses nothing: a call
-   is one kind and its state says where in its life it is. */
+// Called by both the transcript fetch and the live stream, so the two cannot
+// differ. It chooses nothing: the call's state says where in its life it is.
 export function toolCallCard(call: {
   toolUseId: string;
   toolName: string;
@@ -59,9 +58,8 @@ export function continueCard(
   return { kind: "continue_card", toolUseId, state };
 }
 
-/* Repeating a fix is rarely fixing it, and 3am is when that is easiest to miss.
-   It reports, it never refuses - a person who restarts a fifth time has made a
-   decision, not a mistake. */
+// Repeating a fix is rarely fixing it, and 3am is when that is easiest to
+// miss. It reports and never refuses: a fifth restart is a decision.
 function priorRunsOf(
   toolName: string,
   input: Record<string, unknown>,
@@ -73,16 +71,14 @@ function priorRunsOf(
     .length;
 }
 
-/* Read back from the report column, since the write-up is not a turn: a finished
-   investigation with claims but no report is one where the report turn did not
-   land. A session parked on a human has not reached that turn, so it gets none. */
+// Read from the report column, since the write-up is not a turn. A session
+// parked on a human has not reached that turn, so it gets no card.
 function reportCard(sessionId: string): TranscriptItem | null {
   const session = getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
   if (getReport(sessionId)?.submitted != null) {
-    /* A run in flight will write this again over the same column, so the card
-       says so rather than offering a report that is about to be replaced.
-       Without it a follow-up reads as finished from the moment it starts. */
+    // A run in flight writes this again over the same column, so without the
+    // building state a follow-up reads as finished the moment it starts.
     return isRunning(sessionId)
       ? { kind: "report_card", id: "report", state: { phase: "building" } }
       : { kind: "report_card", id: "report", state: { phase: "ready" } };
@@ -104,9 +100,8 @@ function toolCallState(
 ): ToolCallState {
   if (gate !== null) return { phase: "awaiting_human", gate };
   const classified = toolOutcome === undefined ? {} : { toolOutcome };
-  /* Every path a person is on ends here, including an answered question: the
-     decision was recorded when they were asked, so nothing needs to work out
-     from a tool's name whether the words in the result are theirs. */
+  // The decision was recorded when they were asked, so nothing has to work out
+  // from a tool's name whether the words in a result are theirs.
   if (decided !== null)
     return {
       phase: "resolved",
@@ -118,18 +113,16 @@ function toolCallState(
   return { phase: "complete", result, ...classified };
 }
 
-// The one place a transcript becomes something to draw. Everything the console
-// needs about a tool call - its result, whether it waits on a human - is decided
-// here, so the browser never reconciles sources against each other.
+// Everything the console needs about a call is decided here, so the browser
+// never reconciles two sources against each other.
 export function buildTranscript(sessionId: string): TranscriptItem[] {
   const messages: TranscriptRow[] = getTranscriptRows(sessionId);
   // Which call is waiting, and of what kind. What that call was comes from the
   // transcript rows below, which hold it already.
   const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
 
-  /* What the user decided, read back from what was recorded when they were
-     asked. Not reconstructed from the tool's name: that cannot tell a call a
-     person released from one the harness refused without ever drawing a card. */
+  // Not reconstructed from the tool's name: that cannot tell a call a person
+  // released from one the harness refused without drawing a card.
   const decisionFor = (
     toolUseId: string,
     settled: boolean,
@@ -155,9 +148,8 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     }
   }
 
-  /* The ones that opened the session are excluded: the report's alert band sits
-     above them. Read from the row rather than compared clocks - which alerts
-     opened a session is known when they are written. */
+  // The ones that opened the session are excluded, read from the row rather
+  // than from compared clocks: that fact is known when they are written.
   const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
     (entry) => entry.injected,
   );

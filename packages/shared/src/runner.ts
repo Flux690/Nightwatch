@@ -63,9 +63,8 @@ export interface RunnerRecord {
   manifest: RunnerManifest | null;
 }
 
-// Live view of one connected runner for fleet reasoning: enough to match an alert or
-// target identity. Unlike RunnerRecord it has no DB-only fields, and the platform
-// discriminant is what lets a caller partition the fleet before matching.
+// No DB-only fields, unlike RunnerRecord, and the platform discriminant is what
+// lets a caller partition the fleet before matching.
 interface FleetRunnerBase {
   runnerId: string;
   // The model-visible address: user-assigned server name, or the

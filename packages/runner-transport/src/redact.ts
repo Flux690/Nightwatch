@@ -49,8 +49,8 @@ const RULES: RedactionRule[] = [
       /(postgresql|postgres|mysql|mongodb|redis|amqp|jdbc):\/\/[^\s"'`\n]+/gi,
   },
   {
-    // Quoted values capture to the closing quote (spaces and all); unquoted run to the next delimiter. The
-    // old pattern stopped at the first space and required >=4 chars, leaking spaced secrets and missing short ones.
+    // Quoted values capture to the closing quote, unquoted to the next
+    // delimiter: stopping at the first space leaked spaced secrets.
     name: "key-value",
     pattern:
       /"?(password|passwd|token|secret|api_key|apikey|private_key|auth|credential|access_key|auth_token|access_token|client_secret)"?\s*[=:]\s*("[^"\n]*"|'[^'\n]*'|[^\s,\[\]\n]+)/gi,

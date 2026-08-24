@@ -59,9 +59,8 @@ const DEFAULT_EVENT_WINDOW_MINUTES = 60;
 // managed providers do not expose, so this is a caveat and never a claim.
 const COMMON_EVENT_TTL_MINUTES = 60;
 
-/* Kubernetes deletes events on a TTL it will not tell us, and an event survives
-   only while something keeps updating it. So an empty list is either nothing
-   happened or the evidence expired, and only the caller's window is knowable. */
+// Kubernetes deletes events on a TTL it will not report, so an empty list is
+// either nothing happened or the evidence expired.
 function eventScopeNote(scope: {
   returned: number;
   older: number;
@@ -98,9 +97,8 @@ function eventScopeNote(scope: {
   return parts.join(" ");
 }
 
-// Plain text on whole lines, deliberately not a pattern: an agent-written regex
-// over thousands of lines is a backtracking hazard this runner would wear.
-// Case-insensitive, because ERROR and error are the same word to whoever asked.
+// Plain text, not a pattern: an agent-written regex over thousands of lines is
+// a backtracking hazard this runner would wear.
 function matchesFilter(
   line: string,
   contains: string[],
@@ -112,9 +110,8 @@ function matchesFilter(
   return contains.length === 0 || contains.some(hits);
 }
 
-/* What the count means, which is not what it looks like: the tail is applied by
-   the apiserver before any filtering, so a small number of matches is a fact
-   about the lines searched and never about the log. */
+// The tail is applied by the apiserver before any filtering, so a small number
+// of matches is a fact about the lines searched, never about the log.
 function logScanNote(
   scanned: number,
   matched: number,
@@ -175,8 +172,8 @@ export async function getWorkloadLogs(
   );
   if ("found" in resolved) return resolved;
 
-  // When the resolved pod is not live we fell back to a terminated instance (a crash-loop's dead
-  // container); its useful output lives in the previous container, so request that rather than the empty current one.
+  // A terminated instance keeps its useful output in the previous container, so
+  // request that rather than the empty current one.
   const fromPreviousContainer = !resolved.live;
 
   const tailLines = input.tailLines ?? DEFAULT_TAIL_LINES;

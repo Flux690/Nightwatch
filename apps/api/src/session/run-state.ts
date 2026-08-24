@@ -1,8 +1,7 @@
 import { getDb } from "../db.js";
 
-/* The conditional UPDATE is the whole mutex: two racing dispatches both attempt
-   it and one changes a row. Claimable from 'suspended' too, which is a session
-   resuming on the seat it already held. Only 'running' refuses. */
+// The conditional UPDATE is the whole mutex: two racing dispatches attempt it
+// and one changes a row. Claimable from 'suspended', which is a resume.
 export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
@@ -13,9 +12,8 @@ export function claimRun(sessionId: string): boolean {
   return result.changes > 0;
 }
 
-/* A person ended this one. Kept because nothing else can say so afterwards: a
-   stopped run reaches the same end as one that ran out of ideas, and calling
-   both inconclusive blames the agent for a decision the user made. */
+// Nothing else can say so afterwards, and calling a stopped run inconclusive
+// blames the agent for a decision the user made.
 
 export function markStopped(sessionId: string): void {
   getDb()
@@ -34,9 +32,8 @@ export function releaseRun(sessionId: string): void {
     .run(sessionId);
 }
 
-/* Why the last run failed and how many times we have tried. Recorded at the
-   failure, because `describeLLMError`'s prose cannot be classified afterwards -
-   and the whole point is to never retry a bad key or an empty account. */
+// Recorded at the failure, because describeLLMError's prose cannot be
+// classified afterwards and a bad key must never be retried.
 
 export function recordRunFailure(
   sessionId: string,
@@ -110,9 +107,8 @@ export function countSeats(investigation: boolean): number {
   return row.taken;
 }
 
-/* Read at boot to find the ones parked on nobody: approving deletes the interrupt
-   row before the resume claims the run, so a crash in that gap leaves a session
-   suspended forever, holding a seat. */
+// Approving deletes the interrupt row before the resume claims the run, so a
+// crash in that gap leaves a session suspended forever, holding a seat.
 export function suspendedSessionIds(): string[] {
   const rows = getDb()
     .prepare(

@@ -21,9 +21,8 @@ export interface ToolCallPart {
   input: Record<string, unknown>;
 }
 
-/* Why a call did not simply answer, absent when it did. Recorded rather than
-   derived from a boolean, so a file under a different name reads as a miss
-   instead of in the same red as a crash. The type is derived from the list. */
+// Recorded rather than derived from a boolean, so a file under a different
+// name reads as a miss instead of in the same red as a crash.
 export const TOOL_OUTCOMES = [
   // Some runners in a fan-out answered and some did not; the envelope names which.
   "partial",
@@ -43,9 +42,8 @@ export function isToolOutcome(value: unknown): value is ToolOutcome {
   return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
 }
 
-/* What a person said when the harness asked them, recorded at the call: the
-   registry can say a tool needs releasing, but only this says anyone was asked.
-   Not a ToolOutcome, which says how the tool behaved. */
+// The registry can say a tool needs releasing, but only this says anyone was
+// asked. Not a ToolOutcome, which says how the tool behaved.
 export const HUMAN_DECISIONS = ["approved", "rejected", "answered"] as const;
 
 export type HumanDecision = (typeof HUMAN_DECISIONS)[number];
@@ -64,9 +62,8 @@ export interface ToolResultPart {
   // Our own classification, which no wire format carries. Stamped from what the
   // run knew, which is what lets it live with the call instead of beside it.
   toolOutcome?: ToolOutcome;
-  /* Present only when a person was actually asked. Absent is the answer for
-     every call that never reached a gate - including one the harness refused
-     because the tool was not offered, which used to read as an approval. */
+  // Absent for every call that never reached a gate, including one the harness
+  // refused because the tool was not offered, which used to read as approval.
   humanDecision?: HumanDecision;
 }
 

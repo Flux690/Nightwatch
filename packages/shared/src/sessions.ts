@@ -5,14 +5,12 @@ import type { AlertGroupContext, NormalizedAlert } from "./alerts.js";
 import type { MessagePart, NativeEnvelope } from "./messages.js";
 import type { TranscriptItem } from "./transcript.js";
 
-// Who wrote a row. Four kinds against a provider's two roles: "error" is our own
-// note, rendered but never replayed; "nightwarden" is the harness talking to the
-// model, replayed as a user turn but never rendered. buildSeed maps them.
+// Four kinds against a provider's two roles: "error" is rendered but never
+// replayed, "nightwarden" replayed but never rendered. buildSeed maps them.
 export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 
-// Row state for the sessions queue, derived server-side and never declared by
-// the model. A row no word applies to says nothing, which is why the field is
-// nullable rather than carrying a sixth value.
+// Derived server-side, never declared by the model. Nullable rather than
+// carrying a sixth value: a row no word applies to says nothing.
 export type SessionRunStatus =
   | "action_required"
   | "investigating"
@@ -81,9 +79,8 @@ export interface SessionDetail extends SessionMeta {
   // The last thing that happened on it. There is no end time to store - a run
   // can die without writing one - so this is what a finished record is timed to.
   lastActivityAt: string;
-  // Whether a run is in flight right now. The stream carries the deltas; without
-  // this the snapshot has three endings and no beginning, so a session rejoined
-  // mid-run reads as idle until the next event happens to land.
+  // The stream carries the deltas, so without this a session rejoined mid-run
+  // reads as idle until the next event happens to land.
   running: boolean;
   // In arrival order: the batch that opened the session, then any that arrived
   // while the run was working.

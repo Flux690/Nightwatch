@@ -9,9 +9,8 @@ export function getDocker(): Dockerode {
 // while it runs, and this is consulted on every enumeration.
 const hidden = new Set<string>();
 
-// This process's own container id, or null when it is not containerized. The
-// mountinfo pattern is anchored on the containers path because that file also
-// lists overlay layer directories, whose names are 64-hex and are not ids.
+// Anchored on the containers path, because mountinfo also lists overlay layer
+// directories whose names are 64-hex and are not ids.
 function ownContainerId(): string | null {
   const sources: Array<[string, RegExp]> = [
     ["/proc/self/mountinfo", /\/docker\/containers\/([0-9a-f]{64})/],
@@ -39,9 +38,8 @@ export function hideContainer(id: string): void {
   hidden.add(id);
 }
 
-// The only sanctioned way to enumerate containers: the manifest, the list tool and
-// the resolver all arrive through here, so the control plane is absent from all
-// three by construction rather than by three filters.
+// The manifest, the list tool and the resolver all arrive here, so the control
+// plane is absent from all three by construction rather than by three filters.
 export async function listVisibleContainers(
   docker: Dockerode,
 ): Promise<Dockerode.ContainerInfo[]> {
@@ -49,8 +47,8 @@ export async function listVisibleContainers(
   return all.filter((c) => !hidden.has(c.Id));
 }
 
-// Parse Docker's multiplexed stream: 8-byte header (byte 0 = type, 4-7 = BE size) + payload; type 2
-// is stderr, else stdout. TTY containers emit raw bytes, detected when the first byte isn't a valid mux type.
+// 8-byte header (byte 0 type, 4-7 BE size) then payload; type 2 is stderr. A
+// TTY container emits raw bytes, detected when byte 0 is not a valid type.
 export function parseDockerMux(buf: Buffer): {
   stdout: string;
   stderr: string;

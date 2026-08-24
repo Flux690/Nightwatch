@@ -53,8 +53,8 @@ function buildAllowlist(): string[] {
     : DEFAULT_ALLOWLIST;
 }
 
-// Open-then-validate, closing the check/open TOCTOU: open the fd once (pinned to the resolved inode), then
-// prove that inode is reachable via an allowlisted canonical path. Reads come from the handle, never the name; O_NONBLOCK stops a planted FIFO hanging open.
+// Open-then-validate, closing the check/open TOCTOU: reads come from the handle
+// and never the name, and O_NONBLOCK stops a planted FIFO hanging open.
 export async function openAllowedFile(
   requestedPath: string,
 ): Promise<fs.promises.FileHandle> {
@@ -73,8 +73,8 @@ export async function openAllowedFile(
         `Path not in allowlist: ${requestedPath}. Add to NIGHTWARDEN_FILE_ALLOWLIST env var to enable.`,
       );
     }
-    // Bind the allowlisted name to the opened inode: if a symlink was swapped between open and realpath,
-    // the canonical name now resolves to a different inode than the fd holds, so we refuse rather than read the wrong file.
+    // Binds the allowlisted name to the opened inode: a symlink swapped between
+    // open and realpath now resolves elsewhere, so this refuses.
     const nameStat = await fs.promises.stat(canonical, { bigint: true });
     if (nameStat.ino !== fdStat.ino || nameStat.dev !== fdStat.dev) {
       throw new Error(

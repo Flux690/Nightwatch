@@ -29,9 +29,8 @@ import type {
   ModelOption,
 } from "@nightwarden/shared";
 
-// One provider's settings, nested under `providers` so a change to one cannot touch
-// the other's model, endpoint or credential. reasoningLevel is a free string: the
-// chosen model's descriptor is the authority, not an enum here.
+// Nested under `providers` so a change to one cannot touch the other's model,
+// endpoint or credential. reasoningLevel is free: the descriptor is authority.
 const ProviderPatchSchema = z.object({
   model: z.string().min(1).nullable().optional(),
   baseUrl: z.string().url().nullable().optional(),

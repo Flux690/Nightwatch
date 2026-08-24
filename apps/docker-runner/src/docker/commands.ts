@@ -60,9 +60,8 @@ export async function getContainerList(): Promise<DockerServiceListResult> {
 
 const DEFAULT_TAIL_LINES = 200;
 
-// Plain text on whole lines, deliberately not a pattern: an agent-written regex
-// over thousands of lines is a backtracking hazard this host would wear.
-// Case-insensitive, because ERROR and error are the same word to whoever asked.
+// Plain text, not a pattern: an agent-written regex over thousands of lines is
+// a backtracking hazard this host would wear.
 function matchesFilter(
   line: string,
   contains: string[],
@@ -74,9 +73,8 @@ function matchesFilter(
   return contains.length === 0 || contains.some(hits);
 }
 
-/* What the count means, which is not what it looks like: the tail is applied by
-   the engine before any filtering, so a small number of matches is a fact about
-   the lines searched and never about the log. */
+// The tail is applied by the engine before any filtering, so a small number of
+// matches is a fact about the lines searched, never about the log.
 function logScanNote(
   scanned: number,
   matched: number,

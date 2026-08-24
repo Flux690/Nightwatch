@@ -1,6 +1,5 @@
-/* Every sender NightWarden mints a credential for. One row per kind, so an
-   user sees one card and one credential each; the kind decides which card
-   and which status line, never how a body is parsed. */
+// One row per kind, so a user sees one card and one credential each. The kind
+// decides which card, never how a body is parsed.
 export const ALERT_SOURCE_KINDS = ["alertmanager", "grafana"] as const;
 
 export type AlertSourceKind = (typeof ALERT_SOURCE_KINDS)[number];

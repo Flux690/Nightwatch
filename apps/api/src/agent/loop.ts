@@ -158,9 +158,8 @@ function currentToolset(investigation: boolean): OfferedToolset {
   );
 }
 
-/* What to tell the model when its options change under it, or null when they
-   have not. Names only the difference: a run thirty turns deep does not need its
-   whole toolset restated, and the tools themselves carry their own descriptions. */
+// Names only the difference: a run thirty turns deep does not need its whole
+// toolset restated, and each tool already carries its own description.
 function toolsetChange(
   before: OfferedToolset,
   after: OfferedToolset,
@@ -214,9 +213,8 @@ export function buildSessionMeta(
   };
 }
 
-// How a run ended, so the dispatcher (the single lifecycle owner) can emit the
-// one matching terminal event. A thrown error is the 4th state, "failed",
-// handled by the dispatcher's catch - never returned here.
+// A thrown error is the fourth state, "failed", and the dispatcher's catch
+// owns it: it is never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
 // Finish-gate pushback cap: after this many nudges the run writes up anyway
@@ -227,23 +225,19 @@ const MAX_NUDGES = 3;
 // enough to tell a wrong guess from a model with nothing left to try.
 const MAX_BARREN_TURNS = 3;
 
-/* The report turn has one tool and one job. Three, matching the finish gate:
-   repair loops stop paying off past that, and the first two are often spent on a
-   field the model left blank rather than on the write-up itself. */
+// Three, matching the finish gate: repair loops stop paying off past that.
 const MAX_REPORT_ATTEMPTS = 3;
 
-/* Answered calls before the run is asked whether it has settled anything. Eight
-   is past orientation and long before the budget matters. A check, not a repair
-   attempt: nothing has failed, the record is simply still empty. */
+// Past orientation and long before the budget matters. A check, not a repair:
+// nothing has failed, the record is simply still empty.
 const CALLS_BEFORE_RECORD_CHECK = 8;
 
 /* Only what the tool could not already refuse. Every field is required and
    non-blank there, so what is left is the turn that never called it. */
 function problemWithReport(submitted: SubmittedReport | null): string | null {
   if (submitted === null) {
-    /* Says only what is true of both ways to get here: the turn never called
-       the tool, or it called it and the call was refused. Which one it was is
-       already above - a refusal names the field it refused. */
+    // True of both ways here: the turn never called the tool, or it did and
+    // the call was refused. A refusal already names the field above.
     return "The report has not been written.";
   }
   return null;
@@ -263,9 +257,8 @@ export interface RunSessionInput {
   // Present on resume: the full tool_results for the suspended turn
   // (completedResults from interrupt row + the newly resolved gated result).
   resumeToolResults?: ToolResult[];
-  /* A turn NightWarden opens rather than the user, so it is stored as ours and
-     never drawn: the reader pressed a button, and a sentence they did not write
-     appearing in their own voice is a lie about who said what. */
+  // Stored as ours and never drawn: words the reader did not write must never
+  // appear in their own voice.
   harnessMessage?: string;
   // Aborts the LLM request in flight when the dispatcher stops this run.
   signal?: AbortSignal;
@@ -565,9 +558,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
-  /* Every investigation tool taken away and one put back, so the only thing the
-     model can do is the thing being asked. The ledger rides the request: turn
-     forty is the worst place to copy a call id from. */
+  // Every other tool taken away, and the ledger rides the request: turn forty
+  // is the worst place to copy a call id from.
   const writeReport = async (
     unrecovered: boolean,
     turn: number,
@@ -640,9 +632,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         return "stopped";
       }
 
-      /* Before the tool result: a reply cut off mid-call carries half-written
-         arguments, so the refusal below would report a schema fault and hide the
-         real cause. Neither is worth a second attempt - the ceiling stands. */
+      // A reply cut off mid-call carries half-written arguments, so the refusal
+      // below would name a schema fault and hide the real cause.
       if (written.stopReason === "max_tokens") {
         return notWritten(
           `The report was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`,
@@ -759,13 +750,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         log.info({ turn }, "chat finished with free-form response");
         return "completed";
       }
-      // Ledger gate: the record must be complete before it can be written up.
-      // Push back up to MAX_NUDGES times, then write up from what there is - the
-      // status an unfinished record derives to is already the honest one.
+      // Push back up to MAX_NUDGES times, then write up regardless: the status
+      // an unfinished record derives to is already the honest one.
       const gaps = reportGaps(sessionId);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
-      // record, so the gate never makes a network call at the one instant a run
-      // happens to end. That instant is almost never when a condition clears.
+      // record, so the gate never makes a network call as a run happens to end.
       const recovery = recoveryState(sessionId);
       if (gaps.length > 0) {
         if (nudges < MAX_NUDGES) {
@@ -795,9 +784,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           "finish gate: request cap reached, writing up incomplete",
         );
       }
-      /* Only a run that acted must recommend. "I could not work out the cause,
-         here is what I ruled out" is a complete ending; a run that had the
-         user release a write and then went quiet has left them nothing. */
+      // Only a run that acted must recommend: ruling things out is a complete
+      // ending, but releasing a write and going quiet leaves the user nothing.
       const released = gatedCalls(sessionId).some(
         (c) => c.decision === "approved",
       );
@@ -917,9 +905,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       return "suspended";
     }
 
-    // Drain mid-run injected alerts at the tool boundary - the earliest point the
-    // model can act on one - as their own turn after the results. The model judges
-    // each as downstream of this incident or independent of it.
+    // Drained at the tool boundary, the earliest point the model can act on one,
+    // as their own turn after the results.
     provider.appendToolResults(toolResults);
     // Already durable: the dispatcher wrote each one when it arrived. The inbox
     // exists to tell the model, which is a separate concern from keeping it.
@@ -990,9 +977,8 @@ function formatLabels(labels: Record<string, string>): string {
   return rendered || "no labels";
 }
 
-/* Its own turn, so it opens rather than continues: no leading blank lines.
-   Stated, never asked - the alert source already grouped it, and asking the model
-   to re-decide would hand a routing call to the thing being routed. */
+// Stated, never asked: the alert source already grouped it, and asking the
+// model would hand a routing call to the thing being routed.
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
   const header =
     alerts.length === 1

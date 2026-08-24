@@ -5,9 +5,8 @@
 import type { ApprovalStatus } from "./approvals.js";
 import type { ToolOutcome } from "./messages.js";
 
-/* What a suspended call needs from a person, named as the gate names it so there
-   is one vocabulary. It lives on the one phase where it means anything, so it
-   cannot disagree with a call that has settled. */
+// Named as the gate names it, so there is one vocabulary. It lives on the one
+// phase where it means anything, so a settled call cannot contradict it.
 export type ToolGate = "approval" | "clarification";
 
 // Explicit rather than an optional field, so "not set" is never a meaning. A
@@ -58,9 +57,8 @@ export interface ThinkingItem {
   turn: number;
 }
 
-/* One item for the whole life of a tool call, with the state carrying which
-   moment it is in, so nothing can label a call as something its state
-   contradicts. Arguments travel whole in `input`: a copy is a second source. */
+// One item for the whole life of a call, its state saying which moment it is
+// in. Arguments travel whole in `input`, because a copy is a second source.
 export interface ToolCallItem {
   kind: "tool_call";
   toolUseId: string;
@@ -72,9 +70,8 @@ export interface ToolCallItem {
   state: ToolCallState;
 }
 
-/* Not a tool call: the harness raises it when the time budget runs out, no model
-   asked for it, and its synthetic id keys an interrupt row rather than any turn.
-   So it carries the two states it can actually be in, never a tool's four. */
+// Not a tool call: no model asked for it, and its synthetic id keys an
+// interrupt row. So it carries two states rather than a tool's four.
 export interface ContinueCardItem {
   kind: "continue_card";
   toolUseId: string;
@@ -83,18 +80,16 @@ export interface ContinueCardItem {
     | { phase: "resolved"; decision: ApprovalStatus };
 }
 
-/* In the transcript rather than beside it: the report is produced by a turn like
-   any other. `building` is live only, being the phase of a turn in flight; the
-   other two are read back from whether the session holds a report. */
+// `building` is live only, being the phase of a turn in flight; the other two
+// are read back from whether the session holds a report.
 export interface ReportCardItem {
   kind: "report_card";
   id: string;
   state: { phase: "building" | "ready" | "failed" };
 }
 
-// An alert that fired while the run was already working, placed where it
-// interrupted. The report holds the detail; this says only that the ground
-// moved here, so the agent changing course has a visible cause.
+// Placed where it interrupted. The report holds the detail; this says only
+// that the ground moved, so a change of course has a visible cause.
 export interface AlertArrivedItem {
   kind: "alert_arrived";
   id: string;

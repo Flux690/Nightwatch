@@ -36,9 +36,8 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
-/* The citation handle, put where the model reads it. A field on the object
-   rather than a text prefix: the console parses these results, so a header line
-   would break every tool card. A plain string takes the prefix instead. */
+// A field rather than a text prefix: the console parses these results, so a
+// header line would break every tool card. A plain string takes the prefix.
 function withEvidenceId(
   content: unknown,
   evidenceId: string | undefined,
@@ -63,9 +62,8 @@ function tooLarge(name: string, chars: number): string {
   return `${name} produced ${chars} characters, past the ${MAX_TOOL_RESULT_CHARS} a single result may occupy, so none of it was read. Narrow the call - a tighter filter, a shorter window, a smaller limit - and run it again.`;
 }
 
-// Single dispatch chokepoint that both the live loop and the approval resume
-// path pass through. The caller supplies a ceiling; a tool's own limit can only
-// narrow it, never raise it past what the user allowed.
+// The caller supplies a ceiling, and a tool's own limit can only narrow it,
+// never raise it past what the user allowed.
 export async function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
@@ -108,9 +106,8 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-/* Whether a human must permit this call. A function rather than a field read
-   because a user rule will answer from the arguments as well as the tool,
-   and `input` is already here for it. */
+// A function rather than a field read, because a user rule will answer from
+// the arguments as well as the tool.
 export function resolvePolicy(
   tool: Tool,
   _input: Record<string, unknown>,
@@ -118,9 +115,8 @@ export function resolvePolicy(
   return tool.policy;
 }
 
-// Which pull-integrations are connected this turn. Each defaults to true so a
-// caller that only cares about platforms still gets every library; the loop passes
-// live state, so a disconnected integration strips its tools from the next turn.
+// Each defaults to true, so a caller that only cares about platforms still
+// gets every library. The loop passes live state, so a disconnect strips tools.
 interface IntegrationConnections {
   github?: boolean;
   metrics?: boolean;
@@ -134,9 +130,8 @@ export interface OfferedToolset {
   elicitations: Elicitation[];
 }
 
-// Single source of truth for both the offered schemas and the names the loop
-// resolves, so hiding a tool and gating it are one op. `platforms` undefined means
-// every library, which only a caller wanting the whole catalogue passes.
+// One source for both the offered schemas and the names the loop resolves, so
+// hiding a tool and gating it are one operation.
 export function effectiveToolset(
   platforms: Set<Platform> | undefined,
   connections: IntegrationConnections = {},

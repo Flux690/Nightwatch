@@ -20,9 +20,8 @@ import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
 
-/* How recent a dead run has to be to be worth continuing. Deliberately a
-   constant: a user has no basis to reason about it, and it is not
-   `checkInAfterMs`, which answers how long a run works before checking in. */
+// A constant on purpose: a user has no basis to reason about it, and it is
+// not checkInAfterMs, which answers how long a run works before checking in.
 const RESUME_WINDOW_MS = 15 * 60_000;
 
 const INTERRUPTED =
@@ -54,18 +53,16 @@ function unansweredCalls(rows: TranscriptRow[]): PendingCall[] {
   return calls.filter((call) => !answered.has(call.toolUseId));
 }
 
-/* Whether running it a second time is safe. A read changed nothing, so reading
-   again is reading; a write is only replayable where the tool states why. An
-   elicitation never executes at all, so it is neither. */
+// A read changed nothing, so reading again is reading. A write is replayable
+// only where the tool states why, and an elicitation never executes at all.
 function replayable(name: string): boolean {
   const tool = findTool(name);
   if (tool === undefined) return false;
   return tool.effect === "read" || tool.idempotent === true;
 }
 
-/* Answers every call the crash left open, in one turn, the way a provider would.
-   Returns false when any of them cannot be replayed, which leaves the exchange
-   unanswered so the seed unwinds past it instead. */
+// False when any call cannot be replayed, which leaves the exchange unanswered
+// so the seed unwinds past it instead.
 async function answerPendingCalls(
   sessionId: string,
   calls: PendingCall[],
@@ -120,9 +117,8 @@ function worthResuming(sessionId: string): boolean {
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
-/* 'running' was killed mid-turn and may be repairable. 'suspended' with no
-   interrupt row died between approving a call and claiming the resume: the write
-   already ran and its result is gone, and it holds a seat until we say so. */
+// 'suspended' with no interrupt row died between approving a call and claiming
+// the resume: the write already ran, its result is gone, and it holds a seat.
 function strandedSessions(): Array<{ sessionId: string; killed: boolean }> {
   const killed = runningSessionIds().map((sessionId) => ({
     sessionId,
@@ -155,9 +151,8 @@ export async function recoverDeadRuns(): Promise<{
       if (pending.length > 0) {
         await answerPendingCalls(sessionId, pending);
       }
-      /* The note is written only when nobody is picking this up. Writing it
-         before a resume would unwind the seed past the exchange just repaired,
-         since an error row is what tells buildSeed an exchange died. */
+      // Written only when nobody is picking this up: an error row is what
+      // tells buildSeed an exchange died, so it would unwind the repair.
       if (worthResuming(sessionId)) {
         dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
         result.resumed++;

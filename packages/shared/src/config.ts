@@ -6,9 +6,8 @@ export type LLMProviderName = "anthropic" | "openrouter";
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
 
-// What the settings picker needs to offer a provider: its stored name, the name
-// a person reads, and the endpoint it uses when none is given. Served rather
-// than hardcoded so a new adapter appears in the console without a UI change.
+// Served rather than hardcoded, so a new adapter appears in the console
+// without a UI change.
 export interface ProviderOption {
   name: LLMProviderName;
   label: string;
@@ -32,9 +31,8 @@ export interface ReasoningLevel {
   label: string;
 }
 
-// What one model advertises about reasoning, normalised from whichever catalog
-// it came from. The console renders this and never branches on the provider
-// name: the provider's own word arrives in `label`, its logic stays server-side.
+// Normalised from whichever catalog it came from, so the console renders it
+// and never branches on the provider name.
 export interface ReasoningDescriptor {
   // "Effort" for Anthropic, "Reasoning" for OpenRouter.
   label: string;
@@ -72,9 +70,8 @@ export interface ProviderSettings {
   baseUrl?: string;
   // Computed server-side on read and never stored; the plaintext never leaves.
   apiKeyMasked?: string | null;
-  // The user's pick from this model's ladder. A plain string, validated
-  // against the model's descriptor rather than a fixed union: the levels differ
-  // per provider and per model, so an enum here could only ever be a guess.
+  // Validated against the model's descriptor rather than a fixed union: the
+  // levels differ per model, so an enum here could only be a guess.
   reasoningLevel: string | null;
   // Captured from the catalog when the model is saved, so nothing has to reach
   // the network to start a run. Null means the catalog published no ceiling.
@@ -99,9 +96,8 @@ export interface AgentConfig {
   providers: ProviderSettingsMap;
   maxRetries: number;
   requestTimeoutMs: number;
-  // How many investigations may run at once. Counts the suspended ones too: a
-  // run parked on an approval still holds its seat, because starting another
-  // one only queues a second write behind the same person.
+  // Counts the suspended ones too: starting another only queues a second write
+  // behind the same person.
   maxConcurrentInvestigations: number;
   // How long the agent works before finishing its current step and asking
   // whether to continue. The continue gate is what it reaches, not a kill.
@@ -119,7 +115,6 @@ export interface AgentConfig {
   sandboxAllowlistHosts: string[];
 }
 
-// The active provider's block flattened onto the loop settings an SDK call needs.
 // Only the readiness gate builds one, so holding it is proof the install is
 // configured and no call site has to re-check.
 export interface ResolvedLLMConfig {
@@ -128,9 +123,8 @@ export interface ResolvedLLMConfig {
   baseUrl?: string;
   // The chosen model's own ceiling, or a constant when it published none.
   maxOutputTokens: number;
-  /* The window and whether this model summarises rather than refusing when a
-     conversation outgrows it. Both are facts the catalog stated; what to do with
-     them is each adapter's own arithmetic, so no threshold is decided here. */
+  // Both are facts the catalog stated. What to do with them is each adapter's
+  // arithmetic, so no threshold is decided here.
   maxInputTokens: number | null;
   compaction: boolean;
   maxRetries: number;

@@ -1,6 +1,5 @@
-/* Every metrics source speaks the Prometheus HTTP API, so there is one client
-   and no per-product adapter. What differs is configuration: where the rules
-   live, how the credential is presented, and what the source cannot answer. */
+// One client, no per-product adapter: what differs is where the rules live,
+// how the credential is presented, and what the source cannot answer.
 
 export const METRICS_SOURCE_KINDS = [
   "prometheus",

@@ -9,9 +9,8 @@ export interface DockerServiceIdentity {
 export interface KubernetesWorkloadIdentity {
   namespace: string;
   workload: string;
-  // Sub-selector for one container in a multi-container pod. NOT part of the durable
-  // identity (excluded from the key), so calls differing only by container key the same
-  // workload; set by the agent, never from an alert.
+  // Excluded from the key, so calls differing only by container address the
+  // same workload. Set by the agent, never from an alert.
   container?: string;
 }
 
@@ -52,9 +51,8 @@ function composeLabel(
   );
 }
 
-// Canonical address of one service, platform-prefixed so the two can never collide.
-// Always three segments: nothing a user typed ever enters a key. Each platform
-// builds its own, so neither function has a conditional in it.
+// Platform-prefixed so the two can never collide, always three segments, and
+// nothing a user typed ever enters one.
 export function dockerServiceKey(id: DockerServiceIdentity): string {
   return `docker/${id.project}/${id.service}`;
 }

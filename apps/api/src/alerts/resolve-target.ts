@@ -8,9 +8,8 @@ import {
   type KubernetesWorkloadIdentity,
 } from "@nightwarden/shared";
 
-// The outcome of matching an alert's labels against the live fleet. Resolved names the key to
-// act on; ambiguous names the runners to disambiguate between; unresolved hands the agent the
-// raw labels, which formatAlert renders in full alongside the fleet summary.
+// Resolved names the key to act on, ambiguous the runners to choose between,
+// unresolved the raw labels that formatAlert renders in full.
 type AlertResolution =
   | {
       kind: "resolved";
@@ -26,16 +25,14 @@ interface Match {
   runner: string;
 }
 
-// Walks what the fleet actually advertises and asks, per entry, whether these labels describe it.
-// The other direction - minting every identity the labels could name, then filtering - invents keys
-// nothing advertises, and each phantom then has to be reasoned about.
+// Walks what the fleet advertises and asks whether these labels describe it.
+// The other direction mints keys nothing advertises, each needing an answer.
 export function resolveAlertTarget(
   labels: Record<string, string>,
   fleet: FleetRunner[],
 ): AlertResolution {
-  // Partitioned by platform, so each matcher only ever sees identities of its own
-  // kind and neither has to ask what it was handed. The labels are still offered to
-  // both, which is why each matcher keeps its own precondition on them.
+  // Partitioned by platform, so no matcher has to ask what it was handed. The
+  // labels reach both, which is why each keeps its own precondition.
   const matches: Match[] = [];
   for (const runner of fleet) {
     matches.push(
@@ -162,9 +159,8 @@ function allFrom(text: string, alphabet: string): boolean {
   return text.length > 0;
 }
 
-// Kubernetes generates pod names from the owning object, so the owner is recoverable from the
-// name's shape - but only against a known kind. Matching bare names would resolve pod `web-0` to
-// a Deployment named `web`, and a Job's pod `backup-x9k2m` to a Deployment named `backup`.
+// A pod name carries its owner, but only against a known kind: matching bare
+// names would resolve `web-0` to a Deployment named `web`.
 function podBelongsToWorkload(
   podName: string,
   workload: string,

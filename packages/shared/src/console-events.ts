@@ -142,9 +142,8 @@ export interface ConsoleReportUpdated extends ConsoleEnvelope {
   };
 }
 
-/* Not a session event: a queued alert is an alert, with no session id to name
-   and nothing to render in the list. The limit rides along because raising it is
-   what the reader can actually do. */
+// Not a session event: a queued alert has no session id to name. The limit
+// rides along because raising it is what the reader can act on.
 export interface ConsoleQueueChanged extends ConsoleEnvelope {
   type: "QUEUE_CHANGED";
   payload: {

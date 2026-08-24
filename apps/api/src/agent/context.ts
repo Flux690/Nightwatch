@@ -30,9 +30,8 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   fleetTools: false,
 };
 
-// Two prompts, not one with a section bolted on: a question about the fleet is
-// not an incident, and telling a chat it has an investigation to shape is what
-// put a stopwatch on "how many containers are running?".
+// Two prompts, not one with a section bolted on: telling a chat it has an
+// investigation to shape is what put a stopwatch on a one-line question.
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
   let prompt = investigation
     ? INVESTIGATION_PROMPT + budgetLine(opts, true) + REPORT_PROTOCOL
@@ -65,9 +64,8 @@ export function buildInitialContext(
   alerts: NormalizedAlert[],
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
-  // What the delivery said about itself. Rendered rather than dropped: a group
-  // shown short has to say it is short, and one grouped on a label the agent
-  // cannot see reads as an arbitrary batch.
+  // Rendered rather than dropped: a group shown short has to say so, and one
+  // grouped on an unseen label reads as an arbitrary batch.
   delivery: DeliveryContext = { droppedAlerts: 0, groupContext: null },
 ): InitialContext {
   const { droppedAlerts, groupContext } = delivery;
@@ -129,9 +127,8 @@ function formatGroupContext(context: AlertGroupContext | null): string {
   return lines.length === 0 ? "" : `\n<group>\n${lines.join("\n")}\n</group>\n`;
 }
 
-// Rendered whenever any runner is connected: it carries the addresses the optional
-// `runner` parameter is drawn from. A key two runners advertise is marked so the model
-// learns it needs that parameter; which runner to pass comes from a list result.
+// Carries the addresses the optional `runner` parameter is drawn from. A key
+// two runners advertise is marked, so the model learns it needs that parameter.
 function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   if (!fleetView || fleetView.length === 0) return "";
 
@@ -190,9 +187,8 @@ function formatAnnotations(annotations: Record<string, string>): string {
   return `\nannotations:\n${entries.map(([k, v]) => `  ${k}: ${v}`).join("\n")}`;
 }
 
-// Match the alert's labels against the fleet: a resolved target names the key to act on;
-// ambiguous names the runners to choose between; unresolved hands the agent the raw labels
-// to match itself, never a guess. Every label is rendered below either way.
+// Resolved names the key to act on, ambiguous the runners to choose between,
+// unresolved the raw labels to match. Never a guess, and every label renders.
 function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
   const resolution = resolveAlertTarget(alert.labels, fleet);
   const targetLine =

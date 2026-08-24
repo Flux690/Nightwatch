@@ -7,9 +7,8 @@ import { buildSeed } from "../session/seed.js";
 import { logger } from "../logger.js";
 import { verifyRecovery } from "./recovery.js";
 
-/* An alert clears when its condition stops being true, rarely the instant a run
-   ends. Nothing here detects that a fix happened - a bash call may only have
-   read. It asks about every open condition, less and less often. */
+// Nothing here detects that a fix happened, since a bash call may only have
+// read. It asks about every open condition, less and less often.
 
 interface Step {
   // The oldest an alert can be for this step to apply.
@@ -19,9 +18,8 @@ interface Step {
 
 const MINUTE = 60_000;
 
-/* Dense while an incident is live, thin once it is clearly not resolving on its
-   own, and stopped after a day: past that nobody is watching this run, and the
-   webhook still answers instantly if the condition ever does clear. */
+// Stopped after a day: past that nobody is watching this run, and the webhook
+// still answers instantly if the condition ever does clear.
 const SCHEDULE: readonly Step[] = [
   { withinMs: 15 * MINUTE, everyMs: MINUTE },
   { withinMs: 75 * MINUTE, everyMs: 5 * MINUTE },
@@ -34,14 +32,12 @@ export const RECONCILE_TICK_MS = MINUTE;
 // past that the thing is not a blip.
 const MAX_RUN_RETRIES = 3;
 
-/* When each session was last asked about. In memory on purpose: a restart costs
-   one extra round of questions, which is the harmless direction, and the
-   alternative is a column that exists only to describe a schedule. */
+// In memory on purpose: a restart costs one extra round of questions, and the
+// alternative is a column that exists only to describe a schedule.
 const lastAsked = new Map<string, number>();
 
-/* Anchored on the session rather than the alert's firedAt: an alert firing for a
-   month is a brand new incident to an install that just ingested it, and firedAt
-   would retire it before the first question. */
+// Anchored on the session, not the alert's firedAt: an alert firing for a
+// month is new to an install that just ingested it.
 function watchingSince(sessionId: string): number {
   const created = getSession(sessionId)?.createdAt;
   return created === undefined ? Date.now() : new Date(created).getTime();
@@ -89,9 +85,8 @@ export async function reconcileRecovery(
   return result;
 }
 
-/* Rides this sweep rather than its own timer: the sessions worth retrying are
-   exactly the ones worth asking about. Never a permanent failure - a bad key or
-   a missing model fails identically every time. */
+// Rides this sweep: the sessions worth retrying are the ones worth asking
+// about. Never a permanent failure, which fails identically every time.
 function retryFailedRun(sessionId: string): boolean {
   const failure = runFailure(sessionId);
   if (failure === undefined) return false;

@@ -56,9 +56,8 @@ const COMPACTION_BETA = "compact-2026-01-12";
 // as the capability key on a model.
 const COMPACTION_ID = "compact_20260112";
 
-/* The share of the window at which to summarise. The one number we choose, and
-   a ratio rather than a count so it cannot drift per model: on a 200k window it
-   reproduces Anthropic's own documented default of 150,000 exactly. */
+// A ratio rather than a count, so it cannot drift per model: on a 200k window
+// it reproduces Anthropic's own documented default of 150,000 exactly.
 const COMPACTION_TRIGGER_RATIO = 0.75;
 
 // The API refuses a lower trigger, so a window too small for the ratio to clear
@@ -271,9 +270,8 @@ export class AnthropicProvider implements LLMProvider {
       throw err;
     }
 
-    /* At info: a run that dies on context is diagnosable without reproducing it.
-       The top-level counts exclude compaction, which is billed as its own
-       iteration, so summarising a turn would otherwise read as a cheap one. */
+    // The top-level counts exclude compaction, billed as its own iteration, so
+    // a summarised turn would otherwise read as a cheap one.
     const compactionTokens = (response.usage.iterations ?? [])
       .filter((it) => it.type === "compaction")
       .reduce((sum, it) => sum + it.input_tokens + it.output_tokens, 0);
@@ -434,9 +432,8 @@ export class AnthropicProvider implements LLMProvider {
   }
 }
 
-/* The turns a compaction block stood for are still in the transcript, so
-   dropping it costs the model a shortcut and not the conversation. Null when it
-   was the only block: an empty content array is itself rejected. */
+// The turns it stood for are still in the transcript, so dropping it costs a
+// shortcut and not the conversation. Null when it was the only block.
 function withoutCompaction(m: BetaMessageParam): BetaMessageParam | null {
   if (typeof m.content === "string") return m;
   const kept = m.content.filter((b) => b.type !== "compaction");
@@ -451,9 +448,8 @@ function toParts(m: BetaMessageParam): MessagePart[] {
   const parts: MessagePart[] = [];
   for (const b of m.content) {
     if (b.type === "text") parts.push({ type: "text", text: b.text });
-    // Null content is a compaction that produced no usable summary. It rides on
-    // in `native` as the no-op the server treats it as, but it is never drawn:
-    // a line saying the context was summarised where none was is a lie.
+    // A compaction that produced no summary. It rides on in `native` as the
+    // no-op the server treats it as, but saying so on screen would be a lie.
     else if (b.type === "compaction") {
       if (b.content != null) parts.push({ type: "compaction" });
     } else if (b.type === "thinking")
@@ -477,9 +473,8 @@ function toParts(m: BetaMessageParam): MessagePart[] {
   return parts;
 }
 
-// Rebuild from parts for a message another dialect wrote. Reasoning and
-// compaction are dropped: a thinking block without its signature is rejected,
-// and a compaction block belongs to a conversation the other provider never had.
+// Reasoning and compaction are dropped: a thinking block without its signature
+// is rejected, and a compaction belongs to a conversation this provider lacks.
 function toNativeMessage(m: ProviderMessage): BetaMessageParam {
   const blocks: Anthropic.Beta.BetaContentBlockParam[] = [];
   for (const part of m.parts) {

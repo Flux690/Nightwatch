@@ -1,6 +1,5 @@
-// The report domain service: the only place the record is written, and the owner
-// of the two rules that keep it honest - a citation is the id of the tool call
-// that produced it, and nothing recorded can be unrecorded.
+// The only place the record is written, and the owner of its two rules: a
+// citation is the id of the call that produced it, and nothing is unrecorded.
 
 import type {
   Conviction,
@@ -83,9 +82,8 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
   return entries;
 }
 
-// Citations kept only where they name a call this session made, so a fabricated
-// one stays unrenderable. Existence, not completion: the model may cite a call
-// from the same turn, whose result is persisted only once the turn ends.
+// Existence, not completion: the model may cite a call from the same turn,
+// whose result is persisted only once that turn ends.
 function knownCitations(
   sessionId: string,
   ids: string[],
@@ -135,9 +133,8 @@ function citedIds(report: Report): Set<string> {
   ]);
 }
 
-// In the order the calls happened, which is the order they are worth reading. A
-// citation whose call has not answered resolves to nothing: there is nothing to
-// quote. The outcome rides along - a cited miss and a cited crash differ.
+// A citation whose call never answered resolves to nothing. The outcome rides
+// along, because a cited miss and a cited crash differ.
 export function resolveEvidence(
   sessionId: string,
   report: Report,
@@ -180,9 +177,8 @@ function convictionOf(
   return sources.size >= 2 ? "corroborated" : "cited";
 }
 
-/* Every call a person was actually asked about, read from what was recorded at
-   the call. A name cannot answer this: a refused call carries the name of a
-   gated tool and reached no gate. An answered question is not a write. */
+// A name cannot answer this: a refused call carries the name of a gated tool
+// and reached no gate. An answered question is not a write.
 export function gatedCalls(sessionId: string): GatedCall[] {
   return ledgerIn(sessionId).flatMap((entry) => {
     const { humanDecision, toolOutcome } = entry;
@@ -241,15 +237,13 @@ export function isActionable(report: Report | null): boolean {
   );
 }
 
-// One named thing missing from the ledger, checked before the run is allowed to
-// write up. A list rather than a boolean so the completion request can name only
-// what is absent, and so a gap that survives a request can be logged as itself.
+// A list rather than a boolean, so the completion request can name only what
+// is absent and a surviving gap can be logged as itself.
 export type ReportGap =
   { kind: "empty_record" } | { kind: "unresolvable_citation"; ids: string[] };
 
-/* "I could not conclude, here is what I checked" is a complete record, and the
-   gate must never push a model past it. Two kinds, not four: a hypothesis is
-   recorded settled, and an uncited claim never reaches the record. */
+// Two kinds, not four: a hypothesis is recorded settled, and an uncited claim
+// never reaches the record at all.
 export function reportGaps(sessionId: string): ReportGap[] {
   const report = getReport(sessionId);
   const hypotheses = report?.hypotheses ?? [];
@@ -329,9 +323,8 @@ interface SubmitReportInput {
   recommendation: string;
 }
 
-// The report turn's one write. Citations are filtered the same way a
-// hypothesis's are, so a timeline entry cannot point at a call that never
-// happened. Written whole rather than appended: it is authored once.
+// Written whole rather than appended, because it is authored once. Citations
+// are filtered as a hypothesis's are, so no entry points at a call that never ran.
 export function submitReport(
   sessionId: string,
   input: SubmitReportInput,
@@ -347,9 +340,8 @@ export function submitReport(
     const toolUseId = byEvidenceId.get(id.trim()) ?? id;
     return known.has(toolUseId) ? toolUseId : undefined;
   };
-  // A citation naming no call is dropped and the entry kept, exactly as a
-  // hypothesis's is. The lane survives either way: it describes the moment, not
-  // the call, so an unresolvable id must not cost the row its strand.
+  // The entry is kept when its citation is dropped: the lane describes the
+  // moment rather than the call, so an unresolvable id must not cost it.
   const timeline = input.timeline.map((entry) => {
     const cited =
       entry.evidenceId === undefined ? undefined : resolve(entry.evidenceId);

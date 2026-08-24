@@ -3,9 +3,8 @@
 
 import type { HumanDecision, ToolOutcome } from "./messages.js";
 
-// How a hypothesis resolved. Five, because without a home for "symptom of
-// something upstream" the model must overclaim a root cause or say nothing. A
-// hypothesis is recorded once it has been tested, so there is no "open".
+// Five, because without a home for "symptom of something upstream" the model
+// must overclaim or say nothing. Recorded once tested, so there is no "open".
 export type Verdict =
   "root_cause" | "trigger" | "symptom" | "contributing_factor" | "disproven";
 
@@ -86,9 +85,8 @@ export interface TimelineEntry {
   };
 }
 
-// Written in one call at the end of a run, over a ledger that is already
-// complete. Nothing here restates the ledger: no verdicts, no hypotheses, no
-// re-copied citations. It is the prose the ledger has nowhere to put.
+// Written in one call over a complete ledger, and it restates none of it: this
+// is the prose the ledger has nowhere to put.
 export interface SubmittedReport {
   // One sentence, the whole answer. `summary` was doing headline and deck at
   // once and was good at neither. Empty on a report written before it existed.
@@ -114,9 +112,8 @@ export interface Report {
   updatedAt: string;
 }
 
-/* So the console looks a renderer up rather than sniffing the result's shape.
-   Declared on the tool, never guessed: a declaration cannot drift from what the
-   tool returns, a shape test can. Coarser than the renderers on purpose. */
+// Declared on the tool so the console looks a renderer up rather than sniffing
+// the result: a declaration cannot drift from what the tool returns.
 export type EvidenceKind =
   "metric" | "logs" | "change" | "state" | "diff" | "text";
 
@@ -128,9 +125,8 @@ export interface ResolvedEvidence {
   kind: EvidenceKind;
   input: Record<string, unknown>;
   result: string;
-  // Absent when the call answered. A cited miss is often the evidence itself -
-  // the file really is not there - while a cited crash proves nothing about the
-  // fleet, and the report must not read the two the same way.
+  // A cited miss is often the evidence itself, while a cited crash proves
+  // nothing: the report must not read the two the same way.
   toolOutcome?: ToolOutcome;
   // Present only where a person was asked. A cited call they declined never ran,
   // which is a different thing again from one that ran and found nothing.
@@ -141,9 +137,8 @@ export interface ResolvedEvidence {
 // set it. Keyed by hypothesis id; a row absent from it earned no conviction.
 export type ReportConviction = Record<string, Conviction>;
 
-// A gated call and what the user did with it, read back from the session's
-// own transcript. Who decided is not recorded: there is one user, and a
-// multi-tenant build gets the name from the session that approved it.
+// Who decided is not recorded: there is one user, and a multi-tenant build
+// would get the name from the session that approved it.
 export interface GatedCall {
   toolUseId: string;
   toolName: string;
