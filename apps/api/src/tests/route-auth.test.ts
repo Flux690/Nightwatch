@@ -19,13 +19,9 @@ import { registerWsRoutes } from "../fleet/server.js";
 import { mountApi } from "./api-server.js";
 import { useTempDb } from "./temp-db.js";
 
-/* One walk of the whole surface, replacing a 401 case per route file. Those
-   only ever covered the routes someone remembered to write one for; this covers
-   the route added tomorrow, and fails when a new one forgets its guard. */
-
-/* Public by design, and the only reason this list exists: a route not named
-   here has to refuse an anonymous caller. Each is public because it is how a
-   caller gets a credential, or because it verifies one of its own. */
+/* One walk of the whole surface, so the route added tomorrow is covered and a
+   missing guard fails here. A route not named below has to refuse an anonymous
+   caller; these are public because they hand out or verify a credential. */
 const PUBLIC: ReadonlyArray<{ route: string; why: string }> = [
   {
     route: "POST /api/setup",

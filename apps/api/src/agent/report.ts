@@ -1,3 +1,7 @@
+// The report domain service: the only place the record is written, and the owner
+// of the two rules that keep it honest - a citation is the id of the tool call
+// that produced it, and nothing recorded can be unrecorded.
+
 import type {
   Conviction,
   GatedCall,
@@ -17,10 +21,6 @@ import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
 import { evidenceKind, evidenceSource } from "./evidence-source.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
-
-// The report domain service: the only place the record is written, and the owner
-// of the two rules that keep it honest - a citation is the id of the tool call
-// that produced it, and nothing recorded can be unrecorded.
 
 // What a recording tool tells the model. A refusal is a correction, not a fault:
 // the act was rejected and the message says what to do instead.

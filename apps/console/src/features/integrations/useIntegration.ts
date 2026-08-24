@@ -11,10 +11,8 @@ export function connectMessage(err: unknown): string {
   return err instanceof ApiError ? err.message : "Could not reach the API";
 }
 
-/* Disconnecting is the one step every integration performs identically: drop
-   the credential, say so, drop the cached status, and leave for the list the
-   connection is no longer on. Connecting is not here, because each product
-   asks for different fields and a shared shape would only hide that. */
+// The one step every integration performs identically. Connecting is not here:
+// each product asks for different fields, and a shared shape would hide that.
 export function useDisconnect<TVars = void>({
   label,
   queryKey,

@@ -186,11 +186,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
         { label: title },
       ]}
       measure="none"
-      /* The menu acts on the investigation, so it sits after its name rather
-         than at the far edge: the crumb truncates at its own ceiling and the
-         menu follows wherever the name ends, sliding left for a short title. */
       /* One bar, so the rail's edge runs the full height of the stage. The menu
-         sits against the name because it acts on the record; the stepper and the
+         sits against the name because it acts on the record; the stepper and
          rail toggle are right-aligned because they do not. */
       beside={
         <>

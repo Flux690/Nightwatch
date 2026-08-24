@@ -1,3 +1,7 @@
+/* Three axes, one meaning each. Size is level, weight is semibold for a heading
+   alone, and colour says what a thing is rather than how loud: prose takes full
+   ink wherever it sits, and muted is for labels, counts, captions and lines. */
+
 import type {
   Conviction,
   GatedCall,
@@ -16,10 +20,6 @@ import { StatusText, type StatusTone } from "@/shared/ui/status";
 import { clock, elapsed, zoneName } from "@/shared/lib/time";
 import { CitationChip } from "./CitationChip.js";
 import { Evidence } from "./Evidence.js";
-
-/* Three axes, one meaning each. Size is level, weight is semibold for a heading
-   alone, and colour says what a thing is rather than how loud: prose takes full
-   ink wherever it sits, and muted is for labels, counts, captions and lines. */
 
 // Colour marks the two verdicts that change what a user does next. The other
 // standing verdicts take full ink; only what the run discarded is muted.

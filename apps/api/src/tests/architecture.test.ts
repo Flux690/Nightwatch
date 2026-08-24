@@ -38,10 +38,8 @@ function resolveImport(from: string, spec: string): string {
   return relative(SRC, abs).split(sep).join("/");
 }
 
-/* Two kinds of file sit at the root and only one may look down. Infrastructure
-   is the process itself - the database handle, the logger, the key, the paths -
-   and every module stands on it. The composition root wires those modules
-   together, so of course it reaches them; that is the whole of its job. */
+// Two kinds of root file, and only the composition root may look down: wiring
+// the modules together is its whole job, while infrastructure is stood on.
 const INFRASTRUCTURE = [
   "db.ts",
   "logger.ts",

@@ -725,11 +725,8 @@ describe("the investigation record", () => {
       );
     });
 
-    // The clock a confirmation is measured against is the write itself, read
-    // from the ledger: a gated call that answered is one the user released.
-    /* A gated write the user was asked about. Which way they went is recorded on
-       the result, because nothing else can say it: the tool's name is the same
-       whether a person released the call or the harness refused to offer it. */
+    // Which way the user went is recorded on the result, because nothing else
+    // can say it: a refused call carries the same tool name as a released one.
     function appendRestart(
       sessionId: string,
       seq: number,
@@ -1261,12 +1258,8 @@ describe("the investigation record", () => {
       expect(reportRequests()).toHaveLength(1);
     });
 
-    /* The same loop entered again, not a second way to make a report. The
-       sentence that re-enters is NightWarden's, so a reader who pressed a button
-       is never shown words in their own voice that they did not write. */
-    /* A follow-up writes over the same column, so the request has to carry what
-       is being replaced. Without it the model rewrites from a context that may
-       since have been compacted. */
+    // A follow-up writes over the same column, so the request carries what it
+    // replaces: without it the model rewrites from a possibly compacted context.
     it("shows a second run the report it is replacing, as its own prior work", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>

@@ -1,3 +1,7 @@
+// Thin adapters over the report domain service. RecordHypothesis is offered only
+// to a session under investigation; SubmitInvestigationReport only on the
+// report turn, which is the loop's business rather than the toolset's.
+
 import { z } from "zod";
 import {
   RECORD_HYPOTHESIS_SCHEMA,
@@ -9,10 +13,6 @@ import {
   type RecordOutcome,
 } from "../report.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
-
-// Thin adapters over the report domain service. RecordHypothesis is offered only
-// to a session under investigation; SubmitInvestigationReport only on the
-// report turn, which is the loop's business rather than the toolset's.
 
 // Prose the record cannot do without. A blank one is the model skipping the
 // field, which stores a row nobody can read.

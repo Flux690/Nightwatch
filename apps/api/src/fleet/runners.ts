@@ -118,7 +118,6 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
   };
 }
 
-// Validate a plaintext token: hash it and look up.
 export function findRunnerByToken(plaintext: string): RunnerRow | undefined {
   const raw = getDb()
     .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE token = ?`)
@@ -133,7 +132,6 @@ export function touchLastUsed(id: string): void {
     .run(new Date().toISOString(), id);
 }
 
-// Delete a runner record by id (hard delete — no tombstone). Returns false if not found.
 export function deleteRunner(id: string): boolean {
   const result = getDb().prepare(`DELETE FROM runner WHERE id = ?`).run(id);
   return result.changes > 0;

@@ -91,7 +91,6 @@ function SidebarProvider({
       : setOpen((open) => !open);
   }, [isOverlay, setOpen, setOpenOverlay]);
 
-  // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (

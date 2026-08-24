@@ -8,8 +8,6 @@ import { getDb } from "../db.js";
 import { alertsFor, alertsForMany, QUEUED } from "./alerts-store.js";
 import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 
-// The session row itself, and the page the console lists.
-
 // The alerts are the durable source of severity-dependent behavior on resume, so
 // a run that no longer carries them in its job can recover them from here.
 type StoredSession = SessionMeta & {
@@ -36,10 +34,9 @@ export function createSession(meta: SessionMeta, investigation = false): void {
     });
 }
 
-/* One delivery's alerts, durable the moment we answer it 200 and before anything
-   decides whether a seat is free. Owned by no session yet: what makes them one
-   prospective investigation is the group key Alertmanager sent, not our timing. */
-
+/* Creates the session and takes the group's queued alerts in one transaction. A
+   crash between the two would otherwise leave alerts pointing at a session
+   nothing wrote, or a session covering nothing. */
 export function openSessionForGroup(meta: SessionMeta, groupKey: string): void {
   const db = getDb();
   const insertSession = db.prepare(INSERT_SESSION);
@@ -190,10 +187,6 @@ export function countInvestigations(): number {
     .get() as { total: number };
   return row.total;
 }
-
-/* The conditional UPDATE is the whole mutex: two racing dispatches both attempt
-   it and one changes a row. Claimable from 'suspended' too, which is a session
-   resuming on the seat it already held. Only 'running' refuses. */
 
 // Whether the row is there, for callers that only need it to exist. Kept apart
 // from getSession so an existence check never pays for the alerts.

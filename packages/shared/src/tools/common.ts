@@ -1,8 +1,5 @@
-// Vocabulary both platforms share. Everything that describes a container or a
-// workload lives in docker.ts or kubernetes.ts; only what is genuinely common to
-// both is here, so no type has to branch on platform.
-
-// Approval vocabulary: what a write tool declares about the change it wants.
+// Vocabulary both platforms share, so no type has to branch on platform.
+// Anything describing a container or workload lives in its own file.
 export type RiskLevel = "low" | "medium" | "high";
 
 // An identity that resolved to nothing actionable. Propagated verbatim, so "not

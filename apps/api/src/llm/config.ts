@@ -1,4 +1,6 @@
-// Stands in only for models whose catalog publishes no ceiling of their own.
+// These seed the global Config row; the loop reads effective values from the
+// config, never from here. MAX_OUTPUT_TOKENS stands in only for models whose
+// catalog publishes no ceiling of their own.
 export const MAX_OUTPUT_TOKENS = 32_000;
 
 // guards truly stalled connections; SDK default is 10 min, streaming keeps normal turns well clear
@@ -12,8 +14,6 @@ export const MAX_RETRIES = 3;
 export function retryDelaysMs(retries: number): number[] {
   return Array.from({ length: Math.max(0, retries) }, (_, i) => 5_000 * 3 ** i);
 }
-
-// seeds the global Config row; loop reads effective values from config, not these constants
 
 // How many investigations may be in flight at once, counting the suspended ones:
 // a run waiting on an approval still holds its seat, because freeing it starts

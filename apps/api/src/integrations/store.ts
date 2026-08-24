@@ -169,8 +169,6 @@ export function touchIntegration(id: string, at: string): void {
     .run(at, id);
 }
 
-// --- GitHub -----------------------------------------------------------------
-
 const GITHUB = "github";
 
 interface GitHubConfig {
@@ -245,8 +243,6 @@ export function updateGitHubIntegrationRepo(
 export function deleteGitHubIntegration(): void {
   deleteIntegrationsOfKind(GITHUB);
 }
-
-// --- Loki -------------------------------------------------------------------
 
 const LOKI = "loki";
 

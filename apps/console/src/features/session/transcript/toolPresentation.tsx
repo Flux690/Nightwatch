@@ -1,3 +1,7 @@
+/* One row shape for every tool: name, target, the finding, and a chevron. The
+   row carries the answer so the common case needs no click, and expansion is a
+   thread line: at rail width a box per tool buries the conversation. */
+
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/shared/lib/iconProps";
@@ -22,10 +26,6 @@ import type {
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
-
-/* One row shape for every tool: name, target, the finding, and a chevron. The
-   row carries the answer so the common case needs no click, and expansion is a
-   thread line: at rail width a box per tool buries the conversation. */
 
 // Beyond this the body scrolls behind an explicit opt-in. The runner already
 // caps its output at 64KB for safety; this is the separate, much tighter cap

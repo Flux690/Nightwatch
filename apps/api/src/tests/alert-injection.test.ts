@@ -344,8 +344,7 @@ describe("mid-run alert injection (loop seam)", () => {
     });
     setRunnerManifest(runnerId, webOneManifest());
     // Sync the DB mode into the connection cache, as reconciliation would.
-
-    // R1: gated tool → run suspends. R2 (resume): free-form finish.
+    // R1: gated tool suspends the run; R2 resumes to a free-form finish.
     queueRuns(
       [
         {

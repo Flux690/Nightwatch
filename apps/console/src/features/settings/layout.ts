@@ -1,9 +1,6 @@
-// One width per kind of control, applied to the control itself rather than a
-// wrapper: a shared right edge is what makes a column of mixed controls read as
-// ordered. A pick-from control is absent because it hugs its own option.
-//
-// One `w-` class and no more: tailwind-merge cannot tell that `w-control` is a
-// width, so a second one beside it survives and source order decides.
+// One `w-` class per control, on the control rather than a wrapper: a shared
+// right edge is what orders a column, and tailwind-merge cannot dedupe two
+// because it does not know `w-control` is a width.
 export const CONTROL = {
   // Beside a label rather than above it, so content cannot set the width.
   text: "w-control",

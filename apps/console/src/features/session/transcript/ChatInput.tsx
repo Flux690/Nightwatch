@@ -181,13 +181,9 @@ export function ChatInput({
           align="block-end"
           className="justify-between gap-2 px-2 pb-2"
         >
-          {/* Cobalt, and the only lit thing on the bar besides send: it changes
-              what the run will be, so it reads as a decision rather than as a
-              setting. Gone once the session exists - by then it is answered.
-
-              px-2 against the addon's own px-2 puts its first letter on 16px,
-              which is where the textarea's px-4 starts the placeholder above it:
-              the two read as one left edge rather than as a near miss. */}
+          {/* Lit because it changes what the run will be, so it reads as a
+              decision rather than a setting. px-2 against the addon's own puts
+              its first letter on the textarea's px-4 left edge. */}
           {sessionId === null ? (
             <DropdownMenu>
               <DropdownMenuTrigger

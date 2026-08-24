@@ -1,9 +1,6 @@
-/* Every tool the build declares, in one list both ends compile against. The
-   console decides what to draw by comparing a name, and until this existed a
-   rename on the API side changed its behaviour with nothing failing. */
-
-/* Everything a Docker runner must be able to serve. Host tools are here because
-   a Docker host is one machine, so its own vitals are that runner's to answer. */
+/* Every tool the build declares, in one list both ends compile against: the
+   console draws by comparing a name, so a rename used to change its behaviour
+   with nothing failing. Host tools sit here - a Docker host is one machine. */
 export const DOCKER_TOOL_NAMES = [
   "ListDockerServices",
   "GetDockerLogs",

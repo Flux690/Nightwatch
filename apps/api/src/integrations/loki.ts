@@ -271,7 +271,7 @@ export async function labelValues(
   return stringList(await readData(res));
 }
 
-// Returns the label sets of streams matching a selector - lets the agent narrow
+// The label sets of streams matching a selector, so the agent can narrow
 // discovery once it knows one label (e.g. match[]={namespace="shop"}).
 export async function series(
   baseUrl: string,

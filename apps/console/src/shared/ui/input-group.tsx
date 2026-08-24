@@ -64,10 +64,8 @@ function InputGroupAddon({
   );
 }
 
-/* The one place a 24px control is right, which is why the Button no longer
-   carries that rung: a control sitting inside a 32px field cannot be 32px
-   itself. `icon` and `default` are the Button's own two, for a composer whose
-   box is as tall as its content and whose actions are the field's own. */
+// The one place a 24px control is right, which is why Button no longer carries
+// that rung: a control inside a 32px field cannot be 32px itself.
 const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm", {
   variants: {
     size: {

@@ -188,12 +188,8 @@ function maxCompletionTokens(
   return typeof contextLength === "number" && max >= contextLength ? null : max;
 }
 
-// OpenRouter speaks the OpenAI chat-completions wire format, so the `openai`
-// npm package is the transport OpenRouter itself recommends. Everything else
-// here is OpenRouter's own dialect, not a generic compatibility shim.
-/* The OpenAI family requires every property in `required` under strict, with an
-   optional one typed as a union with null. Anthropic has no such rule, so the
-   schemas are written the honest way and bent here. */
+// Strict mode requires every property in `required`, an optional one typed as
+// a union with null. Anthropic has no such rule, so the schemas are bent here.
 function openAIStrictSchema(
   schema: ToolSchema["input_schema"],
 ): Record<string, unknown> {

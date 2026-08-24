@@ -1,3 +1,7 @@
+/* The raised form of a call that cannot run until a person says so, drawn only
+   while that is true. Not pinned: a write gates one tool rather than the run,
+   so it stays where it happened. */
+
 import { useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { CodeBlock } from "@/shared/ui/code-block";
@@ -7,10 +11,6 @@ import type { ToolCallItem } from "./types.js";
 import { SHELL_TOOLS } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
 import { InterruptCard } from "./InterruptCard.js";
-
-/* The raised form of a call that cannot run until a person says so, drawn only
-   while that is true. Not pinned: a write gates one tool rather than the run,
-   so it stays where it happened. */
 
 // Shared by both halves of the exchange so neither can be styled as the louder one.
 const EXCHANGE_LABEL_CLASS = "text-sm text-ink-subtle";

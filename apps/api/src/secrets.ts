@@ -66,8 +66,7 @@ export function decrypt(stored: string): string {
   );
 }
 
-// Returns a display-safe representation: "sk-...XXXX" (last 4 chars only).
-// Callers must never pass encrypted blobs here — only plaintext keys.
+// Never pass an encrypted blob here, only a plaintext key.
 export function maskKey(plaintext: string): string {
   const suffix = plaintext.slice(-4);
   return `sk-...${suffix}`;

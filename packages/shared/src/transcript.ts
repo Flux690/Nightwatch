@@ -1,9 +1,9 @@
-import type { ApprovalStatus } from "./approvals.js";
-import type { ToolOutcome } from "./messages.js";
-
 // What the console renders, built server-side from the stored transcript joined
 // with whatever the session is suspended on. The browser draws these; it never
 // works out what state a tool call is in.
+
+import type { ApprovalStatus } from "./approvals.js";
+import type { ToolOutcome } from "./messages.js";
 
 /* What a suspended call needs from a person, named as the gate names it so there
    is one vocabulary. It lives on the one phase where it means anything, so it

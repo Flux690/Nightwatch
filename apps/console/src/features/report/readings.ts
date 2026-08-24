@@ -1,11 +1,11 @@
+/* What a cited result holds, read from its shape rather than its tool name. A
+   tool that answers something else reads as nothing, and the caller falls back
+   to its one-line reading. */
+
 import { asRecord, numberAt, stringAt } from "@/shared/lib/toolResult";
 import { compact } from "./format.js";
 import { dayClock } from "@/shared/lib/time";
 import { formatBytes } from "@/features/session/transcript/toolFindings";
-
-/* What a cited result holds, read from its shape rather than its tool name. A
-   tool that answers something else reads as nothing, and the caller falls back
-   to its one-line reading. */
 
 // One runner's answer inside a fan-out, or the result itself when there is no
 // envelope. A fleet tool is enveloped even for a single runner.

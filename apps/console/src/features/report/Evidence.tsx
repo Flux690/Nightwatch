@@ -1,3 +1,7 @@
+/* What a cited call is drawn as comes from the kind its tool declares, never
+   from guessing at the result's shape. A kind that finds nothing it can draw
+   renders nothing, and the one-line reading above stands as the whole answer. */
+
 import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
 import { resultSummary } from "@/features/session/transcript/toolPresentation";
@@ -20,10 +24,6 @@ import {
   stateGroups,
   type ReadingGroup,
 } from "./readings.js";
-
-/* What a cited call is drawn as comes from the kind its tool declares, never
-   from guessing at the result's shape. A kind that finds nothing it can draw
-   renders nothing, and the one-line reading above stands as the whole answer. */
 
 // Enough to see what the edit did. The whole change is one click away, and the
 // report is not where a file is reviewed.

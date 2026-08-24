@@ -1,8 +1,8 @@
 import { getDb } from "../db.js";
 
-// One run's lifecycle. The row is the mutex as well as the state, so a claim is
-// a conditional UPDATE and anything left running at boot was killed.
-
+/* The conditional UPDATE is the whole mutex: two racing dispatches both attempt
+   it and one changes a row. Claimable from 'suspended' too, which is a session
+   resuming on the seat it already held. Only 'running' refuses. */
 export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
@@ -110,6 +110,9 @@ export function countSeats(investigation: boolean): number {
   return row.taken;
 }
 
+/* Read at boot to find the ones parked on nobody: approving deletes the interrupt
+   row before the resume claims the run, so a crash in that gap leaves a session
+   suspended forever, holding a seat. */
 export function suspendedSessionIds(): string[] {
   const rows = getDb()
     .prepare(

@@ -247,11 +247,8 @@ export function GitHubConnectPage(): React.JSX.Element {
   const [error, setError] = useState<unknown>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  /* Sandbox prerequisites on the API host, asked the moment the page opens so
-     setup fails loudly here rather than at 3am mid-incident. Advisory only: a
-     preflight that cannot be reached must never block onboarding. Asked once
-     and never again, because it is a POST and the default would repeat it every
-     time the window regained focus. */
+  // Advisory only, and asked once: it is a POST, so the default would repeat
+  // it on every window focus, and an unreachable preflight must not block setup.
   const preflight = useQuery({
     queryKey: ["github-preflight"],
     queryFn: () =>
@@ -381,11 +378,8 @@ export function GitHubConnectPage(): React.JSX.Element {
     endpoint: () => "/api/integrations/github",
   });
 
-  /* Management mode always shows the live combobox, pre-selected to the current
-     binding, so reaching it costs no extra click. Never while a typed token is
-     in the box: a token that failed to validate clears the list, and reloading
-     from the stored credential would wipe the error the user has to read.
-     `mutate` is stable, so every dependency named here is a real one. */
+  // Never while a typed token is in the box: reloading from the stored
+  // credential would wipe the validation error the user still has to read.
   const runLoadRepos = loadRepos.mutate;
   useEffect(() => {
     if (configured && repos === null && !usingFreshToken) runLoadRepos();

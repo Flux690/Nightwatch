@@ -1,9 +1,6 @@
-// A tool result arrives as a JSON string on the transcript wire and as an object
-// on a live card, and every reader wants the same answer from it: an object, or
-// nothing. One place asks that question, so a malformed result is handled once.
-
-// The only assertion: JSON.parse returns `any`, and the checks above it are what
-// make this narrowing true.
+// A tool result is a JSON string on the wire and an object on a live card, so
+// one place asks the question and a malformed result is handled once. The lone
+// assertion below stands because JSON.parse returns `any`.
 export function asRecord(value: unknown): Record<string, unknown> | null {
   let parsed = value;
   if (typeof parsed === "string") {

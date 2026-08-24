@@ -132,7 +132,6 @@ export function listRunners(): RunnerView[] {
 }
 
 // Every runner whose manifest arrived, with its advertised service identities.
-// Used by the agent, the ingest resolver, and the console fleet page.
 export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];

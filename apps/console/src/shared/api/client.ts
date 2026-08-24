@@ -5,10 +5,8 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    /* The whole parsed failure body, not only the text lifted out of it. A
-       route that answers with a code the caller must branch on needs the fields
-       beside `error`, and reaching them through a second fetch wrapper is how
-       the console ended up with two. */
+    // The whole parsed body, not only the text lifted out of it: a caller that
+    // must branch on a code needs the fields beside `error`.
     public readonly body: unknown = undefined,
   ) {
     super(message);

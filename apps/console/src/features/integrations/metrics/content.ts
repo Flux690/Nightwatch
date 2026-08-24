@@ -1,7 +1,7 @@
-import type { MetricsSourceKind } from "@nightwarden/shared";
-
 /* Only text and which fields apply differ between sources. Connecting, probing
    and disconnecting are one code path serving every kind. */
+
+import type { MetricsSourceKind } from "@nightwarden/shared";
 
 /* One credential reaches the source, never two: the API returns the header and
    discards the basic pair when both are sent, so offering both at once would

@@ -1,9 +1,9 @@
-import { loadConfig } from "./config/store.js";
-import { countSeats } from "./session/run-state.js";
-
 /* Two pools, because what starts them differs: an alert storm can produce fifty
    runs in a minute, chats are human-initiated and self-limiting. What binds is
    token spend and better-sqlite3 being synchronous, and both scale with runs. */
+
+import { loadConfig } from "./config/store.js";
+import { countSeats } from "./session/run-state.js";
 
 // A backstop rather than a usage limit, which is why it is a constant and the
 // investigation limit is a setting: reaching it means something is very wrong.

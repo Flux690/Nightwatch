@@ -79,11 +79,8 @@ export interface LLMProvider {
   seed(history: ProviderMessage[]): void;
   // Current conversation in neutral form, for incremental persistence.
   snapshot(): ProviderMessage[];
-  // onDelta, when provided, receives live fragments as the turn streams; signal, when
-  // provided, aborts the in-flight request when the run is stopped.
-  /* `forceTool` names the one tool this turn must call. Every provider enforces
-     it by prefilling the assistant message, so the turn cannot come back as
-     prose. Used on the report turn. */
+  // `forceTool` is enforced by prefilling the assistant message, so the turn
+  // cannot come back as prose. The report turn depends on that.
   chat(
     tools: ToolSchema[],
     onDelta?: OnDelta,

@@ -1,8 +1,8 @@
-import { AwsClient } from "aws4fetch";
-import type { AmpCredential } from "@nightwarden/shared";
-
 // aws4fetch signs a plain fetch Request directly, fitting metricsFetch's
 // raw-fetch style without an AWS SDK dependency tree.
+
+import { AwsClient } from "aws4fetch";
+import type { AmpCredential } from "@nightwarden/shared";
 
 // AMP's own SigV4 service identifier, for both its query and rules APIs.
 const AMP_SERVICE = "aps";

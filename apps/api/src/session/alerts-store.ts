@@ -41,6 +41,9 @@ function alertParams(
   };
 }
 
+/* One delivery's alerts, durable the moment we answer it 200 and before anything
+   decides whether a seat is free. Owned by no session yet: what makes them one
+   prospective investigation is the group key Alertmanager sent, not our timing. */
 export function enqueueAlerts(
   groupKey: string,
   alerts: NormalizedAlert[],
@@ -174,10 +177,6 @@ export function oldestQueuedGroup(): QueuedGroup | undefined {
   return alerts.length === 0 ? undefined : { groupKey: head.groupKey, alerts };
 }
 
-/* Creates the session and takes the group's queued alerts in one transaction. A
-   crash between the two would otherwise leave alerts pointing at a session
-   nothing wrote, or a session covering nothing. */
-
 // What the console's queue band reports: how many alerts are waiting, and how
 // long the one at the front has been waiting.
 export function queueDepth(): {
@@ -276,7 +275,3 @@ export function sessionIdsWithOpenAlerts(): string[] {
     .all() as Array<{ sessionId: string }>;
   return rows.map((r) => r.sessionId);
 }
-
-/* Read at boot to find the ones parked on nobody: approving deletes the interrupt
-   row before the resume claims the run, so a crash in that gap leaves a session
-   suspended forever, holding a seat. */

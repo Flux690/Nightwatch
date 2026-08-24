@@ -778,10 +778,8 @@ describe("widths", () => {
 });
 
 describe("colour", () => {
-  /* Tailwind emits nothing at all for a class whose token is missing, so a
-     colour that does not exist fails silently: the element simply inherits and
-     nobody sees a build error. Every other namespace here is guarded; this is
-     the one that renders the page. */
+  // Tailwind emits nothing for a class whose token is missing, so a colour
+  // that does not exist fails silently: the element just inherits, no error.
   it("paints only with colours the sheet declares", () => {
     const declared = new Set(
       [...css.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1] ?? ""),
@@ -980,12 +978,9 @@ describe("spacing", () => {
   });
 });
 
-/* The system is a set of departures or it is a set of colours that happen to
-   look right. Everything above measures it at the base it ships with, which
-   cannot tell the two apart: a literal is correct there by construction. So
-   run the load-bearing relationships again on a base sharing no lightness, no
-   chroma and no hue with ours, plus an unrelated accent. Every value that is
-   really a departure survives; every value that is really a constant does not. */
+/* Measured at the shipping base a literal is correct by construction, so that
+   base cannot tell a departure from a colour that happens to look right. Run
+   the load-bearing relationships again on a base sharing nothing with ours. */
 describe("on a base it has never been shown", () => {
   const OTHER = {
     "base-l": "7",

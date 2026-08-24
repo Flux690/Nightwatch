@@ -29,10 +29,9 @@ const MODULES = modules(SRC);
 const imports = (text: string): string[] =>
   [...text.matchAll(/from "(@\/[^"]+)"/g)].map((m) => m[1] ?? "");
 
-/* The console is grouped by the feature a file serves, not by what kind of file
-   it is. That only holds while the arrows point one way: app composes features,
-   features stand on shared, and shared knows about neither. Every duplicate and
-   misplacement this layout replaced began as one import going the other way. */
+/* Grouped by the feature a file serves, which holds only while the arrows point
+   one way: app composes features, features stand on shared, shared knows
+   neither. Every misplacement this replaced began as one import going back. */
 describe("layering", () => {
   it("keeps shared ignorant of the features standing on it", () => {
     for (const [path, text] of MODULES) {
