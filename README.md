@@ -507,6 +507,7 @@ Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider*
 | `NIGHTWARDEN_DIR`                     | no       | Absolute path to the directory holding all durable state: `nightwarden.db`, `secret.key`, the per-session GitHub sandbox `workspaces/`, and the generated egress-proxy config `proxy/`. Defaults to `~/.nightwarden`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts.                                                                                                                                        |
 | `SECRET_KEY`                          | no       | AES-256-GCM key that signs owner sessions and encrypts every credential stored at rest: provider API keys, integration tokens, and the fleet ingest token. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file in `NIGHTWARDEN_DIR`, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes those credentials unrecoverable, so each reads back as unset. Set this explicitly if you want to manage the value yourself. |
 | `LOG_LEVEL`                           | no       | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`).                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `CONSOLE_DIST`                        | no       | Directory holding the built console. The build embeds it beside the API bundle and that is where the API looks, so this is an override for running the bundle from an unusual layout, not something an install sets. With no build there and `NODE_ENV=production`, the API refuses to boot rather than serving an API that 404s every browser.                                                                                                                                                                                          |
 | `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`     | no       | Image the console's Docker-host install command hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-docker-runner:latest`; override it to pin a tag or to serve the image from a private registry.                                                                                                                                                                                                                                                                                                                                 |
 | `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` | no       | Image the console's Kubernetes manifest hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-kubernetes-runner:latest`.                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `PROMETHEUS_URL`                      | no       | Seeds a Prometheus metrics source on first boot only, so a fresh install comes up configured without opening a browser. Probed before it saves; an address that does not answer is logged and left unconfigured. Prometheus serves its own rules, so the seeded source uses this address for both.                                                                                                                                                                                                                                       |
@@ -612,23 +613,24 @@ There is no variable naming the platform. A runner is a Docker runner or a Kuber
 
 To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/api/alerts/ingest` endpoint, which drives an investigation end to end on your machine.
 
-Three checks gate every change, across every package:
+Four checks gate every change, across every package:
 
 ```bash
 pnpm typecheck
 pnpm test
 pnpm format:check   # pnpm format fixes what it reports
+pnpm build
 ```
 
-These are exactly what CI runs. `.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request, and `publish-images.yml` calls the same one on every push to `main` before it pushes anything to the registry, so a release can never clear a lower bar than a pull request. `pnpm test` is a single run over every workspace, so one command reports the whole repo; a package can still be run on its own with `pnpm --filter @nightwarden/<package> test`.
+These are exactly what CI runs. `.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request, and `publish-images.yml` calls the same one on every push to `main` before it pushes anything to the registry, so a release can never clear a lower bar than a pull request. `pnpm test` is a single run over every workspace, so one command reports the whole repo; a package can still be run on its own with `pnpm --filter @nightwarden/<package> test`. `pnpm build` is in the list because a tree that type-checks can still fail to produce an artifact, and finding that out on the push to `main` is finding it out after review.
 
-A production build (compiled output for deployment) is available with:
+`pnpm build` produces exactly what the image ships:
 
 ```bash
 pnpm build
 ```
 
-`@nightwarden/shared` and `@nightwarden/runner-transport` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
+`@nightwarden/shared` and `@nightwarden/runner-transport` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so a megabyte of JavaScript ships as a quarter of that with no per-request work. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
 
 ### Monorepo layout
 
@@ -644,7 +646,6 @@ apps/
       alerts/           alert ingest, dedup, and routing a delivery to its group
       auth/             owner password, runner token minting, fleet ingest credential
       config/           user settings: the config store, its routes, health and the run-readiness gate
-      console/          serves the built console beside the API bundle, with an SPA fallback
       db/               SQLite schema and table modules (FKs on, no migrations)
                         integrations.ts holds every configured connection in one table
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
@@ -660,6 +661,7 @@ apps/
       verification/     whether an alert's condition has actually cleared: the reconciler's
                         schedule, and sources/ for each way of asking
       ws/               runner registry/routing, command transport
+      console.ts        serves the console the build embedded beside the bundle, with an SPA fallback
       dispatcher.ts     single entry point for every investigation, and the run pool's promotions
       run-pool.ts       how many runs may be in flight, counted per pool from the session rows
       logger.ts         the process logger

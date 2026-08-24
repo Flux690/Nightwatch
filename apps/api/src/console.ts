@@ -29,7 +29,16 @@ export async function registerConsoleRoutes(
 ): Promise<void> {
   const root = consoleDist();
   if (!existsSync(join(root, "index.html"))) {
-    logger.info({ root }, "no console build found, serving API only");
+    // The build embeds the console, so in production its absence is a broken
+    // image or a mount over dist - serving API-only 404s every browser instead.
+    if (process.env["NODE_ENV"] === "production") {
+      logger.error(
+        { root },
+        "no console build at this path - refusing to boot",
+      );
+      process.exit(1);
+    }
+    logger.info("no console build found, serving API only");
     return;
   }
 

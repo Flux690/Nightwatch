@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { brotliCompress } from "node:zlib";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { registerConsoleRoutes } from "../console.js";
 
 const compress = promisify(brotliCompress);
@@ -120,6 +128,47 @@ describe("console static serving", () => {
       const res = await server.inject({ method: "POST", url: "/sessions" });
 
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe("a missing build", () => {
+    afterEach(() => {
+      vi.stubEnv("CONSOLE_DIST", root);
+      vi.stubEnv("NODE_ENV", "test");
+    });
+
+    // process.exit never returns, so a stub that does needs the cast.
+    function stubExit() {
+      return vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+    }
+
+    it("serves the API alone in development, where Vite is serving the console", async () => {
+      vi.stubEnv("CONSOLE_DIST", join(root, "absent"));
+      const exit = stubExit();
+      const bare = Fastify();
+
+      await registerConsoleRoutes(bare);
+      await bare.ready();
+
+      expect(exit).not.toHaveBeenCalled();
+      expect((await bare.inject("/")).statusCode).toBe(404);
+      exit.mockRestore();
+      await bare.close();
+    });
+
+    it("refuses to boot in production, where the image always carries the console", async () => {
+      vi.stubEnv("CONSOLE_DIST", join(root, "absent"));
+      vi.stubEnv("NODE_ENV", "production");
+      const exit = stubExit();
+      const bare = Fastify();
+
+      await registerConsoleRoutes(bare);
+
+      expect(exit).toHaveBeenCalledWith(1);
+      exit.mockRestore();
+      await bare.close();
     });
   });
 });
