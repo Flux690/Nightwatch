@@ -137,12 +137,25 @@ function slots(value: string): string[] | null {
 const GROUNDS = ["ground", "stage", "surface", "card", "popover"] as const;
 type Ground = (typeof GROUNDS)[number];
 
+/* Inputs swapped in for the duration of one block, so the same assertions can
+   be run against a base and an accent this sheet has never been shown. */
+let palette = new Map<string, string>();
+function onPalette(inputs: Record<string, string>, run: () => void): void {
+  palette = new Map(Object.entries(inputs));
+  try {
+    run();
+  } finally {
+    palette = new Map();
+  }
+}
+
 function envFor(ground: Ground): Map<string, string> {
   const env = new Map(declarations);
   for (const name of ["ground-l", "ground-c"]) {
     const override = groundOverrides.get(`${ground}:${name}`);
     if (override !== undefined) env.set(name, override);
   }
+  for (const [name, value] of palette) env.set(name, value);
   return env;
 }
 
@@ -937,4 +950,141 @@ describe("spacing", () => {
       "spacing",
     );
   });
+});
+
+/* The system is a set of departures or it is a set of colours that happen to
+   look right. Everything above measures it at the base it ships with, which
+   cannot tell the two apart: a literal is correct there by construction. So
+   run the load-bearing relationships again on a base sharing no lightness, no
+   chroma and no hue with ours, plus an unrelated accent. Every value that is
+   really a departure survives; every value that is really a constant does not. */
+describe("on a base it has never been shown", () => {
+  const OTHER = {
+    "base-l": "7",
+    "base-c": "3",
+    "base-h": "60",
+    "accent-l": "52",
+    "accent-c": "48",
+    "accent-h": "262",
+  };
+  const run = (assertions: () => void) => () => {
+    onPalette(OTHER, assertions);
+  };
+
+  it(
+    "still departs from the base in chroma as well as lightness",
+    run(() => {
+      const base = scalar("base-c");
+      expect(base).toBe(3);
+      for (const [g, departure] of [
+        ["ground", "dc-ground"],
+        ["surface", "dc-surface"],
+        ["card", "dc-card"],
+        ["popover", "dc-popover"],
+      ] as const) {
+        expect(groundChroma(g), g).toBeCloseTo(base + scalar(departure), 8);
+      }
+      for (const g of GROUNDS) {
+        expect(step(GROUND_TOKEN[g], g).H, `${g} hue`).toBe(60);
+      }
+    }),
+  );
+
+  it(
+    "still mixes ink toward the pole and its chroma at half rate",
+    run(() => {
+      const base = scalar("base-c");
+      const inkBase = scalar("c-ink-base");
+      const half = scalar("t-ink-c");
+      for (const ink of ["ink-1", "ink-2", "ink-3"]) {
+        for (const g of GROUNDS) {
+          const groundL = step(GROUND_TOKEN[g], g).L;
+          const t = scalar(`t-${ink}`);
+          expect(step(ink, g).L, `${ink} on ${g}`).toBeCloseTo(
+            groundL + t * (100 - groundL),
+            8,
+          );
+          expect(step(ink, g).C, `${ink} chroma on ${g}`).toBeCloseTo(
+            inkBase + (groundChroma(g) - base) * half,
+            8,
+          );
+        }
+      }
+    }),
+  );
+
+  it(
+    "still lifts every control and edge off the ground it lands on",
+    run(() => {
+      for (const g of GROUNDS) {
+        const ground = channel(GROUND_TOKEN[g], g);
+        for (const line of ["line-1", "line-2", "line-3"]) {
+          expect(channel(line, g), `${line} on ${g}`).toBeGreaterThan(ground);
+          expect(
+            channel(`${line}-hover`, g),
+            `${line} hover on ${g}`,
+          ).toBeGreaterThan(channel(line, g));
+        }
+        expect(channel("control", g), `control on ${g}`).toBeGreaterThan(
+          ground,
+        );
+        expect(channel("control-hover", g), `hover on ${g}`).toBeGreaterThan(
+          channel("control", g),
+        );
+        expect(channel("control-disabled", g), `disabled on ${g}`).toBeLessThan(
+          channel("control", g),
+        );
+      }
+    }),
+  );
+
+  it(
+    "still washes every tint over the ground it is drawn on",
+    run(() => {
+      const tints = [...declarations.keys()].filter((n) =>
+        /-tint(-hover)?$/.test(n),
+      );
+      for (const tint of tints) {
+        const seen = GROUNDS.map((g) => step(tint, g).L);
+        expect(new Set(seen.map((l) => l.toFixed(4))).size, tint).toBe(
+          GROUNDS.length,
+        );
+        for (const g of GROUNDS) {
+          expect(channel(tint, g), `${tint} on ${g}`).toBeGreaterThan(
+            channel(GROUND_TOKEN[g], g),
+          );
+        }
+      }
+    }),
+  );
+
+  it(
+    "still holds the accent absolute, on the accent's own hue",
+    run(() => {
+      for (const name of ["cobalt-fill", "cobalt-fill-hover", "cobalt-ink"]) {
+        const seen = GROUNDS.map((g) => step(name, g));
+        expect(new Set(seen.map((s) => s.L.toFixed(6))).size, name).toBe(1);
+        for (const s of seen) expect(s.H, `${name} hue`).toBeCloseTo(262, 8);
+      }
+      expect(step("cobalt-fill").L, "fill").toBeCloseTo(52, 8);
+    }),
+  );
+
+  it(
+    "still clears its contrast floors within each ground",
+    run(() => {
+      for (const g of GROUNDS) {
+        expect(onOwnGround("ink-3", g), `full ink on ${g}`).toBeGreaterThan(9);
+        expect(onOwnGround("ink-2", g), `muted ink on ${g}`).toBeGreaterThan(
+          4.5,
+        );
+        expect(onOwnGround("ink-1", g), `subtle ink on ${g}`).toBeGreaterThan(
+          4.5,
+        );
+        expect(onOwnGround("line-3", g), `strong edge on ${g}`).toBeGreaterThan(
+          3,
+        );
+      }
+    }),
+  );
 });
