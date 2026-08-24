@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /* Rest and hover, and hover moves the background only: a label or an icon that
    changes colour under the pointer reads as a second, competing signal. */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:text-disabled-foreground disabled:shadow-none aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border-[0.5px] border-transparent text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:text-disabled-foreground disabled:shadow-none aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     /* size is declared first so a variant can override it. Only link does: an
        inline text action is the one button that must carry no box. */
@@ -23,7 +23,7 @@ const buttonVariants = cva(
         /* Defined by its edge, so the surface shows through it. Both the edge
            and the hover re-derive from the ground the button lands on. */
         outline:
-          "border-border bg-transparent hover:bg-state-hover aria-expanded:bg-state-hover",
+          "border-border bg-transparent bg-clip-padding hover:bg-state-hover aria-expanded:bg-state-hover",
         secondary:
           "bg-secondary text-secondary-foreground shadow-control hover:bg-secondary-hover aria-expanded:bg-secondary disabled:bg-disabled",
         ghost: "hover:bg-state-hover aria-expanded:bg-state-hover",

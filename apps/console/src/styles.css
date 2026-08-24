@@ -162,10 +162,10 @@
   --scrim: lch(0 0 0 / 0.4);
   --shadow-edge: 0 0.5px 1px 1px lch(0 0 0 / 0.3);
   /* A line of light on top and a drop beneath, in one property. What makes a
-     control read as sitting on the page rather than cut into it. Linear draws
-     the ring at 0.5px; ours is 1px, which is the one place we depart. */
+     control read as sitting on the page rather than cut into it. The ring must
+     meet the fill: a gap between them draws the control as an outlined box. */
   --shadow-control:
-    0 0 0 1px lch(100 0 0 / 0.143), 0 0.5px 1px 1px lch(0 0 0 / 0.3);
+    0 0 0 0.5px lch(100 0 0 / 0.143), 0 0.5px 1px 1px lch(0 0 0 / 0.3);
   /* Four low-opacity layers rather than one big blur, which is what lets an
      edge read soft without the panel under it looking hazy. Measured. */
   --shadow-overlay:
