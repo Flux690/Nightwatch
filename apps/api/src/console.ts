@@ -5,9 +5,9 @@ import FastifyStatic from "@fastify/static";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { logger } from "./logger.js";
 
-// Beside the API bundle in the image; CONSOLE_DIST overrides.
+// Beside the API bundle in the image; NIGHTWARDEN_CONSOLE_DIST overrides.
 function consoleDist(): string {
-  const explicit = process.env["CONSOLE_DIST"];
+  const explicit = process.env["NIGHTWARDEN_CONSOLE_DIST"];
   if (explicit) return resolve(explicit);
   return join(dirname(fileURLToPath(import.meta.url)), "console");
 }

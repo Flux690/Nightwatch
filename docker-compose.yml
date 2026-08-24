@@ -12,11 +12,11 @@ services:
       - "${PORT:-3000}:3000"
     environment:
       # Must be routable from runners and Alertmanager, not just your browser.
-      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL, e.g. http://203.0.113.10:3000}
+      NIGHTWARDEN_PUBLIC_URL: ${NIGHTWARDEN_PUBLIC_URL:?set NIGHTWARDEN_PUBLIC_URL, e.g. http://203.0.113.10:3000}
       # One variable for all three references so the paths cannot drift.
       NIGHTWARDEN_DIR: ${NIGHTWARDEN_DIR:-/opt/nightwarden}
       # Optional first-boot seed; otherwise pick the provider in the console.
-      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      NIGHTWARDEN_LLM_PROVIDER: ${NIGHTWARDEN_LLM_PROVIDER:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
@@ -34,11 +34,11 @@ services:
       # Unset means a key file is generated in NIGHTWARDEN_DIR and reused; set it
       # to manage the value yourself. Changing it makes stored credentials
       # unreadable and signs every owner session out.
-      SECRET_KEY: ${SECRET_KEY:-}
+      NIGHTWARDEN_SECRET_KEY: ${NIGHTWARDEN_SECRET_KEY:-}
       # Override to pin a tag or serve the runners from a private registry.
       NIGHTWARDEN_DOCKER_RUNNER_IMAGE: ${NIGHTWARDEN_DOCKER_RUNNER_IMAGE:-}
       NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE: ${NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NIGHTWARDEN_LOG_LEVEL: ${NIGHTWARDEN_LOG_LEVEL:-info}
     volumes:
       # Same path inside and out, never a named volume: the host daemon resolves
       # sandbox mounts against the host, so a container-only path mounts empty.

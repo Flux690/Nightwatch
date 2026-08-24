@@ -47,7 +47,7 @@ export function isPathAllowed(filePath: string): boolean {
 }
 
 function buildAllowlist(): string[] {
-  const env = process.env["FILE_ALLOWLIST"];
+  const env = process.env["NIGHTWARDEN_FILE_ALLOWLIST"];
   return env
     ? [...DEFAULT_ALLOWLIST, ...env.split(":").filter(Boolean)]
     : DEFAULT_ALLOWLIST;
@@ -70,7 +70,7 @@ export async function openAllowedFile(
     const canonical = await fs.promises.realpath(requestedPath);
     if (!isPathAllowed(canonical)) {
       throw new Error(
-        `Path not in allowlist: ${requestedPath}. Add to FILE_ALLOWLIST env var to enable.`,
+        `Path not in allowlist: ${requestedPath}. Add to NIGHTWARDEN_FILE_ALLOWLIST env var to enable.`,
       );
     }
     // Bind the allowlisted name to the opened inode: if a symlink was swapped between open and realpath,

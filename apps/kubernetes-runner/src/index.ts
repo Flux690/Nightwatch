@@ -10,9 +10,9 @@ if (!token) {
   process.exit(1);
 }
 
-const wsUrl = process.env["WS_URL"];
+const wsUrl = process.env["NIGHTWARDEN_WS_URL"];
 if (!wsUrl) {
-  logger.fatal("WS_URL is required");
+  logger.fatal("NIGHTWARDEN_WS_URL is required");
   process.exit(1);
 }
 

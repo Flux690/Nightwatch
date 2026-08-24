@@ -87,7 +87,7 @@ describe("buildDockerManifest", () => {
 
   describe("the advertised host name", () => {
     it("reports the host's own name, not the container id os.hostname() returns", async () => {
-      vi.stubEnv("HOST_PROC", "/host/proc");
+      vi.stubEnv("NIGHTWARDEN_HOST_PROC", "/host/proc");
       mockReadFile.mockResolvedValue("prod-web-01\n");
 
       const manifest = await buildDockerManifest();

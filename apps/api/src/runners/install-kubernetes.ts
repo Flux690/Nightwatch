@@ -100,7 +100,7 @@ spec:
           env:
             - name: NIGHTWARDEN_TOKEN
               value: "{{NIGHTWARDEN_TOKEN}}"
-            - name: WS_URL
+            - name: NIGHTWARDEN_WS_URL
               value: "{{WS_URL}}"
 `;
 

@@ -1,9 +1,9 @@
 import { afterEach, vi } from "vitest";
 import { logger } from "../logger.js";
 
-// Tests never run the boot sequence that resolves SECRET_KEY, and they must not
+// Tests never run the boot sequence that resolves NIGHTWARDEN_SECRET_KEY, and they must not
 // depend on the developer's .env - a fixed test key keeps the suite hermetic.
-process.env["SECRET_KEY"] = "nightwarden-test-secret-key";
+process.env["NIGHTWARDEN_SECRET_KEY"] = "nightwarden-test-secret-key";
 
 // A dispatched investigation that throws is caught and logged (correct in production, but a
 // swallowed failure would pass green in tests) - fail the test if any run logs it instead.

@@ -83,7 +83,10 @@ describe("fleet summary injection", () => {
   let connB: RunnerConnection | undefined;
 
   beforeAll(() => {
-    vi.stubEnv("SECRET_KEY", "test-only-secret-key-fleet-summary-tests-32b");
+    vi.stubEnv(
+      "NIGHTWARDEN_SECRET_KEY",
+      "test-only-secret-key-fleet-summary-tests-32b",
+    );
     cleanupDb = useTempDb();
   });
 

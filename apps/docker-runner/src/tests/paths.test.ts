@@ -6,7 +6,7 @@ import { isPathAllowed, openAllowedFile } from "../safety/paths.js";
 
 describe("isPathAllowed", () => {
   afterEach(() => {
-    delete process.env["FILE_ALLOWLIST"];
+    delete process.env["NIGHTWARDEN_FILE_ALLOWLIST"];
   });
 
   it("allows a path within an allowlisted root", () => {
@@ -34,7 +34,7 @@ describe("isPathAllowed", () => {
     fs.writeFileSync(target, "secret");
     const link = path.join(allowed, "escape");
     fs.symlinkSync(target, link);
-    process.env["FILE_ALLOWLIST"] = allowed;
+    process.env["NIGHTWARDEN_FILE_ALLOWLIST"] = allowed;
     try {
       expect(isPathAllowed(link)).toBe(false);
     } finally {
@@ -47,7 +47,7 @@ describe("isPathAllowed", () => {
 
   it("allows a legitimate read via the env var extension", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-allowlist-"));
-    process.env["FILE_ALLOWLIST"] = tmpDir;
+    process.env["NIGHTWARDEN_FILE_ALLOWLIST"] = tmpDir;
     try {
       expect(isPathAllowed(path.join(tmpDir, "app.log"))).toBe(true);
     } finally {
@@ -62,14 +62,14 @@ describe("isPathAllowed", () => {
 
 describe("openAllowedFile", () => {
   afterEach(() => {
-    delete process.env["FILE_ALLOWLIST"];
+    delete process.env["NIGHTWARDEN_FILE_ALLOWLIST"];
   });
 
   it("opens and reads a file inside an allowlisted root", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
     const file = path.join(dir, "app.log");
     fs.writeFileSync(file, "hello\nworld\n");
-    process.env["FILE_ALLOWLIST"] = dir;
+    process.env["NIGHTWARDEN_FILE_ALLOWLIST"] = dir;
     try {
       const handle = await openAllowedFile(file);
       try {
@@ -103,7 +103,7 @@ describe("openAllowedFile", () => {
     fs.writeFileSync(target, "secret");
     const link = path.join(allowed, "escape");
     fs.symlinkSync(target, link);
-    process.env["FILE_ALLOWLIST"] = allowed;
+    process.env["NIGHTWARDEN_FILE_ALLOWLIST"] = allowed;
     try {
       await expect(openAllowedFile(link)).rejects.toThrow(/not in allowlist/i);
     } finally {
@@ -113,7 +113,7 @@ describe("openAllowedFile", () => {
 
   it("refuses to read a directory as a file", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
-    process.env["FILE_ALLOWLIST"] = dir;
+    process.env["NIGHTWARDEN_FILE_ALLOWLIST"] = dir;
     try {
       // A directory opens read-only on POSIX but is not a regular file; the
       // fstat guard rejects it before any read.

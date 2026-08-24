@@ -141,7 +141,10 @@ describe("multi-runner routing", () => {
   const conns: RunnerConnection[] = [];
 
   beforeAll(async () => {
-    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
+    vi.stubEnv(
+      "NIGHTWARDEN_SECRET_KEY",
+      "test-only-secret-key-for-routing-tests-32b",
+    );
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     runnerIdA = generateRunnerToken("docker", "routing-a").id;

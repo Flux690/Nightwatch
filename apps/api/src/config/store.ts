@@ -108,7 +108,7 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
   try {
     return maskKey(decrypt(apiKeyEncrypted));
   } catch {
-    // Decryption failure (e.g. rotated SECRET_KEY) - treat as unset.
+    // Decryption failure (e.g. rotated NIGHTWARDEN_SECRET_KEY) - treat as unset.
     return null;
   }
 }
@@ -346,18 +346,18 @@ export function updateProvider(
 
 // Env is a first-boot seed, never a live source, so the database stays the one
 // runtime source of truth. Each provider reads only its own prefix, and
-// LLM_PROVIDER alone decides which becomes active.
+// NIGHTWARDEN_LLM_PROVIDER alone decides which becomes active.
 export function seedConfigFromEnv(): void {
   for (const provider of PROVIDER_NAMES) {
     seedProviderFromEnv(provider);
   }
 
-  const requested = process.env["LLM_PROVIDER"];
+  const requested = process.env["NIGHTWARDEN_LLM_PROVIDER"];
   if (requested === undefined || requested === "") return;
   if (requested !== "anthropic" && requested !== "openrouter") {
     logger.warn(
       { requested },
-      "LLM_PROVIDER is not 'anthropic' or 'openrouter'; leaving the active provider unset",
+      "NIGHTWARDEN_LLM_PROVIDER is not 'anthropic' or 'openrouter'; leaving the active provider unset",
     );
     return;
   }
@@ -369,7 +369,7 @@ export function seedConfigFromEnv(): void {
   if (!block?.model || !block.apiKeyEncrypted) {
     logger.warn(
       { provider: requested },
-      "LLM_PROVIDER is set but that provider has no model and key; finish setup in the console",
+      "NIGHTWARDEN_LLM_PROVIDER is set but that provider has no model and key; finish setup in the console",
     );
     return;
   }

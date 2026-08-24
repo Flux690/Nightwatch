@@ -81,7 +81,7 @@ describe("provider/model config seam", () => {
   beforeAll(async () => {
     // Before the harness: the cookie is signed with this key and the stored
     // credentials are encrypted with it, so stubbing it afterwards invalidates both.
-    vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
     nw = await harness({ routes: [registerConfigRoutes] });
     SESSION = nw.session;
   });
@@ -197,7 +197,7 @@ describe("provider/model config seam", () => {
 
   it("POST /config/models: falls back to the saved key when none is typed", async () => {
     // Written here rather than relying on the fixture: the stored key is
-    // encrypted with whichever SECRET_KEY was live when it was written.
+    // encrypted with whichever NIGHTWARDEN_SECRET_KEY was live when it was written.
     updateProvider("anthropic", { apiKey: "saved-key" });
     let sawAuth = "";
     vi.stubGlobal(

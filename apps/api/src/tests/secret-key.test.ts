@@ -23,8 +23,8 @@ describe("resolveSecretKey", () => {
     dir = mkdtempSync(join(tmpdir(), "nw-secret-key-"));
     vi.stubEnv("NIGHTWARDEN_DIR", dir);
     // setup.ts sets the suite-wide test key; self-provisioning tests need
-    // SECRET_KEY genuinely absent.
-    vi.stubEnv("SECRET_KEY", undefined);
+    // NIGHTWARDEN_SECRET_KEY genuinely absent.
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", undefined);
   });
 
   afterEach(() => {
@@ -32,8 +32,8 @@ describe("resolveSecretKey", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("uses SECRET_KEY when the env var is set", () => {
-    vi.stubEnv("SECRET_KEY", "an-explicit-secret");
+  it("uses NIGHTWARDEN_SECRET_KEY when the env var is set", () => {
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", "an-explicit-secret");
     expect(resolveSecretKey()).toBe("an-explicit-secret");
   });
 
@@ -66,15 +66,15 @@ describe("resolveSecretKey", () => {
 
   it("reuses the same key across two boots (a value encrypted on boot 1 still decrypts on boot 2)", () => {
     const bootOneKey = resolveSecretKey();
-    vi.stubEnv("SECRET_KEY", bootOneKey);
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", bootOneKey);
     const encrypted = encrypt("super-secret-llm-api-key");
 
     // Simulate a process restart: env unset again, file is all that remains.
-    vi.stubEnv("SECRET_KEY", undefined);
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", undefined);
     const bootTwoKey = resolveSecretKey();
     expect(bootTwoKey).toBe(bootOneKey);
 
-    vi.stubEnv("SECRET_KEY", bootTwoKey);
+    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", bootTwoKey);
     expect(decrypt(encrypted)).toBe("super-secret-llm-api-key");
   });
 });

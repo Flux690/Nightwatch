@@ -9,11 +9,11 @@ import {
 // integration tokens, the fleet ingest token. Named for what it protects rather
 // than the algorithm, since node:crypto already owns that name.
 
-// Derive a stable 32-byte key from the SECRET_KEY env var via SHA-256.
+// Derive a stable 32-byte key from the NIGHTWARDEN_SECRET_KEY env var via SHA-256.
 // The env var can be any length; the hash normalises it to exactly 32 bytes.
 function deriveKey(): Buffer {
-  const secret = process.env["SECRET_KEY"];
-  if (!secret) throw new Error("SECRET_KEY is not set");
+  const secret = process.env["NIGHTWARDEN_SECRET_KEY"];
+  if (!secret) throw new Error("NIGHTWARDEN_SECRET_KEY is not set");
   return createHash("sha256").update(secret).digest();
 }
 

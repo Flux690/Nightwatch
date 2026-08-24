@@ -52,7 +52,7 @@ describe("first-boot config seed from the environment", () => {
   it.each(PROVIDER_FAMILIES)(
     "seeds the $provider block from its own variables and activates it",
     ({ provider, env, model, apiKey, baseUrl }) => {
-      vi.stubEnv("LLM_PROVIDER", provider);
+      vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", provider);
       for (const [name, value] of Object.entries(env)) {
         vi.stubEnv(name, value);
       }
@@ -67,8 +67,8 @@ describe("first-boot config seed from the environment", () => {
     },
   );
 
-  it("fills both blocks when both are specified, and activates only the one LLM_PROVIDER names", () => {
-    vi.stubEnv("LLM_PROVIDER", "openrouter");
+  it("fills both blocks when both are specified, and activates only the one NIGHTWARDEN_LLM_PROVIDER names", () => {
+    vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "openrouter");
     for (const family of PROVIDER_FAMILIES) {
       for (const [name, value] of Object.entries(family.env)) {
         vi.stubEnv(name, value);
@@ -85,7 +85,7 @@ describe("first-boot config seed from the environment", () => {
   });
 
   it("seeds a block with no model at all, rather than inventing one", () => {
-    vi.stubEnv("LLM_PROVIDER", "anthropic");
+    vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "anthropic");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-no-model");
 
     seedConfigFromEnv();
@@ -96,7 +96,7 @@ describe("first-boot config seed from the environment", () => {
     expect(loadApiKey("anthropic")).toBeUndefined();
   });
 
-  it("activates nothing without LLM_PROVIDER, so credentials alone never start an agent", () => {
+  it("activates nothing without NIGHTWARDEN_LLM_PROVIDER, so credentials alone never start an agent", () => {
     for (const [name, value] of Object.entries(PROVIDER_FAMILIES[0].env)) {
       vi.stubEnv(name, value);
     }
@@ -110,7 +110,7 @@ describe("first-boot config seed from the environment", () => {
   });
 
   it("leaves an already-configured install alone: env is a first-boot seed, not an override", () => {
-    vi.stubEnv("LLM_PROVIDER", "anthropic");
+    vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "anthropic");
     vi.stubEnv("ANTHROPIC_MODEL", "claude-sonnet-4-6");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-first");
     seedConfigFromEnv();
@@ -133,7 +133,10 @@ describe("first-boot integration seed from the environment", () => {
 
   beforeEach(() => {
     cleanupDb = useTempDb();
-    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-seed-tests-32bytes");
+    vi.stubEnv(
+      "NIGHTWARDEN_SECRET_KEY",
+      "test-only-secret-key-for-seed-tests-32bytes",
+    );
   });
 
   afterEach(() => {

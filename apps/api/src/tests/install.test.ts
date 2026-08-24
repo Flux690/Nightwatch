@@ -127,8 +127,8 @@ describe("GET /runners/install", () => {
       );
     });
 
-    it("bakes in PUBLIC_URL over the request Host, so a runner dials the address that is reachable from its own machine", async () => {
-      vi.stubEnv("PUBLIC_URL", "https://nightwarden.example.com");
+    it("bakes in NIGHTWARDEN_PUBLIC_URL over the request Host, so a runner dials the address that is reachable from its own machine", async () => {
+      vi.stubEnv("NIGHTWARDEN_PUBLIC_URL", "https://nightwarden.example.com");
       try {
         // What a user's browser reached the console on: useless to a runner.
         const res = await get(DOCKER_TOKEN, { host: "localhost:3000" });
@@ -172,8 +172,8 @@ describe("GET /runners/install", () => {
     it("passes only what the Docker runner reads: token, ws url, host /proc", async () => {
       const res = await get(DOCKER_TOKEN);
       expect(res.body).toContain('-e "NIGHTWARDEN_TOKEN=');
-      expect(res.body).toContain('-e "WS_URL=');
-      expect(res.body).toContain('-e "HOST_PROC=/host/proc"');
+      expect(res.body).toContain('-e "NIGHTWARDEN_WS_URL=');
+      expect(res.body).toContain('-e "NIGHTWARDEN_HOST_PROC=/host/proc"');
       // The runner takes its advertised name from the host's own /proc, so the
       // script needs no name baked in and none can be copied wrong.
       expect(res.body).not.toContain("--hostname");
@@ -207,8 +207,8 @@ describe("GET /runners/install", () => {
 // The RBAC the cluster runner is granted is the artifact's real contract, so it
 // is pinned against the builder rather than through a request that only re-serves it.
 describe("kubernetesInstallManifest", () => {
-  const WS_URL = "wss://api.example.com/api/clients/connect";
-  const yaml = kubernetesInstallManifest(WS_URL, "nwr_tok");
+  const wsUrl = "wss://api.example.com/api/clients/connect";
+  const yaml = kubernetesInstallManifest(wsUrl, "nwr_tok");
 
   it("write ClusterRole grants patch and create on pods/exec", () => {
     const writeStart = yaml.indexOf("name: nightwarden-runner-write");
@@ -225,13 +225,13 @@ describe("kubernetesInstallManifest", () => {
     const envNames = [...yaml.matchAll(/- name: (\w+)\n\s+value:/g)].map(
       (m) => m[1],
     );
-    expect(envNames).toEqual(["NIGHTWARDEN_TOKEN", "WS_URL"]);
+    expect(envNames).toEqual(["NIGHTWARDEN_TOKEN", "NIGHTWARDEN_WS_URL"]);
   });
 
   it("substitutes the values it was given", () => {
     const token = "nwr_verylongtoken_withspecialchars-123";
-    const built = kubernetesInstallManifest(WS_URL, token);
-    expect(built).toContain(WS_URL);
+    const built = kubernetesInstallManifest(wsUrl, token);
+    expect(built).toContain(wsUrl);
     expect(built).toContain(token);
   });
 });

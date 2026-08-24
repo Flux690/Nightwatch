@@ -6,22 +6,25 @@ import { randomBytes } from "node:crypto";
 import { secretKeyPath } from "./paths.js";
 import { logger } from "../logger.js";
 
-// Resolves SECRET_KEY: env var wins, else a 0600 key file in the state dir is
-// reused or generated on first boot. Losing it equals rotating SECRET_KEY.
+// Resolves NIGHTWARDEN_SECRET_KEY: env var wins, else a 0600 key file in the state dir is
+// reused or generated on first boot. Losing it equals rotating NIGHTWARDEN_SECRET_KEY.
 export function resolveSecretKey(): string {
-  const envKey = process.env["SECRET_KEY"];
+  const envKey = process.env["NIGHTWARDEN_SECRET_KEY"];
   if (envKey) return envKey;
 
   const path = secretKeyPath();
   if (existsSync(path)) {
     const persisted = readFileSync(path, "utf8").trim();
     if (persisted) {
-      logger.info({ path }, "loaded persisted SECRET_KEY file");
+      logger.info({ path }, "loaded persisted NIGHTWARDEN_SECRET_KEY file");
       return persisted;
     }
     // An empty file (crash mid-write, full disk, tampering) has no recoverable key,
     // so treat it as absent rather than returning "" and failing later as a confusing signing error.
-    logger.warn({ path }, "SECRET_KEY file is empty, generating a new one");
+    logger.warn(
+      { path },
+      "NIGHTWARDEN_SECRET_KEY file is empty, generating a new one",
+    );
   }
 
   const generated = randomBytes(32).toString("hex");
@@ -34,6 +37,6 @@ export function resolveSecretKey(): string {
       stdio: "ignore",
     });
   }
-  logger.info({ path }, "generated new SECRET_KEY file");
+  logger.info({ path }, "generated new NIGHTWARDEN_SECRET_KEY file");
   return generated;
 }

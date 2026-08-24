@@ -280,7 +280,9 @@ describe("requireSession gate", () => {
   });
 
   it("returns 401 for an expired jose JWT", async () => {
-    const key = new TextEncoder().encode(process.env["SECRET_KEY"] ?? "");
+    const key = new TextEncoder().encode(
+      process.env["NIGHTWARDEN_SECRET_KEY"] ?? "",
+    );
     const nowS = Math.floor(Date.now() / 1000);
     const expired = await new SignJWT({ loginVersion: 0 })
       .setProtectedHeader({ alg: "HS256" })

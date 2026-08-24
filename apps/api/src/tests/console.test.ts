@@ -41,7 +41,7 @@ describe("console static serving", () => {
 
   beforeAll(async () => {
     root = await buildFixture();
-    vi.stubEnv("CONSOLE_DIST", root);
+    vi.stubEnv("NIGHTWARDEN_CONSOLE_DIST", root);
     server = Fastify();
     // Registered under a prefix in index.ts, so the guard has something to hit.
     await server.register(
@@ -133,7 +133,7 @@ describe("console static serving", () => {
 
   describe("a missing build", () => {
     afterEach(() => {
-      vi.stubEnv("CONSOLE_DIST", root);
+      vi.stubEnv("NIGHTWARDEN_CONSOLE_DIST", root);
       vi.stubEnv("NODE_ENV", "test");
     });
 
@@ -145,7 +145,7 @@ describe("console static serving", () => {
     }
 
     it("serves the API alone in development, where Vite is serving the console", async () => {
-      vi.stubEnv("CONSOLE_DIST", join(root, "absent"));
+      vi.stubEnv("NIGHTWARDEN_CONSOLE_DIST", join(root, "absent"));
       const exit = stubExit();
       const bare = Fastify();
 
@@ -159,7 +159,7 @@ describe("console static serving", () => {
     });
 
     it("refuses to boot in production, where the image always carries the console", async () => {
-      vi.stubEnv("CONSOLE_DIST", join(root, "absent"));
+      vi.stubEnv("NIGHTWARDEN_CONSOLE_DIST", join(root, "absent"));
       vi.stubEnv("NODE_ENV", "production");
       const exit = stubExit();
       const bare = Fastify();

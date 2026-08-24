@@ -231,7 +231,7 @@ function badInput(message: string): ToolExecuteResult {
 }
 
 // PR body section order (model text, then incident context, files) is host
-// policy; the session reference is plain text since no PUBLIC_URL exists yet to link to.
+// policy; the session reference is plain text since no NIGHTWARDEN_PUBLIC_URL exists yet to link to.
 function composePrBody(
   sessionId: string,
   branch: string,

@@ -53,9 +53,9 @@ try {
   process.exit(1);
 }
 
-// Explicit SECRET_KEY env var wins; otherwise a key file in the state directory
+// Explicit NIGHTWARDEN_SECRET_KEY env var wins; otherwise a key file in the state directory
 // is reused or generated on first boot.
-process.env["SECRET_KEY"] = resolveSecretKey();
+process.env["NIGHTWARDEN_SECRET_KEY"] = resolveSecretKey();
 
 const isDev = process.env["NODE_ENV"] !== "production";
 

@@ -8,7 +8,7 @@ set -euo pipefail
 
 IMAGE="\${NIGHTWARDEN_IMAGE:-{{RUNNER_IMAGE}}}"
 CONTAINER_NAME="nightwarden"
-WS_URL="{{WS_URL}}"
+NIGHTWARDEN_WS_URL="{{WS_URL}}"
 NIGHTWARDEN_TOKEN="{{NIGHTWARDEN_TOKEN}}"
 
 echo "Pulling \${IMAGE}..."
@@ -38,8 +38,8 @@ docker run -d \\
   -v /sys:/sys:ro \\
   -v /:/rootfs:ro \\
   -e "NIGHTWARDEN_TOKEN=\${NIGHTWARDEN_TOKEN}" \\
-  -e "WS_URL=\${WS_URL}" \\
-  -e "HOST_PROC=/host/proc" \\
+  -e "NIGHTWARDEN_WS_URL=\${NIGHTWARDEN_WS_URL}" \\
+  -e "NIGHTWARDEN_HOST_PROC=/host/proc" \\
   "$IMAGE"
 
 echo ""
