@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /* Rest and hover, and hover moves the background only: a label or an icon that
    changes colour under the pointer reads as a second, competing signal. */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors select-none disabled:pointer-events-none disabled:text-disabled-foreground disabled:shadow-none aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     /* size is declared first so a variant can override it. Only link does: an
        inline text action is the one button that must carry no box. */
@@ -18,16 +18,17 @@ const buttonVariants = cva(
         "icon-sm": "size-7",
       },
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary-hover disabled:bg-disabled",
         /* Defined by its edge, so the surface shows through it. Both the edge
            and the hover re-derive from the ground the button lands on. */
         outline:
           "border-border bg-transparent hover:bg-state-hover aria-expanded:bg-state-hover",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-control hover:bg-secondary-hover aria-expanded:bg-secondary",
+          "bg-secondary text-secondary-foreground shadow-control hover:bg-secondary-hover aria-expanded:bg-secondary disabled:bg-disabled",
         ghost: "hover:bg-state-hover aria-expanded:bg-state-hover",
         destructive:
-          "bg-destructive-fill text-primary-foreground hover:bg-destructive-fill-hover",
+          "bg-destructive-fill text-primary-foreground hover:bg-destructive-fill-hover disabled:bg-disabled",
         /* A neutral lift, not a red one: a fixed tint sinks on any ground
            lighter than itself, which a menu is. The ink carries the meaning. */
         "destructive-ghost":

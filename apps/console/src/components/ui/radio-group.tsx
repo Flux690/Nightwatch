@@ -26,7 +26,7 @@ function RadioGroupOption({
     <RadioPrimitive.Root
       data-slot="radio-group-option"
       className={cn(
-        "w-full text-left transition-colors duration-(--duration-fast) disabled:pointer-events-none disabled:opacity-50",
+        "w-full text-left transition-colors duration-(--duration-fast) disabled:pointer-events-none disabled:text-disabled-foreground",
         className,
       )}
       {...props}

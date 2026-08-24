@@ -61,7 +61,7 @@ function DropdownMenuItem({
       className={cn(
         // Even padding, and the width comes from the longest label: the old
         // right pad reserved room for an indicator this item never carries.
-        "relative flex w-full cursor-default items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap select-none data-highlighted:bg-highlight data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-highlighted:bg-destructive-tint data-[variant=destructive]:data-highlighted:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex w-full cursor-default items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap select-none data-highlighted:bg-highlight data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:text-disabled-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:data-highlighted:bg-destructive-tint data-[variant=destructive]:data-highlighted:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

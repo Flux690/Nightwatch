@@ -8,7 +8,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-input transition-colors group-has-disabled/field:opacity-50 after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:aria-checked:border-primary data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground",
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-input transition-colors group-has-disabled/field:border-border after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:border-border disabled:data-checked:bg-disabled aria-invalid:border-destructive aria-invalid:aria-checked:border-primary data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground",
         className,
       )}
       {...props}
@@ -34,7 +34,7 @@ function CheckboxOption({
     <CheckboxPrimitive.Root
       data-slot="checkbox-option"
       className={cn(
-        "w-full text-left transition-colors duration-(--duration-fast) disabled:pointer-events-none disabled:opacity-50",
+        "w-full text-left transition-colors duration-(--duration-fast) disabled:pointer-events-none disabled:text-disabled-foreground",
         className,
       )}
       {...props}

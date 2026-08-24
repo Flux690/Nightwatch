@@ -362,9 +362,14 @@ describe("the ladder", () => {
       "line-1",
       "line-2",
       "line-3",
+      "line-1-hover",
+      "line-2-hover",
+      "line-3-hover",
       "ink-1",
       "ink-2",
       "ink-3",
+      "ink-disabled",
+      "control-disabled",
     ]) {
       const seen = GROUNDS.map((g) => step(name, g).L);
       expect(new Set(seen.map((l) => l.toFixed(4))).size, name).toBe(
@@ -440,6 +445,39 @@ describe("the ladder", () => {
       scalar("accent-h"),
       8,
     );
+  });
+
+  /* An edge answers the pointer the way a fill does. Without these a box drawn
+     by its border alone was the one control that did not react at all. */
+  it("moves every edge further from the ground under the pointer", () => {
+    for (const line of ["line-1", "line-2", "line-3"]) {
+      for (const g of GROUNDS) {
+        expect(
+          channel(`${line}-hover`, g),
+          `${line} hover on ${g}`,
+        ).toBeGreaterThan(channel(line, g));
+      }
+    }
+  });
+
+  /* Inactive, not faded: a wash held a constant alpha and so a varying
+     distance, which drifted as the ground it landed on got lighter. */
+  it("keeps disabled a fixed distance from its own ground", () => {
+    for (const g of GROUNDS) {
+      expect(channel("ink-disabled", g), `ink on ${g}`).toBeLessThan(
+        channel("ink-3", g),
+      );
+      expect(channel("ink-disabled", g), `ink on ${g}`).toBeGreaterThan(
+        channel(GROUND_TOKEN[g], g),
+      );
+      expect(channel("control-disabled", g), `control on ${g}`).toBeLessThan(
+        channel("control", g),
+      );
+    }
+    const spread = GROUNDS.map(
+      (g) => step("ink-disabled", g).L - step(GROUND_TOKEN[g], g).L,
+    );
+    for (const d of spread) expect(d).toBeGreaterThan(0);
   });
 
   it("keeps every line above the ground it is drawn on", () => {
@@ -796,9 +834,13 @@ describe("shadow", () => {
   });
 
   it("spends only the project tokens", () => {
+    const declared = [...declarations.keys()]
+      .filter((name) => name.startsWith("shadow-"))
+      .map((name) => name.slice("shadow-".length));
+    expect(declared.length).toBeGreaterThan(0);
     expectUtilityValues(
       /(?<![-\w])shadow-([^\s"'`]+)/g,
-      ["edge", "raised", "control", "overlay", "none"],
+      [...declared, "none"],
       "shadow",
     );
   });

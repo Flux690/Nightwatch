@@ -55,6 +55,10 @@
   --d-control: 0.171444;
   --d-control-hover: 0.342852;
   --d-control-active: 0.485704;
+  /* Half a lift rather than half an opacity. A wash dimmed the ring and the
+     drop with the fill, so a disabled control lost its shape instead of
+     keeping it and going quiet. */
+  --d-control-disabled: 0.0857;
   --d-state-hover: 0.141667;
   --d-highlight: 0.3;
   --d-raised: 0.309;
@@ -62,6 +66,12 @@
   --d-line-2: 0.8;
   --d-line-3: 1.6;
   --d-line-lit: 0.617519;
+  /* An edge answers the pointer like a fill does. The first and third are the
+     measured hovers of the weights they belong to; the second is derived, by
+     applying the solid edge's own rest-to-hover ratio to its hairline rung. */
+  --d-line-1-hover: 0.4;
+  --d-line-2-hover: 1.12;
+  --d-line-3-hover: 1.92;
 
   --dc-control: 0.289;
   --dc-control-lit: 0.675;
@@ -79,6 +89,9 @@
   --t-ink-1: 0.62;
   --t-ink-2: 0.78;
   --t-ink-3: 0.8989;
+  /* Where a half-opacity ink landed, now stated once so it holds the same
+     distance on every ground instead of drifting with depth. */
+  --t-ink-disabled: 0.485;
 
   /* Status hues. Each is one triple; the four steps below derive from it, and
      Text is pinned at one lightness so seven hues read at one weight. */
@@ -159,6 +172,12 @@
     0 3px 8px lch(0 0 0 / 0.125), 0 2px 5px lch(0 0 0 / 0.125),
     0 1px 1px lch(0 0 0 / 0.125);
   --shadow-raised: 0 1px 2px lch(0 0 0 / 0.4), 0 4px 16px lch(0 0 0 / 0.3);
+  /* Five layers where an overlay takes three. What a modal needs to read as
+     above a menu, since both float and only the shadow separates them. */
+  --shadow-modal:
+    0 4px 40px lch(0 0 0 / 0.1), 0 3px 20px lch(0 0 0 / 0.125),
+    0 3px 12px lch(0 0 0 / 0.125), 0 2px 8px lch(0 0 0 / 0.125),
+    0 1px 1px lch(0 0 0 / 0.125);
 }
 
 /* Which rung an element stands on. A container that changes the ground says so,
@@ -246,6 +265,19 @@
     calc(var(--ground-l) + var(--d-line-3) * var(--contrast)) var(--c-line)
       var(--base-h)
   );
+
+  --line-1-hover: lch(
+    calc(var(--ground-l) + var(--d-line-1-hover) * var(--contrast))
+      var(--c-line) var(--base-h)
+  );
+  --line-2-hover: lch(
+    calc(var(--ground-l) + var(--d-line-2-hover) * var(--contrast))
+      var(--c-line) var(--base-h)
+  );
+  --line-3-hover: lch(
+    calc(var(--ground-l) + var(--d-line-3-hover) * var(--contrast))
+      var(--c-line) var(--base-h)
+  );
   --line-lit: lch(
     calc(var(--ground-l) + var(--d-line-lit) * var(--contrast))
       var(--c-line-lit) var(--base-h)
@@ -262,6 +294,14 @@
   --ink-3: lch(
     calc(var(--ground-l) + var(--t-ink-3) * (100 - var(--ground-l)))
       var(--c-ink) var(--base-h)
+  );
+  --ink-disabled: lch(
+    calc(var(--ground-l) + var(--t-ink-disabled) * (100 - var(--ground-l)))
+      var(--c-ink) var(--base-h)
+  );
+  --control-disabled: lch(
+    calc(var(--ground-l) + var(--d-control-disabled) * var(--contrast))
+      var(--c-control) var(--base-h)
   );
 
   /* A tint is its own ground washed with the hue, composited in linear light,
@@ -341,6 +381,14 @@
   --border: var(--line-1);
   --border-strong: var(--line-3);
   --input: var(--line-2);
+  --border-hover: var(--line-1-hover);
+  --border-strong-hover: var(--line-3-hover);
+  --input-hover: var(--line-2-hover);
+
+  /* Inactive, not faded. Both re-anchor, so a disabled control keeps the
+     same distance from the surface it sits on wherever that surface is. */
+  --disabled: var(--control-disabled);
+  --disabled-foreground: var(--ink-disabled);
 
   --success: var(--green-text);
   --success-base: var(--green-base);
@@ -415,6 +463,11 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-input: var(--input);
+  --color-border-hover: var(--border-hover);
+  --color-border-strong-hover: var(--border-strong-hover);
+  --color-input-hover: var(--input-hover);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
 
   --color-success: var(--success);
   --color-success-base: var(--success-base);
@@ -446,6 +499,7 @@
   --shadow-control: var(--shadow-control);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-raised: var(--shadow-raised);
+  --shadow-modal: var(--shadow-modal);
 }
 
 /* Tokens with no palette dimension. */

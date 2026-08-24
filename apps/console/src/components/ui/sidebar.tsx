@@ -372,7 +372,7 @@ const sidebarMenuButtonVariants = cva(
   /* The rail is 52px and its group insets 12 either side, so a full-width
      button is already the 28px square the icon centres in. The width rides the
      panel's own transition; forcing a size here is what used to make it snap. */
-  "peer/menu-button group/menu-button flex w-full items-center overflow-hidden rounded-md px-2 text-left text-sm transition-[padding] duration-(--duration-panel) ease-panel group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:px-1.5 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground active:bg-sidebar-hover active:text-sidebar-hover-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-hover data-open:hover:text-sidebar-hover-foreground data-active:bg-sidebar-active data-active:text-sidebar-hover-foreground data-active:hover:bg-sidebar-active [&_svg]:size-4 [&_svg]:shrink-0",
+  "peer/menu-button group/menu-button flex w-full items-center overflow-hidden rounded-md px-2 text-left text-sm transition-[padding] duration-(--duration-panel) ease-panel group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:px-1.5 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground active:bg-sidebar-hover active:text-sidebar-hover-foreground disabled:pointer-events-none disabled:text-disabled-foreground aria-disabled:pointer-events-none aria-disabled:text-disabled-foreground data-open:hover:bg-sidebar-hover data-open:hover:text-sidebar-hover-foreground data-active:bg-sidebar-active data-active:text-sidebar-hover-foreground data-active:hover:bg-sidebar-active [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
