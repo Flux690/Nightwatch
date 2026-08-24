@@ -2,9 +2,8 @@ import { loadApiKey, loadConfig } from "./store.js";
 import { MAX_OUTPUT_TOKENS } from "../llm/config.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
-// The single answer to "can the agent reach an LLM?". Every entry point that
-// starts a run asks here, so a half-configured install is refused at the door
-// with a specific reason instead of failing mid-investigation as a provider error.
+// Every entry point that starts a run asks here, so a half-configured install
+// is refused at the door rather than mid-investigation.
 type LLMReadiness =
   | { ready: true; config: ResolvedLLMConfig; apiKey: string }
   | { ready: false; missing: LLMRequirement[] };
@@ -30,9 +29,8 @@ export function checkLLMReadiness(): LLMReadiness {
     return { ready: false, missing };
   }
 
-  // Flatten the active block onto the loop settings the SDKs need. The output
-  // ceiling is the chosen model's own, captured when it was saved; the constant
-  // only stands in for a model whose catalog published none.
+  // The output ceiling is the chosen model's own, captured when it was saved.
+  // The constant stands in only where the catalog published none.
   return {
     ready: true,
     apiKey,

@@ -39,9 +39,8 @@ import { apiFetch } from "@/shared/api/client";
 // --duration-panel, which is what the rail animates over.
 const PANEL_MS = 320;
 
-/* The record's place in the queue, so triage moves record to record without
-   returning to the list and finding the row again. The order is the list's own
-   and the total is the server's, so the two can never disagree. */
+// So triage moves record to record without returning to the list. The order
+// is the list's own and the total the server's, so the two cannot disagree.
 function QueueStepper({
   sessionId,
 }: {
@@ -92,9 +91,8 @@ function QueueStepper({
   );
 }
 
-/* The report with its chat rail, headed by a breadcrumb back to the list. No
-   "Mark as resolved" in the menu: status is derived and never declared, and
-   this is the one place a user would most expect to declare it. */
+// No "Mark as resolved" in the menu: status is derived and never declared,
+// and this is where a user would most expect to declare it.
 export function InvestigationRecordPage(): React.JSX.Element {
   const { id } = useParams({ strict: false });
   const sessionId = id ?? "";

@@ -262,9 +262,8 @@ export async function registerIntegrationRoutes(
     lokiStatusPayload(),
   );
 
-  // Connect: probe the labels endpoint before saving - it is cheap, exercises
-  // auth AND the tenant header, and proves discovery will work; a bad URL,
-  // credential, or tenant fails loud at setup, never at 3am mid-incident.
+  // Probed before saving, because it exercises auth and the tenant header: a
+  // bad URL or credential fails at setup rather than at 3am.
   fastify.post(
     "/integrations/loki",
     { preHandler: requireSession },
@@ -340,9 +339,8 @@ export async function registerIntegrationRoutes(
   );
 }
 
-/* The handlers below run only for a sender the build knows, so they read the
-   kind as one. Guarded the way requireSession guards a caller's identity: the
-   check is the route's precondition, not a branch inside every handler. */
+// Guarded the way requireSession guards identity: the check is the route's
+// precondition, not a branch inside every handler.
 interface AlertSourceRoute {
   Params: { kind: AlertSourceKind };
 }

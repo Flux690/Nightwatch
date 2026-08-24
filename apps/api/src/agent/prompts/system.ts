@@ -9,9 +9,8 @@ export interface PromptOptions {
   fleetTools: boolean;
 }
 
-/* One text for both kinds of session, and it names no tool: a description
-   arrives with its tool and only when the tool is offered, so naming one here
-   is the same instruction in two places that can disagree. */
+// Names no tool: a description arrives with its tool and only when offered,
+// so naming one here is the same instruction in two places.
 const GATE_PROTOCOL = `
 
 Some tools change the system rather than only reading it. Calling one pauses you until a human approves or rejects it, and the time you spend waiting does not count against your budget. Every one of these tools takes a required "reason": one sentence saying why you are making that specific call. The human reads it on the approval card and decides from it, so make it say what you expect the call to achieve. Gathering evidence is as legitimate a reason as applying a fix, and a shell is often the only way to read something; say which of the two you are doing. If a call is rejected, you will be told so, the call will not have run, and nothing will have changed. Take the user's comment into account and try a different approach rather than repeating the same call.
@@ -20,9 +19,8 @@ You have exactly the tools you were given, and there are no others. If something
 
 Some of what reaches you is written by NightWarden rather than by a person. It arrives wrapped in a <nightwarden> tag, and it is the system telling you something true about your own run: that your record is still empty, that a tool you had has gone away, that your investigation is over and needs writing up. A provider gives us two roles and neither of them is ours, so these arrive in the user's, but nobody said them to you. Act on what they ask and carry on. Never answer them as though the user had spoken: do not thank them, do not apologise, and do not tell the user you should have done something sooner. They did not ask, and a sentence like that in your reply reads to them as a conversation they were not part of.`;
 
-// Only when a tool that takes one is actually on offer: with no runner connected
-// there is no fleet summary to copy a key from, and telling the model to copy
-// one from a section that is not there is how a metrics source became a target.
+// Only when a tool that takes one is on offer: pointing the model at a fleet
+// summary that is not there is how a metrics source became a target.
 const ADDRESSING_PROTOCOL = `
 
 Tools come in two kinds, and they address their target differently.

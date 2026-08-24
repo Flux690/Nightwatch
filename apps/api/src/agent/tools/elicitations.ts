@@ -1,15 +1,13 @@
 import type { ToolSchema } from "../../llm/types.js";
 
-// Offered to the model as a tool because tool-calling is its only channel, but
-// modelled as neither: the result comes from a person, so there is nothing to
-// execute and no policy a user rule could switch off.
+// Offered as a tool because tool-calling is the only channel, but the result
+// comes from a person: nothing executes, and no rule can switch it off.
 export interface Elicitation {
   schema: ToolSchema;
 }
 
-/* Four, and the person always gets a free-text box beside them, so the card
-   offers five rows. Beyond that a question stops being answerable at a glance,
-   which is the only reason to interrupt someone with one. */
+// Four plus the free-text box makes five rows. Beyond that a question stops
+// being answerable at a glance, which is the only reason to ask one.
 export const MAX_QUESTION_OPTIONS = 4;
 
 // A shape error on the channel every tool error uses, like executeTool's size

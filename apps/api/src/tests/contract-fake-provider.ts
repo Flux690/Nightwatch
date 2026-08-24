@@ -54,9 +54,8 @@ function extractToolUseIds(msg: NativeMessage): string[] {
     .map((b) => b.id);
 }
 
-/* Both directions, because each catches a different bug. A tool_use with no
-   result is a turn we failed to answer; a result with no call is a turn we
-   dropped, which is what a seed that unwinds too far leaves behind. */
+// A tool_use with no result is a turn we failed to answer; a result with no
+// call is one we dropped, which a seed unwinding too far leaves behind.
 function validateTranscript(messages: NativeMessage[]): void {
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]!;
@@ -77,9 +76,8 @@ function validateTranscript(messages: NativeMessage[]): void {
     const prev = messages[i - 1]!;
     const curr = messages[i]!;
 
-    // Consecutive user turns are legal - the Messages API combines them into
-    // one - which is what lets an injected alert follow the tool results as its
-    // own turn. Two assistant turns in a row is still a bug.
+    // Consecutive user turns are legal and combined by the API, which is what
+    // lets an injected alert be its own turn. Two assistant turns is a bug.
     if (prev.role === "assistant" && curr.role === "assistant") {
       throw new Error(
         `Contract violation: consecutive assistant messages at index ${i - 1} and ${i}`,

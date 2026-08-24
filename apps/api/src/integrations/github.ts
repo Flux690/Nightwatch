@@ -78,9 +78,8 @@ interface RepoListResult extends GitHubRepoPage {
   expiresAt: string | null;
 }
 
-// A fine-grained PAT returns only the repos it was granted, so this list IS the
-// consent the user gave on GitHub's token page; per_page 100 + pushed-sort also
-// absorbs the classic-PAT escape hatch (everything readable).
+// A fine-grained PAT returns only the repos it was granted, so this list is
+// the consent the user gave on GitHub's token page.
 export async function listRepos(
   token: string,
   page: number,
@@ -358,9 +357,8 @@ interface MergedPullRequestInfo {
   mergeCommitSha: string;
 }
 
-// state=closed sorted by updated desc: merging updates a PR, so once a row's
-// updated_at precedes the window there can be no later in-window merge and the
-// scan stops - one page usually suffices without a merged-state filter upstream.
+// Merging updates a PR, so once a row's updated_at precedes the window there
+// can be no later in-window merge and the scan stops.
 export async function listMergedPullRequests(
   token: string,
   owner: string,

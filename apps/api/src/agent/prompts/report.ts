@@ -214,9 +214,8 @@ const REPORT_RUBRIC = `Account for each of these. "None found" is a complete ans
 - Impact: who was affected and for how long.
 - Recommendation: what the user should do now.`;
 
-/* Its own labelled block, because a model shown an unattributed report cannot
-   tell whose words it is reading. It wrote this, and the difference between
-   revising your own work and rewriting a stranger's is the whole point. */
+// Labelled, because a model shown an unattributed report cannot tell whose
+// words it is reading, and revising your own work is the point.
 function previousReportBlock(previous: SubmittedReport): string {
   const lines = [
     previous.headline === undefined ? null : `headline: ${previous.headline}`,
@@ -279,8 +278,7 @@ export function reportRetry(problem: string): string {
   return `${problem} Call SubmitInvestigationReport again.`;
 }
 
-/* Deliberately not "continue": that invites more investigating, and there is
-   nothing left to find. Server-side because it is prompt text - composed in the
-   console it would drift from reportRequest the first time either was edited. */
+// Not "continue": that invites more investigating when there is nothing left
+// to find. Server-side, or it drifts from reportRequest.
 export const REPORT_RETRY_REQUEST =
   "Your investigation is over and its record is complete, but the report was never written. Do not investigate further and do not call any other tool. Write it up now.";

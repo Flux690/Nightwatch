@@ -2,9 +2,8 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { asRecord } from "@/shared/lib/toolResult";
 import { clock } from "@/shared/lib/time";
 
-/* What a measurement result is drawn as, decided by the shape of the data and
-   never by the model: points over time are lines, a reading per label is a
-   comparison, one reading is a number. */
+// Decided by the shape of the data, never by the model: points over time are
+// lines, a reading per label is a comparison, one reading is a number.
 
 export interface Point {
   at: number;
@@ -71,9 +70,8 @@ function seriesLabels(all: Series[]): string[] {
     : full;
 }
 
-// Prometheus names a metric for the unit it counts in, so the name is where the
-// unit comes from. Without it a working set of 4272341811 draws as "4.3B",
-// which is not 4 GB and is not caught at 02:14.
+// Prometheus names a metric for the unit it counts in. Without it a working
+// set of 4272341811 draws as "4.3B", which is not 4 GB.
 function unitOf(metric: Record<string, string>): PlotUnit | null {
   return /_bytes(_total)?$/.test(metric["__name__"] ?? "") ? "bytes" : null;
 }
@@ -179,9 +177,8 @@ export function plotFrom(
   };
 }
 
-/* What a drawing is of, and what it cannot speak for, beneath the drawing where
-   a caption goes. Never a heading above it: a heading has to be there for the
-   layout to hold, and a caption may be absent without anything moving. */
+// Never a heading above: a heading has to be there for the layout to hold,
+// and a caption may be absent without anything moving.
 export function plotCaption(plot: Plot): { of: string; scope: string } {
   if (plot.kind === "value") return { of: plot.label, scope: "" };
   if (plot.kind === "bars") {

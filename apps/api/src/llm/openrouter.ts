@@ -37,9 +37,8 @@ const OPENROUTER_LADDER: readonly ReasoningLevel[] = [
   { value: "minimal", label: "Minimal" },
 ];
 
-// Only stands in for models publishing neither levels nor a default, where the
-// gateway accepts anything. Positional picks would be wrong at both ends: the
-// ladder descends, so first is max and last is off.
+// Stands in only for models publishing neither levels nor a default. A
+// positional pick is wrong at both ends: the ladder descends.
 const OPENROUTER_FALLBACK_EFFORT = "medium";
 
 export function openRouterAuthHeaders(apiKey: string): Record<string, string> {
@@ -175,9 +174,8 @@ function describeReasoning(
   };
 }
 
-/* A ceiling equal to the whole window is not a ceiling: input and output share
-   that budget, so sending it as max_tokens overflows by the size of the prompt
-   and every request is refused. Read as "none published" and take the default. */
+// Input and output share the window, so sending it whole as max_tokens
+// overflows by the size of the prompt and every request is refused.
 function maxCompletionTokens(
   topProvider: unknown,
   contextLength: unknown,

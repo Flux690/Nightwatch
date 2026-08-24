@@ -4,9 +4,8 @@ import type { AlertGroupContext, NormalizedAlert } from "@nightwarden/shared";
 import type { DeliveryContext } from "../delivery.js";
 import { logger } from "../../logger.js";
 
-// Parsing IS normalization: no location and no target is ever stamped on an alert.
-// The labels are the whole record of what it named; matching them to a service is
-// the fleet's job, at the moment the agent needs an answer.
+// No location and no target is ever stamped on an alert: the labels are the
+// whole record, and matching them to a service is the fleet's job.
 type ParsedAlert = NormalizedAlert;
 
 // Only the envelope is validated up front; each alert is parsed defensively in the loop, so
@@ -22,9 +21,8 @@ const alertmanagerWebhookSchema = z.object({
   commonAnnotations: z.unknown().optional(),
 });
 
-/* One delivery is one alert group. groupKey is the sender's own grouping, from
-   the group_by the user configured, and trusting it is what makes grouping their
-   choice. The count beside it is how many they left out of this body. */
+// groupKey is the sender's own grouping, from the group_by the user
+// configured. The count beside it is how many they left out of this body.
 export interface ParsedWebhook {
   groupKey: string;
   delivery: DeliveryContext;

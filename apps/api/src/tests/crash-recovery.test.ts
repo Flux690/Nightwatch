@@ -107,9 +107,8 @@ describe("recovering runs a restart interrupted", () => {
       { sessionId, title: "t", createdAt: new Date().toISOString() },
       [alert],
     );
-    // The interrupt row, its transcript rows and the suspended state are written
-    // in one transaction, so this means the run parked itself rather than being
-    // killed - and it keeps its seat for as long as it waits.
+    // All three are written in one transaction, so this means the run parked
+    // itself rather than being killed, and it keeps its seat while it waits.
     appendRowsAndInterrupt(
       [callTurn(sessionId, 0, "tu-gated", "RestartDockerService", {})],
       {
@@ -183,9 +182,8 @@ describe("recovering runs a restart interrupted", () => {
     await waitFor(() => !isRunning(sessionId));
   });
 
-  /* The mirror of the case above, and the one that matters more: a gated call is
-     unanswered on purpose, so unwinding past it hands the model results for a
-     call it can no longer see it made - which every provider rejects. */
+  // A gated call is unanswered on purpose, so unwinding past it hands the model
+  // results for a call it can no longer see it made.
   it("keeps the turn a resume is about to answer", () => {
     const sessionId = killedRun();
     appendTranscriptRows([

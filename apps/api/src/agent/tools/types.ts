@@ -3,9 +3,8 @@ import type { ToolSchema } from "../../llm/types.js";
 
 export interface ToolExecuteResult {
   content: unknown;
-  // Absent means the call answered. Every failure path names its class instead
-  // of a boolean, and the wire's is_error is derived from it below, so the two
-  // can never disagree about whether something went wrong.
+  // Every failure path names its class instead of a boolean, and is_error is
+  // derived from it, so the two cannot disagree.
   toolOutcome?: ToolOutcome;
 }
 
@@ -55,9 +54,8 @@ interface ToolCommon {
   schema: ToolSchema;
   effect: "read" | "write";
   policy: ToolPolicy;
-  /* What a citation of this call is worth showing as. Declared here rather than
-     in a lookup table for the reason `policy` is: a separate list is one that
-     gets forgotten when a tool is added. */
+  // Declared here for the reason `policy` is: a separate list is one that gets
+  // forgotten when a tool is added.
   evidenceKind: EvidenceKind;
   // A write safe to run twice, which is what lets a call caught by a crash be
   // replayed instead of unwound. Only ever true where the tool says why.

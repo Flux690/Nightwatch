@@ -48,9 +48,8 @@ export async function registerAlertRoutes(
     // the matched source, before the evidence gate, even when everything dedups.
     setAlertSourceReceived(sourceKind, new Date().toISOString());
 
-    // Nothing to investigate with, in the other direction: evidence exists but no
-    // model can reason over it. 503 rather than a drop, so Alertmanager retries
-    // once the user finishes setup instead of losing the alert.
+    // 503 rather than a drop, so Alertmanager retries once the user finishes
+    // setup instead of losing the alert.
     const readiness = checkLLMReadiness();
     if (!readiness.ready) {
       return reply

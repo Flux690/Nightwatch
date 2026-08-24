@@ -178,9 +178,8 @@ export function listSessionSources(
   };
 }
 
-// The queue's total is a claim about the whole set, which no page of rows can
-// answer. It is a count, so it is counted: loading every investigation and its
-// report to take the length of the array is the same answer at any size.
+// A claim about the whole set, which no page of rows can answer. It is a
+// count, so it is counted rather than loaded and measured.
 export function countInvestigations(): number {
   const row = getDb()
     .prepare(`SELECT COUNT(*) AS total FROM sessions WHERE investigation = 1`)

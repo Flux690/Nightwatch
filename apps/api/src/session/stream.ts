@@ -159,9 +159,8 @@ export function publishReportUpdated(sessionId: string): void {
   publishConsoleEvent(env);
 }
 
-/* The alert queue moved: something was queued, or a seat freed and a group
-   started. Published from the dispatcher and the ingest path rather than
-   computed by the console, so the numbers are the ones the pool actually used. */
+// Published from the dispatcher and the ingest path rather than computed by
+// the console, so the numbers are the ones the pool actually used.
 export function publishQueueChanged(): void {
   const { waiting, oldestArrivedAt } = queueDepth();
   const env: ConsoleQueueChanged = {

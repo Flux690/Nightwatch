@@ -64,9 +64,8 @@ interface AlertSpec {
   status?: "firing" | "resolved";
 }
 
-/* One webhook delivery, which is one alert group. groupKey is what Alertmanager
-   computed from the user's group_by, and it is the only thing that decides
-   which alerts share an investigation - so every test names it explicitly. */
+// groupKey is what Alertmanager computed from the user's group_by, and the
+// only thing deciding which alerts share an investigation.
 function delivery(groupKey: string, alerts: AlertSpec[], truncated = 0) {
   return {
     alerts: alerts.map((a) => ({
@@ -157,9 +156,8 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     }
   }
 
-  /* The governing rule, and the whole point of the fix: relatedness is the alert
-     source's decision, so two groups are two incidents however close together
-     they fire. Nothing here waits on a window, because there is no longer one. */
+  // Relatedness is the alert source's decision, so two groups are two
+  // incidents however close together they fire.
   it("two alerts in different groups, ten seconds apart, open two investigations", async () => {
     useGatedProvider();
     const before = countInvestigations();
@@ -231,9 +229,8 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     expect(alertIdsOf(sessionId!).sort()).toEqual(["j-1", "j-2"]);
   });
 
-  /* Alertmanager repeats a still-firing alert on repeat_interval, as often as
-     every few minutes. Scoped to the run rather than the alert, this would open
-     a fresh investigation of the identical alert every time one finished. */
+  // Alertmanager repeats a still-firing alert every few minutes. Scoped to the
+  // run, this would reopen the identical alert every time one finished.
   it("a repeat of the same alert is dropped even after its investigation ended", async () => {
     useImmediateProvider();
     const groupKey = '{}:{alertname="Repeating"}';

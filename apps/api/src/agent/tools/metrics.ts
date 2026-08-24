@@ -53,9 +53,8 @@ const TARGET_POINTS_PER_SERIES = 200;
 const MAX_METRIC_NAMES = 100;
 const MAX_ALERT_RULES = 50;
 
-/* Consulted only when more than one source is connected, exactly as `runner`
-   is consulted only for a shared target key. Named after the context block that
-   lists them, so the model copies a name rather than inventing one. */
+// Consulted only when more than one source is connected, and named after the
+// context block that lists them so the model copies rather than invents.
 const METRICS_SOURCE_PROPERTY = {
   type: "string",
   description:
@@ -123,9 +122,8 @@ function resolveMetricsSource(
   };
 }
 
-/* An empty series is not a reading of zero: a metric name that does not exist
-   answers identically. The result is kept rather than replaced, since the window
-   is what makes the emptiness mean anything. */
+// An empty series is not a reading of zero: a metric name that does not exist
+// answers identically, and the window is what makes emptiness mean anything.
 function emptyNote(query: string, label: string): string {
   return `${label} evaluated "${query}" and it matched no series. That is not a reading of zero: a metric name that does not exist, a label that never had this value, and a genuinely absent target all answer this way. Check the name with ListMetricNames before treating this as evidence of anything.`;
 }
@@ -467,9 +465,8 @@ export const METRICS_TOOLS: Tool[] = [
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = resolveMetricsSource(input);
       if (!isSource(source)) return source;
-      /* A source with no rules endpoint has not told us it evaluates no rules;
-         it has told us nothing. VictoriaMetrics serves them from vmalert alone,
-         and Grafana Cloud from the Grafana stack behind another credential. */
+      // A source with no rules endpoint has told us nothing, not that it
+      // evaluates none: VictoriaMetrics serves them from vmalert alone.
       if (source.rules === null) {
         return {
           content: `No rules endpoint is configured for ${source.label}, so nothing here can say which alerting rules it evaluates or whether any is firing. This is a gap in the connection, not an absence of rules. The user can add the rules URL on the Integrations page - on VictoriaMetrics it is vmalert's address, and on Grafana Cloud the Grafana stack's.`,

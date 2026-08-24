@@ -71,9 +71,8 @@ describe("dispatcher", () => {
     expect(dispatcher.dispatch({ sessionId: "never-created" })).toBe(false);
   });
 
-  /* The conditional UPDATE is the mutex, not a check before it: two dispatches
-     arriving together both reach it and only one changes the row, so the loser is
-     told rather than colliding on the transcript's primary key. */
+  // The conditional UPDATE is the mutex, not a check before it, so the loser
+  // is told rather than colliding on the transcript's primary key.
   it("refuses a second dispatch for a session a run already holds", async () => {
     const gate = deferred();
     const dispatcher = createDispatcher({ run: () => gate.promise });
@@ -114,9 +113,8 @@ describe("dispatcher", () => {
   });
 
   describe("promotion", () => {
-    /* A seat is held from the moment a run starts until it ends, so what frees
-       one is a run finishing - and that is the only thing that starts the next
-       waiting group. Nothing polls, and no timer decides. */
+    // A run finishing is the only thing that frees a seat and the only thing
+    // that starts the next waiting group. Nothing polls.
     it("starts a waiting group only when a run ends and frees its seat", async () => {
       updateConfig({ maxConcurrentInvestigations: 1 });
       const gate = deferred();

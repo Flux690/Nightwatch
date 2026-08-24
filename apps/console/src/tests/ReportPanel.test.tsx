@@ -156,9 +156,8 @@ describe("ReportPanel", () => {
     expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
   });
 
-  /* Two fields doing two jobs: the sentence someone reads at 02:14, and the
-     paragraph that expands it. Before `headline` existed the summary did both
-     and was good at neither, so a report stored then still leads with it. */
+  // Before `headline` existed the summary did both jobs and was good at
+  // neither, so a report stored then still leads with it.
   it("leads with the headline and demotes the summary to the deck", () => {
     render(
       panel({
@@ -187,9 +186,8 @@ describe("ReportPanel", () => {
     expect(screen.getByText(/the payments write path/)).toBeInTheDocument();
   });
 
-  /* The model has paid tokens on a timeline citation since the schema first
-     asked for one, and nothing drew it: the row claimed a fact and hid what
-     showed it. The chip reaches the call rather than redrawing its result. */
+  // Nothing drew the timeline citation, so the row claimed a fact and hid what
+  // showed it. The chip reaches the call rather than redrawing its result.
   it("reaches the cited call from a timeline row", () => {
     const scrollIntoView = vi.fn();
     vi.spyOn(document, "getElementById").mockReturnValue({
@@ -402,9 +400,8 @@ describe("ReportPanel", () => {
       }),
     );
 
-    /* A log-based claim with no log lines under it cannot be checked at a
-       glance, which is what the citation was for. Each line appears once: the
-       excerpt replaces the one-line reading rather than repeating it. */
+    // Each line appears once: the excerpt replaces the one-line reading rather
+    // than repeating it.
     expect(screen.getAllByText(/cannot allocate 2\.2GB buffer/)).toHaveLength(
       1,
     );
@@ -545,9 +542,8 @@ describe("ReportPanel", () => {
     expect(screen.queryByText(/Failed/)).not.toBeInTheDocument();
   });
 
-  /* A host tool declares itself a measurement but answers a fan-out of plain
-     readings rather than a series, so the chart reader found nothing in it and
-     the claim was left with a bare tool name under it. */
+  // A host tool declares a measurement but answers plain readings, so the
+  // chart reader found nothing and the claim showed a bare tool name.
   it("draws the readings of a measurement that carries no series, per runner", () => {
     render(
       panel({

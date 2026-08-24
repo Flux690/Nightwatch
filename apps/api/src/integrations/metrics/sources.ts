@@ -109,9 +109,8 @@ export function getMetricsSource(id: string): MetricsSource | null {
   return row === null ? null : resolve(row);
 }
 
-/* Which source a call with no `source` argument means. Exactly one connected
-   is the ordinary install and needs no argument; with several the tools require
-   one, the way a target key advertised by more than one runner does. */
+// One connected is the ordinary install and needs no argument; with several
+// the tools require one, as a shared target key does.
 export function soleMetricsSource(): MetricsSource | null {
   const all = listMetricsSources();
   return all.length === 1 ? (all[0] ?? null) : null;
@@ -121,9 +120,8 @@ export function hasMetricsSource(): boolean {
   return listMetricsSourceRows().length > 0;
 }
 
-/* A basic pair becomes one Authorization value here. Encoded rather than asked
-   for as base64: a Grafana Cloud user is handed an instance id and a token, and
-   turning those into a header is our job. */
+// Encoded here rather than asked for as base64: a Grafana Cloud user is handed
+// an instance id and a token, and turning those into a header is our job.
 export function authorizationOf(input: MetricsEndpointInput): string | null {
   if (input.authHeader !== undefined && input.authHeader !== "") {
     return input.authHeader;

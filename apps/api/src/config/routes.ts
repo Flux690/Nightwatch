@@ -68,9 +68,8 @@ const ConfigPatchSchema = z.object({
     .optional(),
 });
 
-// The provider block being edited, not necessarily the one on disk; each field falls
-// back to the stored value so a half-typed form still asks something coherent. POST
-// because the key travels in the body: a credential must never reach a URL.
+// Each field falls back to the stored value, so a half-typed form still asks
+// something coherent. POST because a credential must never reach a URL.
 const CatalogBodySchema = z.object({
   provider: z.enum(["anthropic", "openrouter"]).optional(),
   baseUrl: z.string().url().optional(),
@@ -84,9 +83,8 @@ const KeyBodySchema = z.object({
   apiKey: z.string().min(1),
 });
 
-// Picking a model captures what its catalog says about it, so starting a run
-// never has to reach the network. Derived here rather than taken from the
-// request: what a model supports is the provider's answer, not the browser's.
+// Captured at pick time, so starting a run never reaches the network. Derived
+// here, because what a model supports is the provider's answer.
 async function withModelFacts(
   provider: LLMProviderName,
   patch: ProviderPatch,
@@ -165,9 +163,8 @@ export async function registerConfigRoutes(
     providers: PROVIDER_OPTIONS,
   }));
 
-  // Proxied because the key lives here and must never reach the console. Answers
-  // about the block being edited, not the one on disk, so listing is also what
-  // verifies it: models coming back prove the endpoint and the key. Never persists.
+  // Proxied because the key lives here and must never reach the console.
+  // Listing verifies too: models coming back prove the endpoint and the key.
   fastify.post(
     "/config/models",
     { preHandler: requireSession },

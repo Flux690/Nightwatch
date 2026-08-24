@@ -132,9 +132,8 @@ describe("API-local session store", () => {
 
     const stored = getSession(m.sessionId)!.alerts;
     expect(stored.map((entry) => entry.alert)).toEqual([alert, later]);
-    /* Which one opened the session is recorded, not deduced. Both carry an
-       arrival stamp and the two can land in the same millisecond, so anything
-       that compared them would be reading a race rather than a fact. */
+    // Recorded, not deduced: both carry an arrival stamp and can land in the
+    // same millisecond, so comparing them would read a race.
     expect(stored.map((entry) => entry.injected)).toEqual([false, true]);
     expect(stored[1]!.clearedAt).toBeNull();
   });
@@ -390,9 +389,8 @@ describe("API-local session store", () => {
       expect(statusOf(m.sessionId)).toBeNull();
     });
 
-    // Running a write is evidence of effort, not of outcome, and whether an
-    // approved shell command even changed anything is unknowable. The alert that
-    // fired is the only thing that can say the incident is over.
+    // A write is evidence of effort, not outcome. The alert that fired is the
+    // only thing that can say the incident is over.
     it("does not resolve on a write while the alert it fired on still fires", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
@@ -486,9 +484,8 @@ describe("API-local session store", () => {
       expect(statusOf(investigation())).toBe("inconclusive");
     });
 
-    // It used to answer null here, which put the row in no group on the page
-    // while it still counted in the queue total - so the stepper read "3 / 12"
-    // over eleven rows. Every investigation lands in exactly one group.
+    // Answering null here put the row in no group while it still counted in
+    // the total, so the stepper read "3 / 12" over eleven rows.
     it("reads Inconclusive when a cause was found but nothing was recommended", () => {
       const sessionId = investigation();
       recordHypothesis(sessionId, {

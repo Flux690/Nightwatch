@@ -8,9 +8,8 @@ import { REPO_TOOLS } from "./tools/repo.js";
 import type { Tool } from "./tools/types.js";
 import type { EvidenceKind } from "@nightwarden/shared";
 
-// Which source a piece of evidence came from, which is the library its tool
-// belongs to: two Docker reads question one daemon, while a metric query and a
-// log read question two. Corroboration means citing two sources.
+// Two Docker reads question one daemon, while a metric query and a log read
+// question two. Corroboration means citing two sources.
 const LIBRARIES: ReadonlyArray<readonly [string, Tool[]]> = [
   ["docker", DOCKER_TOOLS],
   ["host", HOST_TOOLS],
@@ -42,9 +41,8 @@ const KIND_BY_TOOL = new Map(
   ),
 );
 
-// What to draw a cited call as, from the tool's own declaration. A name the
-// libraries no longer know - a tool renamed in an upgrade - reads as plain text:
-// the result is still quotable, just not typed.
+// From the tool's own declaration. A name the libraries no longer know reads
+// as plain text: the result is still quotable, just not typed.
 export function evidenceKind(toolName: string): EvidenceKind {
   return KIND_BY_TOOL.get(toolName) ?? "text";
 }
