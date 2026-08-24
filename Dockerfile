@@ -46,13 +46,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
       --filter @nightwarden/api
 
 
-# The full install, used only to produce dist and then discarded. Filtered to the
-# two workspaces this image builds, so no runner's dependencies are fetched.
+# The full install, used only to produce dist and then discarded. The api's own
+# devDependencies pull in shared and the console, so no runner's are fetched.
 FROM manifests AS build
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store \
-      --filter @nightwarden/api... --filter @nightwarden/console...
+      --filter "@nightwarden/api..."
 
 COPY tsconfig.base.json ./
 COPY scripts/ scripts/
@@ -60,10 +60,9 @@ COPY packages/shared/ packages/shared/
 COPY apps/api/ apps/api/
 COPY apps/console/ apps/console/
 
-# One image, one origin: the API serves the console from beside its bundle.
-RUN pnpm --filter @nightwarden/console build \
-    && pnpm --filter @nightwarden/api build \
-    && cp -r apps/console/dist apps/api/dist/console
+# The console is a devDependency of the api, so this builds it first and the
+# api's own build embeds it. Nothing about the artifact is decided here.
+RUN pnpm --filter "@nightwarden/api..." build
 
 
 FROM base AS runtime

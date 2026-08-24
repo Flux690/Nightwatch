@@ -27,3 +27,7 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
+
+      # A pull request that cannot produce the artifact is not green. Without
+      # this the break surfaces on the push to main, after review.
+      - run: pnpm build

@@ -81,6 +81,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@nightwarden/console':
+        specifier: workspace:*
+        version: link:../console
       '@nightwarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared

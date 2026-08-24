@@ -22,7 +22,7 @@ import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerInstallRoutes } from "./runners/install.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { registerMetricsRoutes } from "./integrations/metrics/routes.js";
-import { registerConsoleRoutes } from "./console/serve.js";
+import { registerConsoleRoutes } from "./console.js";
 import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
