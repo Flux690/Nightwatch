@@ -1,6 +1,6 @@
 import type { ResolvedLLMConfig, NormalizedAlert } from "@nightwarden/shared";
 import { createTitleProvider } from "../llm/factory.js";
-import { updateSessionTitle } from "../db/sessions.js";
+import { updateSessionTitle } from "./store.js";
 import { publishSessionTitleUpdated } from "./stream.js";
 import { TITLE_SYSTEM_PROMPT } from "../agent/prompts/title.js";
 import { loadConfig } from "../config/store.js";

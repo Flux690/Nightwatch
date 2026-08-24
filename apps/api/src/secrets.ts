@@ -1,20 +1,41 @@
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { platform } from "node:os";
+import { dirname } from "node:path";
 import {
   createCipheriv,
   createDecipheriv,
   createHash,
   randomBytes,
 } from "node:crypto";
+import { secretKeyPath } from "./paths.js";
+import { logger } from "./logger.js";
 
 // Every credential stored at rest passes through here: provider keys,
-// integration tokens, the fleet ingest token. Named for what it protects rather
-// than the algorithm, since node:crypto already owns that name.
+// integration tokens, the fleet ingest token, and the owner session signature.
+let secret: string | null = null;
 
-// Derive a stable 32-byte key from the NIGHTWARDEN_SECRET_KEY env var via SHA-256.
-// The env var can be any length; the hash normalises it to exactly 32 bytes.
+/* Boot resolves the key once and every reader takes it from here. Publishing it
+   through process.env instead made the ordering an undeclared contract: import
+   anything before boot ran and the failure named the env var, not the cause. */
+export function initSecrets(): void {
+  secret = resolveSecretKey();
+}
+
+function activeSecret(): string {
+  if (secret === null) {
+    throw new Error("secrets are not initialised; initSecrets() runs at boot");
+  }
+  return secret;
+}
+
+// jose signs with the raw value; AES needs exactly 32 bytes, which the hash gives.
+export function signingSecret(): string {
+  return activeSecret();
+}
+
 function deriveKey(): Buffer {
-  const secret = process.env["NIGHTWARDEN_SECRET_KEY"];
-  if (!secret) throw new Error("NIGHTWARDEN_SECRET_KEY is not set");
-  return createHash("sha256").update(secret).digest();
+  return createHash("sha256").update(activeSecret()).digest();
 }
 
 // AES-256-GCM: iv (12 bytes) + authTag (16 bytes) + ciphertext, hex-encoded
@@ -50,4 +71,39 @@ export function decrypt(stored: string): string {
 export function maskKey(plaintext: string): string {
   const suffix = plaintext.slice(-4);
   return `sk-...${suffix}`;
+}
+
+// Resolves NIGHTWARDEN_SECRET_KEY: env var wins, else a 0600 key file in the state dir is
+// reused or generated on first boot. Losing it equals rotating NIGHTWARDEN_SECRET_KEY.
+export function resolveSecretKey(): string {
+  const envKey = process.env["NIGHTWARDEN_SECRET_KEY"];
+  if (envKey) return envKey;
+
+  const path = secretKeyPath();
+  if (existsSync(path)) {
+    const persisted = readFileSync(path, "utf8").trim();
+    if (persisted) {
+      logger.info({ path }, "loaded persisted NIGHTWARDEN_SECRET_KEY file");
+      return persisted;
+    }
+    // An empty file (crash mid-write, full disk, tampering) has no recoverable key,
+    // so treat it as absent rather than returning "" and failing later as a confusing signing error.
+    logger.warn(
+      { path },
+      "NIGHTWARDEN_SECRET_KEY file is empty, generating a new one",
+    );
+  }
+
+  const generated = randomBytes(32).toString("hex");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, generated, { mode: 0o600 });
+  if (platform() === "win32") {
+    // 0o600 is ignored on Windows; restrict via ACL: remove inheritance, grant
+    // only the current user full control so other local accounts cannot read it.
+    execSync(`icacls "${path}" /inheritance:r /grant:r "%USERNAME%":F`, {
+      stdio: "ignore",
+    });
+  }
+  logger.info({ path }, "generated new NIGHTWARDEN_SECRET_KEY file");
+  return generated;
 }

@@ -18,13 +18,13 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { harness, type Harness } from "./harness.js";
-import { registerRunner, unregisterRunner } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
+import { registerRunner, unregisterRunner } from "../fleet/connections.js";
+import { resolveCommand } from "../fleet/transport.js";
 import type {
   SessionDetail,
   SessionListRow,

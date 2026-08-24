@@ -1,7 +1,8 @@
-import { proxyDir, workspacesDir } from "../../env/paths.js";
+import { proxyDir, workspacesDir } from "../../paths.js";
 import { loadConfig } from "../../config/store.js";
-import { getGitHubIntegration } from "../../db/integrations.js";
-import { getSession, getTranscriptRows } from "../../db/sessions.js";
+import { getGitHubIntegration } from "../../integrations/store.js";
+import { getSession } from "../../session/store.js";
+import { getTranscriptRows } from "../../session/transcript-store.js";
 import {
   buildAuthHeader,
   createPullRequest,

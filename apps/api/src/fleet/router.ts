@@ -3,8 +3,8 @@ import type {
   KubernetesWorkloadIdentity,
   Platform,
 } from "@nightwarden/shared";
-import { addressName, manifestedConnections } from "./fleet.js";
-import type { RunnerConnection } from "./fleet.js";
+import { addressName, manifestedConnections } from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
 
 // A fan-out wider than this is noise, not evidence: the model cannot read ten
 // hosts' filesystems in one turn and the token cost is real.

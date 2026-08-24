@@ -13,11 +13,11 @@ import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
 import { registerMetricsRoutes } from "../integrations/metrics/routes.js";
-import { deleteLokiIntegration } from "../db/integrations.js";
-import { setAlertSourceReceived } from "../db/alert-sources.js";
+import { deleteLokiIntegration } from "../integrations/store.js";
+import { setAlertSourceReceived } from "../integrations/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
-import { getDb } from "../db/client.js";
+import { getDb } from "../db.js";
 import { decrypt } from "../secrets.js";
 import { mountApi } from "./api-server.js";
 

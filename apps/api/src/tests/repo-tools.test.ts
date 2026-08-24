@@ -23,13 +23,13 @@ import { updateConfig } from "../config/store.js";
 import {
   deleteGitHubIntegration,
   saveGitHubIntegration,
-} from "../db/integrations.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+} from "../integrations/store.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
+import { createSession } from "../session/store.js";
 import {
   appendTranscriptRows,
-  createSession,
   getNextSeq,
-} from "../db/sessions.js";
+} from "../session/transcript-store.js";
 import { runSession } from "../agent/loop.js";
 import {
   effectiveToolset,

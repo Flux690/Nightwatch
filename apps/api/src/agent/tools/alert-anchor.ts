@@ -1,4 +1,4 @@
-import { getSession } from "../../db/sessions.js";
+import { getSession } from "../../session/store.js";
 
 // Evidence windows anchor on when the alert fired, never on when the tool ran -
 // runs pause for approvals, so "now" drifts. The earliest of a batch, since that

@@ -20,15 +20,15 @@ import { createScriptRunner } from "./contract-fake-provider.js";
 const scriptRunner = createScriptRunner();
 mockCreateProvider.mockImplementation(() => scriptRunner.create());
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import {
   deleteLokiIntegration,
   saveLokiIntegration,
-} from "../db/integrations.js";
+} from "../integrations/store.js";
 import {
   generateAlertSourceToken,
   getAlertSource,
-} from "../db/alert-sources.js";
+} from "../integrations/alert-sources.js";
 
 function lastReceived(): string | null {
   return getAlertSource("alertmanager")?.lastReceivedAt ?? null;
@@ -38,15 +38,15 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
 import {
   clearTestLLM,
   configureTestLLM,
   connectTestMetrics,
   useTempDb,
 } from "./temp-db.js";
-import { deleteMetricsSource } from "../db/metrics.js";
+import { deleteMetricsSource } from "../integrations/metrics/store.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 import { mountApi } from "./api-server.js";
 

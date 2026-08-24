@@ -13,7 +13,7 @@ import { createContractFakeProvider } from "./contract-fake-provider.js";
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { subscribeConsole } from "../session/bus.js";
-import { createSession, getSession } from "../db/sessions.js";
+import { createSession, getSession } from "../session/store.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
 // Title generation only runs inside a configured session, so the test states

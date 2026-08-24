@@ -33,8 +33,8 @@ import {
 } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import { getSession } from "../db/sessions.js";
-import { getReport } from "../db/reports.js";
+import { getSession } from "../session/store.js";
+import { getReport } from "../session/reports.js";
 import { buildInitialContext } from "../agent/context.js";
 
 describe("state inversion: persistence and reads are API-local", () => {

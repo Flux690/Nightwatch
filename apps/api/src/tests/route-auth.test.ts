@@ -11,11 +11,11 @@ import { registerTokenRoutes } from "../auth/token.js";
 import { registerConfigRoutes } from "../config/routes.js";
 import { registerIntegrationRoutes } from "../integrations/routes.js";
 import { registerMetricsRoutes } from "../integrations/metrics/routes.js";
-import { registerInstallRoutes } from "../runners/install.js";
-import { registerRunnerRoutes } from "../runners/routes.js";
+import { registerInstallRoutes } from "../fleet/install.js";
+import { registerRunnerRoutes } from "../fleet/routes.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { registerWsRoutes } from "../ws/server.js";
+import { registerWsRoutes } from "../fleet/server.js";
 import { mountApi } from "./api-server.js";
 import { useTempDb } from "./temp-db.js";
 

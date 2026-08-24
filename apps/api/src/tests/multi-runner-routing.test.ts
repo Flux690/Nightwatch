@@ -9,6 +9,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { initSecrets } from "../secrets.js";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type {
@@ -33,7 +34,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -41,11 +42,12 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
+import { resolveCommand } from "../fleet/transport.js";
 import { dispatcher } from "../dispatcher.js";
-import { createSession, getTranscriptRows } from "../db/sessions.js";
+import { createSession } from "../session/store.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
@@ -145,6 +147,7 @@ describe("multi-runner routing", () => {
       "NIGHTWARDEN_SECRET_KEY",
       "test-only-secret-key-for-routing-tests-32b",
     );
+    initSecrets();
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     runnerIdA = generateRunnerToken("docker", "routing-a").id;

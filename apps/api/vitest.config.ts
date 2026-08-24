@@ -1,9 +1,15 @@
+import { fileURLToPath } from "node:url";
 import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    // Resolved here because only the config is certain of it: cwd differs
+    // between the root run and a filtered one.
+    env: {
+      API_SRC: fileURLToPath(new URL("./src", import.meta.url)),
+    },
     testTimeout: 20_000,
     hookTimeout: 20_000,
     // Vitest 4's default exclude dropped dist/build globs, so the compiled

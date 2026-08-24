@@ -18,7 +18,7 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { harness, type Harness } from "./harness.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 
 describe("termination paths: every run ends in model text, no escalation", () => {
   let nw: Harness;

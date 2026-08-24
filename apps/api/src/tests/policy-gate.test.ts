@@ -23,7 +23,7 @@ import {
   toolCallReached,
 } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 

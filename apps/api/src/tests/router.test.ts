@@ -11,14 +11,14 @@ import {
   unregisterRunner,
   setRunnerManifest,
   getFleetView,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
 import {
   resolveCommand,
   sendCommand,
   sendFleetCommand,
-} from "../ws/command-transport.js";
-import { isSharedTarget } from "../ws/router.js";
+} from "../fleet/transport.js";
+import { isSharedTarget } from "../fleet/router.js";
 import { dockerService, kubernetesWorkload } from "./manifest-helper.js";
 
 function svc(name: string): DockerServiceIdentity {

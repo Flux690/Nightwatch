@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -32,14 +32,14 @@ import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
 import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
+import { resolveCommand } from "../fleet/transport.js";
 import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
 import { buildChatContext } from "../agent/context.js";
 import { connectedPlatforms } from "../agent/policy.js";
@@ -49,7 +49,7 @@ import { seedChatSession } from "./session-helper.js";
 import {
   deleteLokiIntegration,
   saveLokiIntegration,
-} from "../db/integrations.js";
+} from "../integrations/store.js";
 import { mountApi } from "./api-server.js";
 import {
   kubernetesManifest,

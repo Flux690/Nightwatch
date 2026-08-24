@@ -6,7 +6,7 @@ import {
   integrationOfKind,
   putIntegration,
   type IntegrationRow,
-} from "./integrations.js";
+} from "../store.js";
 import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
 /* A metrics source is a connection like any other; only its config shape is

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { countSeats, queueDepth } from "../db/sessions.js";
+import { queueDepth } from "./alerts-store.js";
+import { countSeats } from "./run-state.js";
 import { seatLimit } from "../run-pool.js";
 import { publishConsoleEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";

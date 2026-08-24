@@ -10,7 +10,7 @@ import {
   countInvestigations,
   listSessionSources,
   type SessionListSource,
-} from "../db/sessions.js";
+} from "./store.js";
 import { isActionable } from "../agent/report.js";
 import { dispatcher } from "../dispatcher.js";
 

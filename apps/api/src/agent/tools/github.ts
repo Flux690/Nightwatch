@@ -1,5 +1,5 @@
 import type { ToolOutcome } from "@nightwarden/shared";
-import { getGitHubIntegration } from "../../db/integrations.js";
+import { getGitHubIntegration } from "../../integrations/store.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
 import {

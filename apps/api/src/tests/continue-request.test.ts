@@ -21,7 +21,7 @@ import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
 import { buildTranscript } from "../session/transcript.js";
 import { updateConfig } from "../config/store.js";
 

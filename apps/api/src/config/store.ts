@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDb } from "../db/client.js";
+import { getDb } from "../db.js";
 import {
   DEFAULT_CHECK_IN_AFTER_MS,
   DEFAULT_MAX_CONCURRENT_INVESTIGATIONS,

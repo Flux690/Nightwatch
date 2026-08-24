@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { harness, type Harness } from "./harness.js";
-import { generateRunnerToken } from "../db/runner.js";
-import { registerInstallRoutes } from "../runners/install.js";
-import { kubernetesInstallManifest } from "../runners/install-kubernetes.js";
+import { generateRunnerToken } from "../fleet/runners.js";
+import { registerInstallRoutes } from "../fleet/install.js";
+import { kubernetesInstallManifest } from "../fleet/install-kubernetes.js";
 
 const URL = "/api/runners/install";
 

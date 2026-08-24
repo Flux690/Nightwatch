@@ -2,8 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
-import { getDb, resetDb } from "../db/client.js";
-import { saveMetricsSource, type MetricsSourceInput } from "../db/metrics.js";
+import { getDb, resetDb } from "../db.js";
+import {
+  saveMetricsSource,
+  type MetricsSourceInput,
+} from "../integrations/metrics/store.js";
 import { updateConfig, updateProvider } from "../config/store.js";
 
 // Call at the top of beforeAll before anything opens the lazy db; pair the

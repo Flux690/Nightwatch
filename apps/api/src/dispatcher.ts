@@ -2,18 +2,19 @@ import { randomUUID } from "node:crypto";
 import { buildSessionMeta, runSession } from "./agent/loop.js";
 import type { RunSessionInput, RunOutcome } from "./agent/loop.js";
 import {
-  appendErrorMessage,
   appendSessionAlert,
+  oldestQueuedGroup,
+} from "./session/alerts-store.js";
+import {
   claimRun,
   clearRunFailure,
-  recordRunFailure,
   isRunning,
-  oldestQueuedGroup,
-  openSessionForGroup,
+  recordRunFailure,
   releaseRun,
-  sessionExists,
-} from "./db/sessions.js";
-import { markStopped } from "./db/sessions.js";
+} from "./session/run-state.js";
+import { openSessionForGroup, sessionExists } from "./session/store.js";
+import { appendErrorMessage } from "./session/transcript-store.js";
+import { markStopped } from "./session/run-state.js";
 import { hasSeat } from "./run-pool.js";
 import { describeLLMError, isTransientLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
@@ -59,6 +60,12 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
 
+  function drainInbox(sessionId: string): NormalizedAlert[] {
+    const arr = inbox.get(sessionId) ?? [];
+    inbox.delete(sessionId);
+    return arr;
+  }
+
   function start(input: RunSessionInput): boolean {
     // Claimed durably first, so a restart can tell a run that was alive from one
     // that concluded, and a second dispatch cannot start.
@@ -80,7 +87,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     const controller = new AbortController();
     controllers.set(input.sessionId, controller);
 
-    void run({ ...input, signal: controller.signal })
+    void run({ ...input, signal: controller.signal, drainInbox })
       .then((toolOutcome) => {
         // A run that reached an ending, however it ended, is not a failure any
         // more - so it stops carrying one and gets its full three attempts back.
@@ -191,11 +198,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       inbox.set(sessionId, arr);
     },
 
-    drainInbox(sessionId: string): NormalizedAlert[] {
-      const arr = inbox.get(sessionId) ?? [];
-      inbox.delete(sessionId);
-      return arr;
-    },
+    drainInbox,
 
     stop(sessionId: string): boolean {
       const controller = controllers.get(sessionId);

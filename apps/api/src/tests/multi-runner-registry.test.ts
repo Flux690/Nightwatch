@@ -9,13 +9,13 @@ import type {
   FleetRunner,
   RunnerRecord,
 } from "@nightwarden/shared";
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
-import { registerWsRoutes } from "../ws/server.js";
-import { registerRunnerRoutes } from "../runners/routes.js";
-import { resolveCommand, sendCommand } from "../ws/command-transport.js";
+import { registerWsRoutes } from "../fleet/server.js";
+import { registerRunnerRoutes } from "../fleet/routes.js";
+import { resolveCommand, sendCommand } from "../fleet/transport.js";
 import { logger } from "../logger.js";
 import { mountApi } from "./api-server.js";
 import { dockerService, manifest } from "./manifest-helper.js";

@@ -3,17 +3,19 @@ import { evidenceIdsByToolUseId } from "../agent/evidence-id.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "./interrupts.js";
+import {
+  markDone,
+  runningSessionIds,
+  suspendedSessionIds,
+} from "./run-state.js";
+import { getSession } from "./store.js";
 import {
   appendErrorMessage,
   appendTranscriptRows,
   getNextSeq,
-  getSession,
   getTranscriptRows,
-  markDone,
-  runningSessionIds,
-  suspendedSessionIds,
-} from "../db/sessions.js";
+} from "./transcript-store.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";

@@ -9,12 +9,12 @@ import {
   deleteLokiIntegration,
   getLokiIntegration,
   saveLokiIntegration,
-} from "../db/integrations.js";
+} from "./store.js";
 import {
   deleteAlertSource,
   generateAlertSourceToken,
   getAlertSource,
-} from "../db/alert-sources.js";
+} from "./alert-sources.js";
 import { isAlertSourceKind } from "@nightwarden/shared";
 import type { AlertSourceKind } from "@nightwarden/shared";
 import {
@@ -27,7 +27,7 @@ import { LokiApiError, probeLoki } from "./loki.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
-import { publicUrl } from "../env/public-url.js";
+import { publicUrl } from "../public-url.js";
 import type {
   GitHubIntegrationStatus,
   LokiIntegrationStatus,

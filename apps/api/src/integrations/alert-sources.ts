@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { hashToken } from "./runner.js";
+import { hashToken } from "../fleet/runners.js";
 import {
   allIntegrations,
   deleteIntegrationsOfKind,
@@ -7,7 +7,7 @@ import {
   putIntegration,
   touchIntegration,
   type IntegrationRow,
-} from "./integrations.js";
+} from "./store.js";
 import { ALERT_SOURCE_KINDS } from "@nightwarden/shared";
 import type { AlertSourceKind } from "@nightwarden/shared";
 

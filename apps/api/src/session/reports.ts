@@ -1,5 +1,5 @@
 import type { Report } from "@nightwarden/shared";
-import { getDb } from "./client.js";
+import { getDb } from "../db.js";
 
 // The record's persistence seam. One report per session, held in a column on it:
 // born with the session, deleted with it, and only ever read alongside it.

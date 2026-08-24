@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedAlertSession } from "./session-helper.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { saveLokiIntegration } from "../db/integrations.js";
+import { saveLokiIntegration } from "../integrations/store.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
 import type {

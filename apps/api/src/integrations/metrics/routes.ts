@@ -9,7 +9,7 @@ import {
   listMetricsSourceRows,
   metricsSourceOfKind,
   saveMetricsSource,
-} from "../../db/metrics.js";
+} from "./store.js";
 import { logger } from "../../logger.js";
 import { MetricsApiError, instantQuery, alertingRules } from "./client.js";
 import {

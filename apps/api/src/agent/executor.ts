@@ -2,8 +2,8 @@ import {
   RunnerUnreachableError,
   sendCommand,
   sendFleetCommand,
-} from "../ws/command-transport.js";
-import { NoPlatformRunnerError } from "../ws/router.js";
+} from "../fleet/transport.js";
+import { NoPlatformRunnerError } from "../fleet/router.js";
 import { logger } from "../logger.js";
 import type { ToolOutcome } from "@nightwarden/shared";
 import type {

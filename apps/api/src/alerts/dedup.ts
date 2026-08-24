@@ -1,4 +1,4 @@
-import { isAlertCovered } from "../db/sessions.js";
+import { isAlertCovered } from "../session/alerts-store.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 
 /* Derived: a duplicate iff some row holds this (fingerprint, startsAt) and

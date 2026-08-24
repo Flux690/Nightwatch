@@ -18,7 +18,7 @@ import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { getSession } from "../db/sessions.js";
+import { getSession } from "../session/store.js";
 import { seedCompleteReport } from "./report-helper.js";
 
 describe("DELETE /sessions/:id", () => {

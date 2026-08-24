@@ -1,6 +1,5 @@
 import type {
   Conviction,
-  EvidenceKind,
   GatedCall,
   HumanDecision,
   Hypothesis,
@@ -12,12 +11,11 @@ import type {
   ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
-import { amendReport, appendToReport, getReport } from "../db/reports.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { amendReport, appendToReport, getReport } from "../session/reports.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
-import { findTool } from "./tools/toolset.js";
-import { evidenceSource } from "./evidence-source.js";
+import { evidenceKind, evidenceSource } from "./evidence-source.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
 
 // The report domain service: the only place the record is written, and the owner
@@ -135,13 +133,6 @@ function citedIds(report: Report): Set<string> {
       entry.evidenceId === undefined ? [] : [entry.evidenceId],
     ),
   ]);
-}
-
-// What to draw a cited call as, from the tool's own declaration. A name the
-// registry no longer knows - a tool renamed in an upgrade - reads as plain text,
-// which is the honest fallback: the result is still quotable, just not typed.
-function evidenceKind(toolName: string): EvidenceKind {
-  return findTool(toolName)?.evidenceKind ?? "text";
 }
 
 // In the order the calls happened, which is the order they are worth reading. A

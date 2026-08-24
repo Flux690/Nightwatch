@@ -1,15 +1,14 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getLoginVersion } from "../db/user.js";
+import { getLoginVersion } from "./user.js";
+import { signingSecret } from "../secrets.js";
 
 const AUTH_COOKIE = "nw_auth";
 const SESSION_LIFETIME_S = 7 * 24 * 60 * 60;
 const REISSUE_THRESHOLD_S = 2 * 24 * 60 * 60;
 
 function signingKey(): Uint8Array {
-  const key = process.env["NIGHTWARDEN_SECRET_KEY"];
-  if (!key) throw new Error("NIGHTWARDEN_SECRET_KEY is not set");
-  return new TextEncoder().encode(key);
+  return new TextEncoder().encode(signingSecret());
 }
 
 export function cookieHeader(value: string, secure: boolean): string {

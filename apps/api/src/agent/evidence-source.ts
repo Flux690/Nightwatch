@@ -6,6 +6,7 @@ import { LOKI_TOOLS } from "./tools/loki.js";
 import { METRICS_TOOLS } from "./tools/metrics.js";
 import { REPO_TOOLS } from "./tools/repo.js";
 import type { Tool } from "./tools/types.js";
+import type { EvidenceKind } from "@nightwarden/shared";
 
 // Which source a piece of evidence came from, which is the library its tool
 // belongs to: two Docker reads question one daemon, while a metric query and a
@@ -30,4 +31,20 @@ const BY_TOOL = new Map(
 // it can never corroborate a second call to itself.
 export function evidenceSource(toolName: string): string {
   return BY_TOOL.get(toolName) ?? toolName;
+}
+
+const KIND_BY_TOOL = new Map(
+  LIBRARIES.flatMap(([, tools]) =>
+    tools.map((tool): [string, EvidenceKind] => [
+      tool.schema.name,
+      tool.evidenceKind,
+    ]),
+  ),
+);
+
+// What to draw a cited call as, from the tool's own declaration. A name the
+// libraries no longer know - a tool renamed in an upgrade - reads as plain text:
+// the result is still quotable, just not typed.
+export function evidenceKind(toolName: string): EvidenceKind {
+  return KIND_BY_TOOL.get(toolName) ?? "text";
 }

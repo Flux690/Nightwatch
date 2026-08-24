@@ -7,8 +7,8 @@ import type {
 } from "@nightwarden/shared";
 import { logger } from "../logger.js";
 import { resolveByRunner, resolveByService } from "./router.js";
-import { addressName } from "./fleet.js";
-import type { RunnerConnection } from "./fleet.js";
+import { addressName } from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
 
 // Request/reply correlation for runner commands, owned entirely by this
 // module - the registry knows nothing about pending commands.

@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { Platform } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { findRunnerByToken } from "../db/runner.js";
-import { publicWsUrl } from "../env/public-url.js";
+import { findRunnerByToken } from "../fleet/runners.js";
+import { publicWsUrl } from "../public-url.js";
 import { dockerInstallScript } from "./install-docker.js";
 import { kubernetesInstallManifest } from "./install-kubernetes.js";
 

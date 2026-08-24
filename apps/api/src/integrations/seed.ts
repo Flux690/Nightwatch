@@ -1,5 +1,5 @@
-import { getLokiIntegration, saveLokiIntegration } from "../db/integrations.js";
-import { listMetricsSourceRows, saveMetricsSource } from "../db/metrics.js";
+import { getLokiIntegration, saveLokiIntegration } from "./store.js";
+import { listMetricsSourceRows, saveMetricsSource } from "./metrics/store.js";
 import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";

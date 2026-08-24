@@ -1,11 +1,11 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
-import { resolveSecretKey } from "./env/secret-key.js";
-import { initDb } from "./db/client.js";
+import { initSecrets } from "./secrets.js";
+import { initDb } from "./db.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerTokenRoutes } from "./auth/token.js";
-import { registerWsRoutes } from "./ws/server.js";
+import { registerWsRoutes } from "./fleet/server.js";
 import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { dispatcher } from "./dispatcher.js";
@@ -18,8 +18,8 @@ import { seedConfigFromEnv } from "./config/store.js";
 import { seedIntegrationsFromEnv } from "./integrations/seed.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { recoverDeadRuns } from "./session/recover.js";
-import { registerRunnerRoutes } from "./runners/routes.js";
-import { registerInstallRoutes } from "./runners/install.js";
+import { registerRunnerRoutes } from "./fleet/routes.js";
+import { registerInstallRoutes } from "./fleet/install.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { registerMetricsRoutes } from "./integrations/metrics/routes.js";
 import { registerConsoleRoutes } from "./console.js";
@@ -28,12 +28,8 @@ import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { releaseContainers } from "./sandbox/workspace.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
-import { getGitHubIntegration } from "./db/integrations.js";
-import {
-  nightwardenDir,
-  stateDirIsEphemeral,
-  workspacesDir,
-} from "./env/paths.js";
+import { getGitHubIntegration } from "./integrations/store.js";
+import { nightwardenDir, stateDirIsEphemeral, workspacesDir } from "./paths.js";
 import { logger } from "./logger.js";
 
 // Resolve the state directory first so a relative NIGHTWARDEN_DIR fails here with
@@ -53,9 +49,8 @@ try {
   process.exit(1);
 }
 
-// Explicit NIGHTWARDEN_SECRET_KEY env var wins; otherwise a key file in the state directory
-// is reused or generated on first boot.
-process.env["NIGHTWARDEN_SECRET_KEY"] = resolveSecretKey();
+// Before anything that encrypts, signs or reads a stored credential.
+initSecrets();
 
 const isDev = process.env["NODE_ENV"] !== "production";
 

@@ -1,7 +1,7 @@
 import { loadConfig } from "../config/store.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { getTranscriptRows } from "./transcript-store.js";
 import { evidenceIdsByToolUseId } from "../agent/evidence-id.js";
-import type { PendingHumanInput } from "../db/interrupts.js";
+import type { PendingHumanInput } from "./interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";

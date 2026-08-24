@@ -3,14 +3,13 @@ import { createDispatcher } from "../dispatcher.js";
 import type { RunSessionInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { updateConfig } from "../config/store.js";
+import { enqueueAlerts, queueDepth } from "../session/alerts-store.js";
 import {
   countInvestigations,
   createSession,
-  enqueueAlerts,
   getSession,
   listSessionSources,
-  queueDepth,
-} from "../db/sessions.js";
+} from "../session/store.js";
 import { seedAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 

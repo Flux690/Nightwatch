@@ -16,27 +16,31 @@ import type {
   SessionMeta,
 } from "@nightwarden/shared";
 import { connectTestMetrics, useTempDb } from "./temp-db.js";
-import { deleteMetricsSource } from "../db/metrics.js";
+import { deleteMetricsSource } from "../integrations/metrics/store.js";
 
 import {
-  createSession,
   appendSessionAlert,
-  appendTranscriptRows,
-  appendRowsAndInterrupt,
-  listSessionSources,
-  getSession,
-  getTranscriptRows,
-  deleteSession,
   markAlertCleared,
-} from "../db/sessions.js";
+} from "../session/alerts-store.js";
+import {
+  createSession,
+  deleteSession,
+  getSession,
+  listSessionSources,
+} from "../session/store.js";
+import {
+  appendRowsAndInterrupt,
+  appendTranscriptRows,
+  getTranscriptRows,
+} from "../session/transcript-store.js";
 import { listSessionPage } from "../session/list.js";
 import { recordHypothesis } from "../agent/report.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
-import { getReport } from "../db/reports.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
+import { getReport } from "../session/reports.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
-import {} from "../db/integrations.js";
+import {} from "../integrations/store.js";
 import { verifyRecovery } from "../verification/recovery.js";
 import { reconcileRecovery } from "../verification/reconciler.js";
 

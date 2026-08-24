@@ -4,10 +4,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 
 import { registerTokenRoutes } from "../auth/token.js";
-import { registerWsRoutes } from "../ws/server.js";
-import { getDb } from "../db/client.js";
-import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
-import { createSession } from "../db/sessions.js";
+import { registerWsRoutes } from "../fleet/server.js";
+import { getDb } from "../db.js";
+import { generateRunnerToken, touchLastUsed } from "../fleet/runners.js";
+import { createSession } from "../session/store.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");

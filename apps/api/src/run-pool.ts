@@ -1,5 +1,5 @@
 import { loadConfig } from "./config/store.js";
-import { countSeats } from "./db/sessions.js";
+import { countSeats } from "./session/run-state.js";
 
 /* Two pools, because what starts them differs: an alert storm can produce fifty
    runs in a minute, chats are human-initiated and self-limiting. What binds is

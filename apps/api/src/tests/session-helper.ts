@@ -4,11 +4,8 @@ import type { DeliveryContext } from "../alerts/delivery.js";
 import { mintSession } from "../auth/session.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { dispatcher } from "../dispatcher.js";
-import {
-  createSession,
-  enqueueAlerts,
-  openSessionForGroup,
-} from "../db/sessions.js";
+import { enqueueAlerts } from "../session/alerts-store.js";
+import { createSession, openSessionForGroup } from "../session/store.js";
 
 // A sender that withheld nothing and described the group not at all: the shape
 // every test that is not about the envelope wants.

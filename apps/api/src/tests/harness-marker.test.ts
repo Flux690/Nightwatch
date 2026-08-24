@@ -21,7 +21,7 @@ const setScript = (turns: ScriptedTurn[]): void =>
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
 import { stripHarnessMarker } from "../agent/harness-marker.js";
 
 const FINISH: ScriptedTurn = { text: "Investigation complete.", toolUses: [] };

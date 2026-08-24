@@ -3,8 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveSecretKey } from "../env/secret-key.js";
-import { encrypt, decrypt } from "../secrets.js";
+import { resolveSecretKey, initSecrets, encrypt, decrypt } from "../secrets.js";
 
 function expectRestrictedPermissions(file: string): void {
   if (platform() === "win32") {
@@ -29,6 +28,7 @@ describe("resolveSecretKey", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    initSecrets();
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -65,16 +65,13 @@ describe("resolveSecretKey", () => {
   });
 
   it("reuses the same key across two boots (a value encrypted on boot 1 still decrypts on boot 2)", () => {
+    initSecrets();
     const bootOneKey = resolveSecretKey();
-    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", bootOneKey);
     const encrypted = encrypt("super-secret-llm-api-key");
 
-    // Simulate a process restart: env unset again, file is all that remains.
-    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", undefined);
-    const bootTwoKey = resolveSecretKey();
-    expect(bootTwoKey).toBe(bootOneKey);
-
-    vi.stubEnv("NIGHTWARDEN_SECRET_KEY", bootTwoKey);
+    // A restart with the env var still unset: the key file is all that remains.
+    initSecrets();
+    expect(resolveSecretKey()).toBe(bootOneKey);
     expect(decrypt(encrypted)).toBe("super-secret-llm-api-key");
   });
 });

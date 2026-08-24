@@ -12,7 +12,7 @@ import {
   getUserCredentials,
   getLoginVersion,
   saveUser,
-} from "../db/user.js";
+} from "./user.js";
 import { createCredentialRateLimiter } from "./rate-limit.js";
 
 const MIN_PASSWORD = 12;

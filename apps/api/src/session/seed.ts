@@ -1,5 +1,5 @@
 import type { TranscriptRow } from "@nightwarden/shared";
-import { getTranscriptRows } from "../db/sessions.js";
+import { getTranscriptRows } from "./transcript-store.js";
 import type { ProviderMessage } from "../llm/types.js";
 
 function hasToolCall(message: TranscriptRow): boolean {

@@ -2,8 +2,8 @@ import {
   claimPendingHumanInput,
   deletePendingHumanInput,
   getPendingHumanInputBySessionId,
-} from "../db/interrupts.js";
-import { findToolCall } from "../db/sessions.js";
+} from "./interrupts.js";
+import { findToolCall } from "./transcript-store.js";
 import { stripHarnessMarker } from "../agent/harness-marker.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";

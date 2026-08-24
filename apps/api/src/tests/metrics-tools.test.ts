@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { saveMetricsSource } from "../db/metrics.js";
+import { saveMetricsSource } from "../integrations/metrics/store.js";
 import { seedAlertSession } from "./session-helper.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";

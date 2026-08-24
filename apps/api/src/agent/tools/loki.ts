@@ -1,4 +1,4 @@
-import { getLokiIntegration } from "../../db/integrations.js";
+import { getLokiIntegration } from "../../integrations/store.js";
 import {
   LokiApiError,
   labelNames,

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { listRunnersMeta } from "../db/runner.js";
-import { listRunners, getFleetView } from "../ws/fleet.js";
+import { listRunnersMeta } from "../fleet/runners.js";
+import { listRunners, getFleetView } from "../fleet/connections.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwarden/shared";

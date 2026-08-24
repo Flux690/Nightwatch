@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initSecrets } from "../secrets.js";
 import { clearTestLLM, connectTestMetrics, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
 import { seedIntegrationsFromEnv } from "../integrations/seed.js";
-import { listMetricsSourceRows } from "../db/metrics.js";
-import { getDb } from "../db/client.js";
-import { getLokiIntegration } from "../db/integrations.js";
+import { listMetricsSourceRows } from "../integrations/metrics/store.js";
+import { getDb } from "../db.js";
+import { getLokiIntegration } from "../integrations/store.js";
 
 // Every supported provider, as data: a new one is a row here, not a copied test,
 // so it cannot be added without the seed being proven for it.
@@ -137,6 +138,7 @@ describe("first-boot integration seed from the environment", () => {
       "NIGHTWARDEN_SECRET_KEY",
       "test-only-secret-key-for-seed-tests-32bytes",
     );
+    initSecrets();
   });
 
   afterEach(() => {

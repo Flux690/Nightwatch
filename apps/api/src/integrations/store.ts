@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getDb } from "./client.js";
+import { getDb } from "../db.js";
 import { decrypt, encrypt } from "../secrets.js";
 
 /* One table holds every configured connection. This file owns the row shape;

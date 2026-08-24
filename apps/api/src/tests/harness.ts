@@ -7,14 +7,14 @@ import {
   type Platform,
   type RunnerCommandMessage,
 } from "@nightwarden/shared";
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
+import { resolveCommand } from "../fleet/transport.js";
 import { mountApi } from "./api-server.js";
 import {
   dockerService,

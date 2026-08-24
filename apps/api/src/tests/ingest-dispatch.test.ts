@@ -19,19 +19,18 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import { generateAlertSourceToken } from "../db/alert-sources.js";
+import { generateAlertSourceToken } from "../integrations/alert-sources.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
 import { updateConfig } from "../config/store.js";
+import { markAlertCleared, queueDepth } from "../session/alerts-store.js";
+import { recordRunFailure } from "../session/run-state.js";
 import {
-  appendErrorMessage,
   countInvestigations,
   getSession,
   listSessionSources,
-  markAlertCleared,
-  queueDepth,
-  recordRunFailure,
-} from "../db/sessions.js";
+} from "../session/store.js";
+import { appendErrorMessage } from "../session/transcript-store.js";
 import { randomUUID } from "node:crypto";
 import { waitFor } from "./wait.js";
 import { seedAlertSession } from "./session-helper.js";

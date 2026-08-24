@@ -1,7 +1,10 @@
 import type { NormalizedAlert } from "@nightwarden/shared";
 import type { DeliveryContext } from "./delivery.js";
 import { isDuplicate } from "./dedup.js";
-import { enqueueAlerts, sessionCoveringGroup } from "../db/sessions.js";
+import {
+  enqueueAlerts,
+  sessionCoveringGroup,
+} from "../session/alerts-store.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 import { publishQueueChanged } from "../session/stream.js";

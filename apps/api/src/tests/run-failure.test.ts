@@ -27,7 +27,7 @@ import {
 } from "./console-events-helper.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 
 function providerError(status: number, body?: Record<string, unknown>): Error {
   return OpenAI.APIError.generate(

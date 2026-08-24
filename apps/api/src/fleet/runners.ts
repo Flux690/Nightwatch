@@ -1,6 +1,6 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { isPlatform, type Platform } from "@nightwarden/shared";
-import { getDb } from "./client.js";
+import { getDb } from "../db.js";
 
 // Runner record stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
 // Plaintext is returned once at generation and never stored or logged.

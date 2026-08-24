@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { dbPath } from "../env/paths.js";
+import { dbPath } from "./paths.js";
 
 // No migrations: a schema change is applied by recreating the database.
 const SCHEMA = `

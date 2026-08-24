@@ -11,13 +11,12 @@ import { createScriptRunner } from "./contract-fake-provider.js";
 const scriptRunner = createScriptRunner();
 mockCreateProvider.mockImplementation(() => scriptRunner.create());
 
+import { claimRun, isRunning } from "../session/run-state.js";
 import {
   appendRowsAndInterrupt,
   appendTranscriptRows,
   getTranscriptRows,
-  isRunning,
-  claimRun,
-} from "../db/sessions.js";
+} from "../session/transcript-store.js";
 import { recoverDeadRuns } from "../session/recover.js";
 import { buildSeed } from "../session/seed.js";
 import { useTempDb } from "./temp-db.js";

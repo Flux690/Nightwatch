@@ -11,7 +11,7 @@ import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
-import { getReport } from "../db/reports.js";
+import { getReport } from "../session/reports.js";
 import { recoveryState } from "../verification/recovery.js";
 import {
   effectiveToolset,
@@ -32,16 +32,16 @@ import { loadConfig } from "../config/store.js";
 import {
   getGitHubIntegration,
   getLokiIntegration,
-} from "../db/integrations.js";
+} from "../integrations/store.js";
 import { hasMetricsSource } from "../integrations/metrics/sources.js";
+import { getSession } from "../session/store.js";
 import {
   appendErrorMessage,
-  appendTranscriptRows,
-  getTranscriptRows,
   appendRowsAndInterrupt,
+  appendTranscriptRows,
   getNextSeq,
-  getSession,
-} from "../db/sessions.js";
+  getTranscriptRows,
+} from "../session/transcript-store.js";
 import {
   publishTextMessageContent,
   publishMessage,
@@ -55,8 +55,7 @@ import {
   generateSessionTitle,
   buildAlertTitleSource,
 } from "../session/title.js";
-import { dispatcher } from "../dispatcher.js";
-import { getFleetView } from "../ws/fleet.js";
+import { getFleetView } from "../fleet/connections.js";
 import { logger } from "../logger.js";
 import type {
   AlertGroupContext,
@@ -74,7 +73,7 @@ import type {
   ToolResult,
   ToolSchema,
 } from "../llm/types.js";
-import type { PendingHumanInput } from "../db/interrupts.js";
+import type { PendingHumanInput } from "../session/interrupts.js";
 
 /* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider snapshot
    always comes back without them. The run knew both before the row existed; this
@@ -273,6 +272,9 @@ export interface RunSessionInput {
   // When true: seed prior transcript and run exactly one closing turn (no tools),
   // then finish. Used when the user declines a continue-request interrupt.
   standDown?: boolean;
+  /* Alerts that arrived mid-run, handed in rather than fetched: the dispatcher
+     owns the inbox and calls this, so the loop never imports it back. */
+  drainInbox?: (sessionId: string) => NormalizedAlert[];
 }
 
 export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
@@ -921,7 +923,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     provider.appendToolResults(toolResults);
     // Already durable: the dispatcher wrote each one when it arrived. The inbox
     // exists to tell the model, which is a separate concern from keeping it.
-    const injected = dispatcher.drainInbox(sessionId);
+    const injected = input.drainInbox?.(sessionId) ?? [];
     if (injected.length > 0) {
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
     }

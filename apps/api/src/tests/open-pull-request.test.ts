@@ -12,7 +12,7 @@ vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import { useTempDb } from "./temp-db.js";
 import { updateConfig } from "../config/store.js";
-import { saveGitHubIntegration } from "../db/integrations.js";
+import { saveGitHubIntegration } from "../integrations/store.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { releaseContainers } from "../sandbox/workspace.js";
 import type { DispatchedToolResult } from "../agent/tools/types.js";

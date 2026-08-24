@@ -7,13 +7,13 @@ import { routeDelivery } from "./route-alert.js";
 import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
-} from "../db/alert-sources.js";
-import { markAlertCleared } from "../db/sessions.js";
+} from "../integrations/alert-sources.js";
+import { markAlertCleared } from "../session/alerts-store.js";
 import { publishReportUpdated } from "../session/stream.js";
-import { getLokiIntegration } from "../db/integrations.js";
+import { getLokiIntegration } from "../integrations/store.js";
 import { hasMetricsSource } from "../integrations/metrics/sources.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { getFleetView } from "../ws/fleet.js";
+import { getFleetView } from "../fleet/connections.js";
 import {
   checkLLMReadiness,
   notConfiguredMessage,

@@ -1,5 +1,5 @@
 import type { Platform } from "@nightwarden/shared";
-import { listRunners } from "../ws/fleet.js";
+import { listRunners } from "../fleet/connections.js";
 
 // Run policy: which tools an investigation may use, derived from the connected
 // fleet; pure reads, recomputed each turn.

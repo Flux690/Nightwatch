@@ -21,8 +21,8 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
-import { deleteMetricsSource } from "../db/metrics.js";
+import { hasPendingHumanInput } from "../session/interrupts.js";
+import { deleteMetricsSource } from "../integrations/metrics/store.js";
 import { listSessionPage } from "../session/list.js";
 
 describe("POST /sessions/:id/stop", () => {

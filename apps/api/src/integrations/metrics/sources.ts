@@ -9,7 +9,7 @@ import {
   getMetricsSourceRow,
   listMetricsSourceRows,
   type MetricsSourceRow,
-} from "../../db/metrics.js";
+} from "./store.js";
 import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
 

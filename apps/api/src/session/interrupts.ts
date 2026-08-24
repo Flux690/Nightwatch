@@ -1,4 +1,4 @@
-import { getDb } from "./client.js";
+import { getDb } from "../db.js";
 import type { ToolResult } from "../llm/types.js";
 
 /* The gate a session is parked on: four columns on the session row, since there

@@ -9,6 +9,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { initSecrets } from "../secrets.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -24,15 +25,15 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken } from "../fleet/runners.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/fleet.js";
-import type { RunnerConnection } from "../ws/fleet.js";
+} from "../fleet/connections.js";
+import type { RunnerConnection } from "../fleet/connections.js";
 import { dispatcher } from "../dispatcher.js";
 import type { RunnerManifest, NormalizedAlert } from "@nightwarden/shared";
 import { dockerService, manifest } from "./manifest-helper.js";
@@ -87,6 +88,7 @@ describe("fleet summary injection", () => {
       "NIGHTWARDEN_SECRET_KEY",
       "test-only-secret-key-fleet-summary-tests-32b",
     );
+    initSecrets();
     cleanupDb = useTempDb();
   });
 

@@ -1,5 +1,6 @@
 import type { SessionAlert } from "@nightwarden/shared";
-import { getSession, markAlertCleared } from "../db/sessions.js";
+import { markAlertCleared } from "../session/alerts-store.js";
+import { getSession } from "../session/store.js";
 import { logger } from "../logger.js";
 import { publishReportUpdated } from "../session/stream.js";
 import type { VerificationSource } from "./source.js";

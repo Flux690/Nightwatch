@@ -1,4 +1,4 @@
-import { appendToReport } from "../db/reports.js";
+import { appendToReport } from "../session/reports.js";
 import { submitReport } from "../agent/report.js";
 
 // Satisfies the ledger gate for tests that exercise run mechanics rather than

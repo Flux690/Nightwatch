@@ -1,4 +1,4 @@
-import { getDb } from "./client.js";
+import { getDb } from "../db.js";
 
 const USER_ID = "global";
 

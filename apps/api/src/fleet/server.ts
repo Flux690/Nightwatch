@@ -1,18 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findRunnerByToken, touchLastUsed } from "../db/runner.js";
+import { findRunnerByToken, touchLastUsed } from "../fleet/runners.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
   markRunnerAlive,
-} from "./fleet.js";
+} from "../fleet/connections.js";
 import {
   rejectPendingForConnection,
   resolveCommand,
-} from "./command-transport.js";
+} from "../fleet/transport.js";
 import type {
   RunnerManifestMessage,
   RunnerResultMessage,

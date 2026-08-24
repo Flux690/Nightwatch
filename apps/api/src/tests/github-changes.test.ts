@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedAlertSession } from "./session-helper.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { saveGitHubIntegration } from "../db/integrations.js";
+import { saveGitHubIntegration } from "../integrations/store.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
 import type { GetRecentChangesResult } from "../agent/tools/github.js";

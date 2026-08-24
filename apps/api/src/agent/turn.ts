@@ -7,7 +7,7 @@ import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
 import { isToolName } from "@nightwarden/shared";
 
