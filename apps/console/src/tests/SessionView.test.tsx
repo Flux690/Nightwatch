@@ -137,9 +137,8 @@ const CHAT_ROWS = [
   },
 ];
 
-/* The page rather than the conversation: the header, its disclosure and its
-   menu live in AgentPage, so this drives the real route tree the way AppShell
-   does. The conversation below it is the same portalled node either way. */
+// The header, its disclosure and its menu live in AgentPage, so this drives
+// the real route tree the way AppShell does.
 function setupPage({
   path = "/agent",
   running = false,
@@ -381,9 +380,8 @@ describe("SessionView", () => {
       });
     });
 
-    /* The test above waits for the end state, which is why it never saw this. A
-       streamed block keyed by the clock and its saved counterpart keyed by the
-       turn never merge, so the same sentence is drawn twice. */
+    // A streamed block keyed by the clock and its saved copy keyed by the turn
+    // never merge, so the same sentence is drawn twice.
     it("does not draw a streamed turn twice once its saved copy arrives", async () => {
       const { setItems } = setup();
 
@@ -409,9 +407,8 @@ describe("SessionView", () => {
         expect(screen.getByText("Investigation complete.")).toBeInTheDocument();
       });
 
-      /* The marker is what proves the refetch landed. Counting straight after
-         the event would pass on the first poll, against a transcript the server
-         had not answered yet - which is how this went unnoticed. */
+      // Counting straight after the event would pass on the first poll, against
+      // a transcript the server had not answered yet.
       setItems([
         USER_TURN,
         {
@@ -1033,9 +1030,8 @@ describe("SessionView", () => {
         });
       });
 
-      /* A decided call is an ordinary row. The card was the raised state of
-         this same call, so it goes when the decision does - it used to stay and
-         grow a duplicate beneath it, naming one call twice. */
+      // The card was the raised state of this same call, so it goes when the
+      // decision does: it used to stay and grow a duplicate beneath it.
       await waitFor(() => {
         expect(screen.queryByTestId("approval-card")).not.toBeInTheDocument();
       });
@@ -1488,9 +1484,8 @@ describe("SessionView", () => {
         });
       });
 
-      /* Answering ends the question: what is left is a call like any other. Its
-         line names what was asked, which is what a reader scanning back is
-         looking for - not the word "Answered", which told them nothing. */
+      // Its line names what was asked, which is what a reader scanning back is
+      // looking for, rather than the word "Answered".
       await waitFor(() => {
         expect(
           screen.queryByTestId("clarification-card"),
@@ -1692,9 +1687,8 @@ describe("the Agent page", () => {
       within(panel).getByRole("link", { name: /Why is redis restarting\?/ }),
     ).toBeInTheDocument();
 
-    // The filter is the whole of "only what a person started", so the request
-    // carrying it is the behaviour worth pinning. Which day heading a row lands
-    // under is the clock's business, not this test's.
+    // The request carrying the filter is the behaviour worth pinning. Which day
+    // heading a row lands under is the clock's business.
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("kind=chat")),
     ).toBe(true);

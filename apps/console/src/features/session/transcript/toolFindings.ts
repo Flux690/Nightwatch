@@ -4,9 +4,8 @@ import {
   stringAt as str,
 } from "@/shared/lib/toolResult";
 
-// The one-line answer a tool row shows unexpanded, COMPUTED from the tool's own
-// structured result and never written by the model: a sentence it composes about
-// data we already hold is one nothing can check. Quoted log lines stay verbatim.
+// Computed from the tool's own result, never written by the model: a sentence
+// it composes about data we already hold is one nothing can check.
 
 type FindingTone = "normal" | "bad";
 
@@ -68,9 +67,8 @@ function worstLine(lines: string[]): { line: string; severe: boolean } | null {
   return last === undefined ? null : { line: last, severe: false };
 }
 
-// A runner-routed result is always enveloped, even for one runner, so a formatter
-// for such a tool reads the entries rather than the shape underneath. Entries whose
-// runner failed carry an error string instead of a record and are skipped here.
+// Always enveloped, even for one runner, so a formatter reads the entries
+// rather than the shape underneath. A failed entry carries a string, skipped.
 function byRunner(
   record: Record<string, unknown>,
 ): Array<{ runner: string; result: Record<string, unknown> }> | null {
@@ -199,9 +197,8 @@ const FORMATTERS: Record<string, Formatter> = {
   },
 };
 
-/* The two measurements whose numbers live in arrays, so nothing above reaches
-   them: the fullest filesystem and the worst-off pod are what each was asked
-   for, and without a line here they render as a bare tool name. */
+// Their numbers live in arrays, so nothing above reaches them and without a
+// line here they render as a bare tool name.
 FORMATTERS["GetHostDisk"] = (record) => {
   const mounts = (byRunner(record) ?? [{ runner: "", result: record }]).flatMap(
     ({ runner, result }) =>
@@ -254,9 +251,8 @@ FORMATTERS["OpenPullRequest"] = (r) => {
   return message === null ? null : { text: clipLine(message), tone: "normal" };
 };
 
-// Prometheus and Loki share a series shape, and an empty result is the finding
-// that matters: it usually means the query named a metric that does not exist,
-// which is otherwise invisible until the report has no chart in it.
+// An empty result is the finding that matters: it usually means the query
+// named a metric that does not exist, invisible until the report has no chart.
 function seriesFinding(record: Record<string, unknown>): ToolFinding | null {
   const series = arr(record, "series");
   if (!series) return null;

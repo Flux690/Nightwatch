@@ -1,6 +1,5 @@
-/* The raised form of a call that cannot run until a person says so, drawn only
-   while that is true. Not pinned: a write gates one tool rather than the run,
-   so it stays where it happened. */
+// Not pinned: a write gates one tool rather than the run, so it stays where
+// it happened.
 
 import { useState } from "react";
 import { Button } from "@/shared/ui/button";
@@ -41,9 +40,8 @@ function serviceOf(input: Record<string, unknown>): string | null {
   return inputString(input, "server");
 }
 
-/* The agent's own grading of the call. The three levels the schema asks for read
-   as a sentence; anything else it wrote is shown as the note it is rather than
-   glued into a template, and nothing at all reads as nothing. */
+// The three levels the schema asks for read as a sentence; anything else is
+// shown as the note it is rather than glued into a template.
 const RISK_SENTENCE: Record<string, string> = {
   low: "The agent calls this low risk",
   medium: "The agent calls this medium risk",

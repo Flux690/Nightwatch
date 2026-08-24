@@ -41,9 +41,8 @@ function alertParams(
   };
 }
 
-/* One delivery's alerts, durable the moment we answer it 200 and before anything
-   decides whether a seat is free. Owned by no session yet: what makes them one
-   prospective investigation is the group key Alertmanager sent, not our timing. */
+// Durable the moment we answer 200, before anything decides whether a seat is
+// free. What makes them one investigation is the sender's group key.
 export function enqueueAlerts(
   groupKey: string,
   alerts: NormalizedAlert[],
@@ -122,9 +121,8 @@ export function isAlertCovered(
   return row !== undefined;
 }
 
-/* The session an arriving alert joins, or undefined. Alertmanager grouped these
-   together under the user's own `group_by`, so this is their decision arriving as
-   data - never a relationship we inferred from labels or from the fleet. */
+// Alertmanager grouped these under the user's own `group_by`, so this is their
+// decision arriving as data, never a relationship we inferred.
 
 export function sessionCoveringGroup(groupKey: string): string | undefined {
   const row = getDb()
@@ -262,9 +260,8 @@ export function alertsForMany(
   return byId;
 }
 
-// Sessions still holding a condition nobody has seen recover. What the
-// reconciler works through, and the only reason it wakes up. Queued alerts are
-// excluded: nothing has investigated them, so there is no recovery to verify.
+// What the reconciler works through. Queued alerts are excluded: nothing has
+// investigated them, so there is no recovery to verify.
 export function sessionIdsWithOpenAlerts(): string[] {
   const rows = getDb()
     .prepare(

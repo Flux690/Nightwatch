@@ -1,6 +1,5 @@
-/* One row shape for every tool: name, target, the finding, and a chevron. The
-   row carries the answer so the common case needs no click, and expansion is a
-   thread line: at rail width a box per tool buries the conversation. */
+// The row carries the answer, so the common case needs no click. Expansion is
+// a thread line: at rail width a box per tool buries the conversation.
 
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
@@ -64,9 +63,8 @@ function stringList(value: unknown): string[] {
 
 const MONO = "font-mono text-sm leading-relaxed";
 
-/* What a non-success reads as. The word carries the distinction and the colour
-   only reinforces it, so a permission failure and a crash never look alike. A
-   miss is deliberately unlabelled and unmuted-red: the tool worked. */
+// The word carries the distinction and colour only reinforces it. A miss is
+// unlabelled on purpose, because the tool worked.
 const OUTCOME_LABEL: Record<ToolOutcome, string> = {
   partial: "Some runners failed",
   expected_miss: "",
@@ -83,14 +81,12 @@ const OUTCOME_TONE: Record<ToolOutcome, string> = {
   system: "text-fail",
 };
 
-/* A decision, not a fault: nothing broke and nothing ran. It reads off what the
-   person said rather than off a tool outcome, because a declined call has none -
-   the tool it names never executed. */
+// A decision, not a fault. Read off what the person said, because a declined
+// call has no outcome: the tool it names never executed.
 const DECLINED = { text: "Declined", tone: "text-muted-foreground" } as const;
 
-// The one-line reading of a settled call, shared with the report so a cited
-// result reads the same in both. The class outranks the finding's own tone: a
-// result that never arrived has nothing to read off.
+// Shared with the report so a cited result reads the same in both. The class
+// outranks the finding's tone: a result that never arrived says nothing.
 export function resultSummary(
   toolName: string,
   result: unknown,
@@ -195,9 +191,8 @@ function EventList({
   );
 }
 
-// Per-tool bodies. A tool with no entry falls back to its raw result, which is
-// honest: better a JSON block than a shape we pretended to understand. The
-// report quotes a cited call through this too, so one result renders one way.
+// A tool with no entry falls back to its raw result: better a JSON block than
+// a shape we pretended to understand. The report quotes through this too.
 function ToolBody({
   toolName,
   input,
@@ -282,9 +277,8 @@ function ToolBody({
       return <KeyValues rows={rows} />;
     }
 
-    // Shell tools: the command, then its output. Keyed on the tool name, not on the
-    // presence of an exitCode - plenty of results carry one without being a shell
-    // command, and deserve their own shape rather than an empty terminal.
+    // Keyed on the tool name, not on an exitCode: plenty of results carry one
+    // without being a shell command and deserve their own shape.
     if (isTool(toolName, ...SHELL_TOOLS)) {
       const argv = Array.isArray(input["command"])
         ? (input["command"] as unknown[]).map(String).join(" ")
@@ -329,9 +323,8 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
   const [revealed, setRevealed] = useState(false);
   const { toolName, input } = item;
 
-  // The report can point at this exact call. Marking it is the whole signal: a
-  // collapsed row scrolled into view looks like every other collapsed row, and
-  // opening it would push the neighbouring steps the reader came for off screen.
+  // Marking is the whole signal: a collapsed row scrolled into view looks like
+  // every other, and opening it would push the neighbouring steps off screen.
   useEffect(
     () =>
       onRevealToolCall((id) => {

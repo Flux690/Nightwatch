@@ -28,9 +28,8 @@ function scopes(result: unknown): Scoped[] {
   });
 }
 
-/* The payloads name their own units in their field names, which is the same
-   convention plot.ts reads a metric name for. Nothing is inferred from a value:
-   a bare number is printed as a number. */
+// The payloads name their units in their field names. Nothing is inferred
+// from a value: a bare number is printed as a number.
 function readingOf(key: string, value: number): string {
   if (/bytes$/i.test(key)) return formatBytes(value);
   if (/percent$/i.test(key)) {
@@ -44,9 +43,8 @@ function readingOf(key: string, value: number): string {
    sixty characters nobody reads dominating every row beside it. */
 const DIGEST = /^([a-z0-9]+):([0-9a-f]{32,})$/;
 
-/* An instant, however it arrived. Carried with its date rather than as a bare
-   clock: a config table holds when an image was built as well as when a
-   container started, and those can be weeks apart. */
+// Carried with its date rather than a bare clock: a config table holds when
+// an image was built as well as when a container started, weeks apart.
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
 function readable(value: string): string {
@@ -74,9 +72,8 @@ export interface ReadingGroup {
   rows: Array<{ key: string; label: string; value: string }>;
 }
 
-/* Every top-level number, in the order it is carried. Nothing is ranked: the
-   one-line reading above already says which is the finding. Values nested in
-   arrays are not read here and stay with that line. */
+// Nothing is ranked: the one-line reading above already says which is the
+// finding. Values nested in arrays stay with that line.
 export function readingGroups(result: unknown): ReadingGroup[] {
   return scopes(result).flatMap((scope) => {
     const rows = Object.entries(scope.result).flatMap(([key, value]) =>
@@ -165,9 +162,8 @@ function logLines(result: Record<string, unknown>): string[] {
   });
 }
 
-/* The tail, because a log is read from its end, plus the worst line when it
-   sits above that tail: an OOM kill four hundred lines back is the whole
-   reason the claim cites this call. */
+// The tail, plus the worst line when it sits above that tail: an OOM kill four
+// hundred lines back is the whole reason the claim cites this call.
 export function logExcerpt(result: unknown): LogExcerpt | null {
   const all = scopes(result).flatMap((scope) => logLines(scope.result));
   if (all.length === 0) return null;

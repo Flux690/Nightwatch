@@ -208,9 +208,8 @@ describe("the investigation record", () => {
     return hypotheses[hypotheses.length - 1]!.id;
   }
 
-  /* The report turn's tool, attached alone once the ledger gate has passed.
-     Every field is required, so a case that is about one blank field overrides
-     just that field and takes the rest from here. */
+  // Every field is required, so a case about one blank field overrides that
+  // field and takes the rest from here.
   async function submit(
     sessionId: string,
     input: Record<string, unknown>,
@@ -523,9 +522,8 @@ describe("the investigation record", () => {
       expect(conviction[two]).toBe("corroborated");
     });
 
-    /* The handle has to be somewhere the model reads. The provider's own call id
-       lives in the message's tool_calls plumbing and never appears as content,
-       which is why one run invented 21 ids rather than copy a real one. */
+    // The provider's own call id never appears as content, which is why one run
+    // invented 21 ids rather than copy a real one.
     it("puts each call's citation handle in its own result, and takes it back", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
@@ -619,9 +617,8 @@ describe("the investigation record", () => {
       expect(answers.get("tu-b")).toContain("[e2]");
     });
 
-    /* The card counts what a person already released against this service, so
-       a fifth restart at 3am is reported rather than slipped past. Counted from
-       the transcript, which is the only thing that can answer it. */
+    // Counted from the transcript, the only thing that can answer it, so a
+    // fifth restart at 3am is reported rather than slipped past.
     it("tells a card how often this same write already ran here", () => {
       const sessionId = randomUUID();
       seedAlertSession(
@@ -966,9 +963,8 @@ describe("the investigation record", () => {
       expect(gatedCalls(sessionId)).toHaveLength(0);
     });
 
-    /* With no Docker runner, DockerBash is refused and no card is drawn, but it
-       carries the name of a gated tool - all the old check looked at. Five
-       refusals were reported to the user as five writes they had approved. */
+    // A refused call still carries the name of a gated tool, which is all the
+    // old check looked at: five refusals read as five approved writes.
     it("never counts a call the harness refused as a write the user released", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
@@ -995,9 +991,8 @@ describe("the investigation record", () => {
       // Nobody was asked, so there is nothing to report either way.
       expect(gatedCalls(sessionId)).toHaveLength(0);
 
-      /* And it starts no clock. A refusal that counted as a released write made
-         every later reading a confirmation of it, so a claim citing one graded
-         `verified` - the tier that means an action ran and was checked. */
+      // A refusal counted as a released write made every later reading a
+      // confirmation of it, grading a claim `verified` when nothing ran.
       const id = await record(
         sessionId,
         "the container is out of disk",
@@ -1011,18 +1006,16 @@ describe("the investigation record", () => {
   });
 
   describe("the finish gate", () => {
-    // Only the harness's own turns: the opening turn is an appendUserMessage too
-    // on the paths that resume, and the assertions below are about what the
-    // harness said, split by which of its two jobs said it.
+    // Only the harness's own turns: on a resume the opening turn is an
+    // appendUserMessage too, and these assertions are about what it said.
     function harnessMessages(index = 0): string[] {
       const provider = mockCreateProvider.mock.results[index]!.value as {
         appendUserMessage: ReturnType<typeof vi.fn>;
       };
       return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
     }
-    /* Matched on content, not on the first character: every harness message is
-       wrapped in a <nightwarden> tag so the model can tell who is speaking, and
-       the tag is asserted on its own below rather than by each of these. */
+    // Matched on content, not the first character: the <nightwarden> tag is
+    // asserted on its own below rather than by each of these.
     function completionRequests(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
         m.includes("Your investigation record"),
@@ -1075,9 +1068,8 @@ describe("the investigation record", () => {
       };
     }
 
-    /* A provider takes two roles and neither of them is ours, so a harness turn
-       is sent in the user's. Tagged, or the model answers NightWarden as though
-       the person had spoken and apologises to them for something nobody said. */
+    // A harness turn is sent in the user's role, so it is tagged: untagged, the
+    // model apologises to the person for something nobody said.
     it("marks every message it writes as its own, never as the user's", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
@@ -1219,9 +1211,8 @@ describe("the investigation record", () => {
       expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
-    /* The largest single output of the run, with thinking spending the budget
-       first, so the output ceiling is where it most often dies. It used to die
-       into a server log, leaving no write-up and nothing saying why. */
+    // The largest single output of the run, so the ceiling is where it most
+    // often dies. It used to die into a server log, saying nothing on screen.
     it("says the report was cut off rather than ending with nothing", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
@@ -1479,9 +1470,8 @@ describe("the investigation record", () => {
       expect(getReport(sessionId)).toBeUndefined();
     });
 
-    /* A run that acted is held to a different standard from one that only looked:
-       "I could not work out the cause" is a complete ending, releasing a write
-       and then going quiet with the condition still firing is not. */
+    // Ruling things out is a complete ending; releasing a write and then going
+    // quiet with the condition still firing is not.
     describe("a run that acted", () => {
       // A write the user was asked about and let through, recorded on the call
       // where it happened. Nothing about the tool's name could say this.
@@ -1535,9 +1525,8 @@ describe("the investigation record", () => {
         expect(request).toContain("Nothing can confirm");
       });
 
-      /* The tool refuses the blank field, so nothing is stored and the turn is
-         asked again. The refusal names the field; the request that follows says
-         only that the report is unwritten, which is true either way. */
+      // The refusal names the field, while the request that follows says only
+      // that the report is unwritten, which is true either way.
       it("refuses a write-up that recommends nothing, and asks again", async () => {
         settledRun(submitTurn(""), submitTurn("cap concurrency at one job"));
         const sessionId = randomUUID();

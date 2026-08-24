@@ -146,9 +146,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     return true;
   }
 
-  /* A seat freed, so the alerts that were waiting for one become sessions. Runs
-     here rather than in the pool because starting a run is this module's job and
-     the pool only counts seats - it never learns how to dispatch. */
+  // Here rather than in the pool, because starting a run is this module's job
+  // and the pool only counts seats.
   function promoteQueued(): void {
     while (hasSeat(true)) {
       const group = oldestQueuedGroup();

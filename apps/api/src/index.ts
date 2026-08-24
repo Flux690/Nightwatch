@@ -142,9 +142,8 @@ const start = async (): Promise<void> => {
        were waiting for were freed by recovery above. Nothing else would notice
        until the next delivery arrived. */
     dispatcher.promoteQueued();
-    /* An alert usually clears minutes after the run that fixed it has ended, so
-       something has to keep asking. Unref'd: a pending sweep is no reason to
-       hold the process open, and the server keeps the loop alive anyway. */
+    // An alert usually clears minutes after the run that fixed it ended, so
+    // something has to keep asking. Unref'd: the server holds the loop open.
     setInterval(() => {
       void reconcileRecovery().catch((err: unknown) => {
         fastify.log.warn({ err }, "recovery reconciler pass failed");
@@ -162,16 +161,14 @@ const start = async (): Promise<void> => {
 
 await start();
 
-// Without handlers the open SSE/WS connections keep the event loop alive on
-// Ctrl+C until tsx force-kills the process. Exit 0: a signal exit is a normal
-// exit here, so pnpm doesn't report a failed script.
+// Without handlers the open SSE and WS connections keep the loop alive on
+// Ctrl+C. Exit 0, so pnpm does not report a failed script.
 function shutdown(signal: NodeJS.Signals): void {
   fastify.log.info({ signal }, "shutting down");
   const failsafe = setTimeout(() => process.exit(1), 5000);
   failsafe.unref();
-  // Sandbox containers cannot outlive the process that started them: without
-  // this they run until the next boot reaps them, holding their reservations.
-  // Their checkouts stay, and boot salvage does the git work with time for it.
+  // Without this they run until the next boot reaps them, holding their
+  // reservations. The checkouts stay for boot salvage to push.
   releaseContainers()
     .catch((err: unknown) => fastify.log.error(err))
     .finally(() => {

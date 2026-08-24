@@ -8,9 +8,8 @@ const SRC = process.env["CONSOLE_SRC"] ?? "";
 
 const css = readFileSync(join(SRC, "styles.css"), "utf8");
 
-/* Every declaration in styles.css, by the selector that carries it. A token is
-   read in the context of a ground, because after re-anchoring the same name
-   resolves to a different colour depending on which surface it lands on. */
+// Read in the context of a ground, because after re-anchoring the same name
+// resolves to a different colour depending on the surface it lands on.
 const declarations = new Map<string, string>();
 const groundOverrides = new Map<string, string>();
 
@@ -36,9 +35,8 @@ for (const block of bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
   }
 }
 
-/* A calc() evaluator, because the ladder is arithmetic now: a role is its
-   ground plus a departure times the contrast, and ink is a proportion of the
-   distance to the pole. Anything the browser computes, this has to compute. */
+// The ladder is arithmetic: a role is its ground plus a departure times the
+// contrast, so anything the browser computes this has to compute.
 function evaluate(expr: string, env: Map<string, string>): number {
   const src = expr.trim();
   let i = 0;
@@ -345,9 +343,8 @@ describe("the ladder", () => {
     }
   });
 
-  /* Every surface is the anchor plus its own departure, so a theme moves the
-     whole ladder by moving one value. A rung that stops deriving is a rung that
-     will be wrong in the next theme. */
+  // A theme moves the whole ladder by moving one value, so a rung that stops
+  // deriving is one that will be wrong in the next theme.
   it("derives every surface from the one anchor", () => {
     const env = envFor("stage");
     const anchor = evaluate(env.get("base-l") ?? "", env);
@@ -364,9 +361,8 @@ describe("the ladder", () => {
     }
   });
 
-  /* The rule the whole system rests on: a control, an edge and ink are all
-     departures from the ground they land on, not from the page. A token that
-     resolves identically on every ground has stopped re-anchoring. */
+  // A control, an edge and ink depart from the ground they land on, not the
+  // page: a token identical on every ground has stopped re-anchoring.
   it("re-anchors every control, edge and ink per ground", () => {
     for (const name of [
       "control",
@@ -389,9 +385,8 @@ describe("the ladder", () => {
     }
   });
 
-  /* Chroma is a departure from the ground's own chroma, not a constant. Held
-     flat, a control on a card came out duller than the same control on the
-     stage, which is not what the system it reproduces does. */
+  // Chroma departs from the ground's own, not a constant: held flat, a control
+  // on a card came out duller than the same control on the stage.
   it("re-anchors chroma per ground, and mixes ink's at half rate", () => {
     for (const [role, departure] of [
       ["control", "dc-control"],
@@ -560,9 +555,8 @@ describe("the ladder", () => {
     }
   });
 
-  /* A tint washes its own ground rather than naming a fixed rung, which is what
-     lets it be a hover: held absolute it went darker than the menu it opened
-     on, and no ground could outrun it without inverting. */
+  // A tint washes its own ground rather than naming a fixed rung: held
+  // absolute it went darker than the menu it opened on.
   it("washes every tint over the ground it is drawn on", () => {
     const tints = [...declarations.keys()].filter((n) =>
       /-tint(-hover)?$/.test(n),
@@ -627,9 +621,8 @@ describe("the contrast matrix", () => {
     }
   });
 
-  /* Status is absolute within a polarity, so it is held only on the grounds
-     status actually appears on. Text and Base are two different jobs with two
-     different floors: 7:1 for words, 3:1 for a dot. */
+  // Held only on the grounds status appears on. Text and Base are two jobs
+  // with two floors: 7:1 for words, 3:1 for a dot.
   const STATUS_GROUNDS: Ground[] = ["ground", "stage", "surface", "card"];
 
   it("keeps status text at AAA where status appears", () => {
@@ -756,9 +749,8 @@ function expectUtilityValues(
 const SPACING = ["0", "1", "1.5", "2", "2.5", "3", "4", "6", "8", "12"];
 
 describe("widths", () => {
-  /* styles.css states the rule: every width resolves to a container token. A
-     raw `max-w-120` on a Field is how help text ended up clamped to half the
-     column it had. shared/ui is exempt, carrying its own defaults. */
+  // A raw `max-w-120` on a Field is how help text ended up clamped to half the
+  // column it had. shared/ui is exempt, carrying its own defaults.
   it("names a container token rather than a raw width", () => {
     const declared = [...css.matchAll(/--container-([a-z-]+):/g)].map(
       (m) => m[1],

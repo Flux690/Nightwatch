@@ -23,18 +23,16 @@ function isSettled(source: SessionListSource): boolean {
   );
 }
 
-/* Derived, never declared by the model. A crash is checked before an unconcluded
-   run, so a broken run reads as broken. Total by construction: a fall-through of
-   null put a record in no group while still counting in the queue total. */
+// Derived, never declared by the model, and total by construction: a
+// fall-through of null put a record in no group but still in the queue total.
 function deriveStatus(source: SessionListSource): SessionRunStatus {
   const report = source.report;
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
   if (isSettled(source)) return "resolved";
   if (report !== null && isActionable(report)) return "action_required";
-  /* Below the actionable check on purpose: a run stopped after it had something
-     to act on is still something to act on. Above the fall-through, because
-     inconclusive names a conclusion the run reached and this one was ended. */
+  // Below the actionable check, since a stopped run with something to act on
+  // still has it. Above the fall-through: inconclusive names a conclusion.
   if (source.stoppedAt !== null) return "stopped";
   if (source.lastKind === "error") return "failed";
   // Nothing for the user to act on: the run ended without a recommendation,
@@ -64,8 +62,7 @@ function awaitedRecommendation(report: Report | null): string | null {
     : (leadingClaim(report)?.statement ?? null);
 }
 
-// One line answering the question the status raises. Every branch is the
-// system's own record or the model's prose; nothing is inferred, so the failure
+// Every branch is the system's record or the model's prose, so the failure
 // mode is an empty line rather than a wrong one.
 function deriveFinding(
   source: SessionListSource,

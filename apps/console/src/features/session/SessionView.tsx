@@ -33,9 +33,8 @@ import { apiFetch } from "@/shared/api/client";
 // A stable empty default, so an unloaded transcript does not remount the column.
 const EMPTY_ITEMS: TranscriptItem[] = [];
 
-/* What gets pinned above the message box, from the projection or the live
-   stream. Only what stops the whole run qualifies: a question and the
-   time-budget prompt. An approval gates one tool, so it stays inline. */
+// Only what stops the whole run is pinned. An approval gates one tool, so it
+// stays inline where it happened.
 function dockedCard(items: TranscriptItem[]): TranscriptItem | undefined {
   for (const item of items) {
     if (item.kind === "continue_card") {
@@ -52,9 +51,8 @@ function dockedCard(items: TranscriptItem[]): TranscriptItem | undefined {
   return undefined;
 }
 
-/* The report is not a message: every run rewrites it, so no position among them
-   is right. Written where it happened it goes stale, and pushed last it sits
-   under a question asked after it. Docked, it is out of the ordering. */
+// Every run rewrites it, so no position among the messages is right: written
+// where it happened it goes stale, pushed last it sits under a later question.
 function dockedReport(items: TranscriptItem[]): TranscriptItem | undefined {
   return items.find((item) => item.kind === "report_card");
 }
@@ -163,9 +161,8 @@ export function SessionView({
 
   const session = useSession(activeSessionId);
 
-  /* The live state below is this component's, so leaving and returning starts it
-     empty and only the snapshot can say a run is in flight. Read once: after
-     that the stream is the truth and a refetch mid-suspend would undo it. */
+  // Read once: after that the stream is the truth, and a refetch mid-suspend
+  // would undo it.
   const seededFor = useRef<string | null>(null);
   useEffect(() => {
     if (activeSessionId === null || session === null) return;
@@ -391,9 +388,8 @@ export function SessionView({
   const handleSend = useCallback((text: string) => {
     setPendingEcho(text);
     lastEchoRef.current = text;
-    // No transcript item is seeded: the run being active with nothing streaming
-    // is what surfaces the working animation. A just-answered card still live
-    // (not yet flushed by the resumed run) is left untouched so it survives.
+    // An active run with nothing streaming is what surfaces the working
+    // animation, and a just-answered card is left untouched so it survives.
     setIsRunning(true);
   }, []);
 

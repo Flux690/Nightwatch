@@ -10,9 +10,8 @@ import type { RunnerConnection } from "../fleet/connections.js";
 // hosts' filesystems in one turn and the token cost is real.
 const MAX_FANOUT = 8;
 
-// The owning runner plus the advertised identity behind a target key, so the
-// transport can expand the flat key back into the structured payload. Nothing here
-// narrows it: the identity only ever returns to the runner that advertised it.
+// Lets the transport expand a flat key back into its structured payload. The
+// identity only ever returns to the runner that advertised it.
 interface ResolvedService {
   conn: RunnerConnection;
   identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
@@ -40,9 +39,8 @@ function ownersOf(target: string): ResolvedService[] {
   return owners;
 }
 
-// Service-routed (validate-and-route): the flat target key the model echoed must match an
-// advertising runner. Identity carries no scope any more, so a key advertised by two runners
-// is a normal state, disambiguated by the optional `runner` parameter rather than by the key.
+// The key the model echoed must match an advertising runner. Two runners
+// advertising one key is normal, disambiguated by the `runner` parameter.
 export function resolveByService(
   commandInput: Record<string, unknown>,
 ): ResolvedService {
@@ -86,9 +84,8 @@ export function resolveByService(
   );
 }
 
-// Runner-routed: `runner` names one, and its absence fans out to every runner of
-// this platform. A fan-out reaches only runners of that platform, so a Kubernetes
-// cluster is never asked for a Docker host's filesystems.
+// A fan-out reaches only runners of that platform, so a Kubernetes cluster is
+// never asked for a Docker host's filesystems.
 export function resolveByRunner(
   commandInput: Record<string, unknown>,
   platform: Platform,

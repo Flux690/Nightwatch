@@ -1,6 +1,5 @@
-/* Three axes, one meaning each. Size is level, weight is semibold for a heading
-   alone, and colour says what a thing is rather than how loud: prose takes full
-   ink wherever it sits, and muted is for labels, counts, captions and lines. */
+// Three axes, one meaning each: size is level, weight marks a heading alone,
+// and colour says what a thing is rather than how loud.
 
 import type {
   Conviction,
@@ -65,9 +64,8 @@ function Band({
   );
 }
 
-/* What the user did, and what came of it. Three words because there are
-   three outcomes worth telling apart: it ran, they said no, or it broke. Who
-   decided is not shown - there is one user, and the record is theirs. */
+// Three words for the three outcomes worth telling apart: it ran, they said
+// no, or it broke. Who decided is not shown, since there is one user.
 function decisionView(call: {
   decision: "approved" | "rejected";
   toolOutcome?: string;
@@ -78,9 +76,8 @@ function decisionView(call: {
     : { label: "Ran", tone: "ok" };
 }
 
-// What woke the user, read from the alerts themselves rather than from the
-// opening message, which is written for the model. Rendered before the agent has
-// said anything, so the first thing on screen at 02:14 is true.
+// Read from the alerts themselves, not the opening message written for the
+// model, so the first thing on screen at 02:14 is true.
 function AlertBand({
   alerts,
 }: {
@@ -123,9 +120,8 @@ function AlertBand({
   );
 }
 
-/* The model's entries and the system's in one order, split where the alert
-   fired. Released writes are contributed here rather than listed by the model,
-   so an action cannot be missing from a timeline it did not author. */
+// Released writes are contributed here rather than listed by the model, so an
+// action cannot be missing from a timeline it did not author.
 type Row =
   | { at: string; kind: "entry"; entry: TimelineEntry }
   | { at: string; kind: "alert" };
@@ -233,9 +229,8 @@ function TimelineRow({
   );
 }
 
-/* What the system can say about the run without the model's help, as a
-   sentence rather than a row of tiles: this page has no boxes to spend, and a
-   clause that has no answer is left out rather than printed empty. */
+// A sentence rather than a row of tiles, and a clause with no answer is left
+// out rather than printed empty.
 function Facts({
   report,
   conviction,
@@ -365,9 +360,8 @@ export function ReportPanel({
   }
 
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
-  // Coalesced rather than read straight: a record stored before the write-up
-  // existed carries no key at all, and an absent one must read as "not written
-  // up yet", not as an object to reach into.
+  // A record stored before the write-up existed carries no key at all, and an
+  // absent one must read as "not written up yet".
   const submitted = report.submitted ?? null;
   const ranked = rankHypotheses(report.hypotheses);
   const findings = ranked.filter((h) => h.verdict !== "disproven");
@@ -399,9 +393,8 @@ export function ReportPanel({
     });
   };
 
-  /* Where footnotes go: at the foot of what they back, naming every call the
-     claim rests on. One row rather than a control hung off each drawing, which
-     is what left a chip stranded whenever a call named no target. */
+  // One row rather than a control hung off each drawing, which left a chip
+  // stranded whenever a call named no target.
   const sourcesUnder = (ids: string[]): React.JSX.Element | null => {
     const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
     if (cited.length === 0) return null;
@@ -419,9 +412,8 @@ export function ReportPanel({
     );
   };
 
-  /* One column, read downward: what it is, what it says, why, then what backs
-     it. A margin column for two short words spent a sixth of the page on them
-     and squeezed the statement into the rest. */
+  // One column read downward. A margin column for two short words spent a
+  // sixth of the page on them and squeezed the statement into the rest.
   const claim = (h: Hypothesis): React.JSX.Element => (
     <li
       key={h.id}

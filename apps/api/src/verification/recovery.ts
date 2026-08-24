@@ -6,9 +6,8 @@ import { publishReportUpdated } from "../session/stream.js";
 import type { VerificationSource } from "./source.js";
 import { metricsRulesSource } from "./sources/metrics-rules.js";
 
-/* Every source that can answer whether a condition is still true. A static list
-   for the same reason the tool registry is one: what the system can do is
-   decided at build time, not discovered at runtime. */
+// A static list for the same reason the tool registry is one: what the system
+// can do is decided at build time, never discovered at runtime.
 const SOURCES: readonly VerificationSource[] = [metricsRulesSource];
 
 export type RecoveryState =
@@ -25,18 +24,16 @@ function uncleared(alerts: SessionAlert[]): SessionAlert[] {
   return alerts.filter((entry) => entry.clearedAt === null);
 }
 
-/* What the record already says, with nothing asked of anyone. The webhook and
-   the reconciler both stamp clearedAt, so the finish gate reads the answer
-   instead of making an HTTP call at the one instant a run happens to end. */
+// The webhook and the reconciler both stamp clearedAt, so the finish gate
+// reads the answer instead of making an HTTP call as a run ends.
 export function recoveryState(sessionId: string): RecoveryState {
   const alerts = getSession(sessionId)?.alerts ?? [];
   if (alerts.length === 0) return "no_condition";
   return uncleared(alerts).length === 0 ? "confirmed" : "unconfirmed";
 }
 
-/* Stamps `clearedAt`, the field Alertmanager's resolved webhook also writes, so
-   status derivation stays a synchronous read and never learns to make an HTTP
-   call. Called when a run tries to end, never on the read path. */
+// Stamps the same `clearedAt` the resolved webhook writes, so status stays a
+// synchronous read. Called when a run tries to end, never on the read path.
 export async function verifyRecovery(
   sessionId: string,
 ): Promise<RecoveryState> {
