@@ -19,7 +19,7 @@
      system and the anchor holds still in the middle. */
   --d-ground: -0.108333;
   --d-surface: 0.066667;
-  --d-card: 0.141667;
+  --d-card: 0.137467;
   --d-popover: 0.404185;
 
   /* The absolute rungs. Only these five are anchored to the base; every
