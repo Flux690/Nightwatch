@@ -234,6 +234,14 @@ const GROUND_TOKEN: Record<Ground, string> = {
 const onOwnGround = (name: string, g: Ground): number =>
   ratio(step(name, g), step(GROUND_TOKEN[g], g));
 
+/* Read from the sheet rather than restated here. A literal would assert the
+   value the base happens to have today and permit the derivation to be lost. */
+const scalar = (name: string, g: Ground = "stage"): number => {
+  const env = envFor(g);
+  return evaluate(env.get(name) ?? "", env);
+};
+const groundChroma = (g: Ground): number => scalar("ground-c", g);
+
 describe("the ladder", () => {
   it("rises monotonically away from the anchor", () => {
     for (const [below, above] of [
@@ -293,13 +301,6 @@ describe("the ladder", () => {
      flat, a control on a card came out duller than the same control on the
      stage, which is not what the system it reproduces does. */
   it("re-anchors chroma per ground, and mixes ink's at half rate", () => {
-    const GROUND_C: Record<Ground, number> = {
-      ground: 0.4,
-      stage: 0.4,
-      surface: 0.85,
-      card: 0.85,
-      popover: 1.3,
-    };
     for (const [role, departure] of [
       ["control", "dc-control"],
       ["control-hover", "dc-control-lit"],
@@ -312,19 +313,57 @@ describe("the ladder", () => {
       const d = evaluate(env.get(departure) ?? "", env);
       for (const g of GROUNDS) {
         expect(step(role, g).C, `${role} on ${g}`).toBeCloseTo(
-          GROUND_C[g] + d,
+          groundChroma(g) + d,
           8,
         );
       }
     }
+    const base = scalar("base-c");
+    const inkBase = scalar("c-ink-base");
+    const half = scalar("t-ink-c");
     for (const ink of ["ink-1", "ink-2", "ink-3"]) {
       for (const g of GROUNDS) {
         expect(step(ink, g).C, `${ink} on ${g}`).toBeCloseTo(
-          1.2 + (GROUND_C[g] - 0.4) / 2,
+          inkBase + (groundChroma(g) - base) * half,
           8,
         );
       }
     }
+  });
+
+  /* A ground's chroma is a departure from the base's, like its lightness. As
+     literals these were right at one base and silently wrong at every other. */
+  it("states every ground's chroma as a departure from the base", () => {
+    const base = scalar("base-c");
+    for (const [g, departure] of [
+      ["ground", "dc-ground"],
+      ["surface", "dc-surface"],
+      ["card", "dc-card"],
+      ["popover", "dc-popover"],
+    ] as const) {
+      expect(groundChroma(g), g).toBeCloseTo(base + scalar(departure), 8);
+      expect(step(GROUND_TOKEN[g], g).C, GROUND_TOKEN[g]).toBeCloseTo(
+        groundChroma(g),
+        8,
+      );
+    }
+    expect(groundChroma("stage"), "stage").toBeCloseTo(base, 8);
+  });
+
+  /* The one family that must not re-anchor: a primary button is the same
+     colour on the page, on a card and in a menu, which is what finds it. */
+  it("holds the accent absolute, and on one hue", () => {
+    for (const name of ["cobalt-fill", "cobalt-fill-hover", "cobalt-ink"]) {
+      const seen = GROUNDS.map((g) => step(name, g));
+      expect(new Set(seen.map((s) => s.L.toFixed(6))).size, name).toBe(1);
+      for (const s of seen) {
+        expect(s.H, `${name} hue`).toBeCloseTo(scalar("accent-h"), 8);
+      }
+    }
+    expect(step("selection").H, "selection hue").toBeCloseTo(
+      scalar("accent-h"),
+      8,
+    );
   });
 
   it("keeps every line above the ground it is drawn on", () => {
@@ -382,7 +421,7 @@ describe("the ladder", () => {
 
   it("holds every semantic token to a step or an alias", () => {
     for (const [name, value] of declarations) {
-      if (/^(d|dc|c|t)-/.test(name) || /^(base|l)-/.test(name)) continue;
+      if (/^(d|dc|c|t)-/.test(name) || /^(base|l|accent)-/.test(name)) continue;
       if (name === "contrast") continue;
       if (name === "ground-l" || name === "ground-c") continue;
       if (

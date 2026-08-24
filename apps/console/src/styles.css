@@ -30,11 +30,25 @@
   --l-card: calc(var(--base-l) + var(--d-card) * var(--contrast));
   --l-popover: calc(var(--base-l) + var(--d-popover) * var(--contrast));
 
-  --n-1: lch(var(--l-ground) 0.4 var(--base-h));
-  --n-2: lch(var(--l-stage) var(--base-c) var(--base-h));
-  --n-3: lch(var(--l-surface) 0.85 var(--base-h));
-  --n-4: lch(var(--l-card) 0.85 var(--base-h));
-  --n-5: lch(var(--l-popover) 1.3 var(--base-h));
+  /* A rung's chroma is a departure from the base's, exactly as its lightness
+     is. Held as literals these were right at one base and wrong at every
+     other: a change of tint moved the stage and left the rest behind. */
+  --dc-ground: 0;
+  --dc-surface: 0.45;
+  --dc-card: 0.45;
+  --dc-popover: 0.9;
+
+  --c-ground: calc(var(--base-c) + var(--dc-ground));
+  --c-stage: var(--base-c);
+  --c-surface: calc(var(--base-c) + var(--dc-surface));
+  --c-card: calc(var(--base-c) + var(--dc-card));
+  --c-popover: calc(var(--base-c) + var(--dc-popover));
+
+  --n-1: lch(var(--l-ground) var(--c-ground) var(--base-h));
+  --n-2: lch(var(--l-stage) var(--c-stage) var(--base-h));
+  --n-3: lch(var(--l-surface) var(--c-surface) var(--base-h));
+  --n-4: lch(var(--l-card) var(--c-card) var(--base-h));
+  --n-5: lch(var(--l-popover) var(--c-popover) var(--base-h));
 
   /* Departures for anything that sits ON a surface rather than being one.
      Chroma is a constant per role, not a function of distance or contrast. */
@@ -112,11 +126,22 @@
   --purple-text: lch(80 80 var(--hue-purple));
   --purple-tint: lch(9.772 13.365 285.643);
 
-  /* One accent, at the two lightnesses physics demands: a fill dark enough to
-     carry white and an ink light enough to be read on the dark. */
-  --cobalt-fill: lch(42.686 55.105 284.861);
-  --cobalt-fill-hover: lch(46.5 55.105 284.861);
-  --cobalt-ink: lch(63.991 47.502 279.701);
+  /* One accent, stated once. A fill dark enough to carry white and an ink light
+     enough to be read on the dark are one colour at two lightnesses, so only
+     this triple is an input and the three roles below depart from it. */
+  --accent-l: 42.686;
+  --accent-c: 55.105;
+  --accent-h: 284.861;
+
+  --cobalt-fill: lch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --cobalt-fill-hover: lch(
+    calc(var(--accent-l) + 3.814) var(--accent-c) var(--accent-h)
+  );
+  /* Lifted clear of the dark and eased off in chroma, which is what a fill can
+     afford to carry and a 13px label cannot. */
+  --cobalt-ink: lch(
+    calc(var(--accent-l) + 21.305) calc(var(--accent-c) - 7.603) var(--accent-h)
+  );
 
   --white: lch(100 0 var(--base-h));
 
@@ -148,23 +173,23 @@
    and everything inside re-derives against it instead of against the page. */
 :root {
   --ground-l: var(--l-stage);
-  --ground-c: var(--base-c);
+  --ground-c: var(--c-stage);
 }
 [data-ground="ground"] {
   --ground-l: var(--l-ground);
-  --ground-c: 0.4;
+  --ground-c: var(--c-ground);
 }
 [data-ground="surface"] {
   --ground-l: var(--l-surface);
-  --ground-c: 0.85;
+  --ground-c: var(--c-surface);
 }
 [data-ground="card"] {
   --ground-l: var(--l-card);
-  --ground-c: 0.85;
+  --ground-c: var(--c-card);
 }
 [data-ground="popover"] {
   --ground-l: var(--l-popover);
-  --ground-c: 1.3;
+  --ground-c: var(--c-popover);
 }
 
 /* Declared on every ground, not only on :root, because a custom property
@@ -301,8 +326,11 @@
   --sidebar-active: var(--control-hover);
   --sidebar-border: var(--line-1);
 
+  /* Selection is one of the few roles the accent reaches, so it takes the
+     accent's hue rather than the neutral ladder's: change the brand colour and
+     the selection follows it. */
   --selection: lch(
-    calc(var(--ground-l) + 0.5 * var(--contrast)) 18 var(--base-h)
+    calc(var(--ground-l) + 0.5 * var(--contrast)) 18 var(--accent-h)
   );
 
   --stage-fall: linear-gradient(var(--n-2) 0%, var(--n-1) 100%);
