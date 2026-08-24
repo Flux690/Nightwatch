@@ -224,9 +224,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// jsdom applies no CSS, so the expanded/rail distinction is only legible as the
-// state the sidebar publishes for the CSS to key on. At the overlay tier the
-// element is absent entirely, which is the point of that tier.
+// jsdom applies no CSS, so the distinction is only legible as the state the
+// sidebar publishes. At the overlay tier the element is absent entirely.
 function sidebarState(): string | null {
   const el = document.querySelector('[data-slot="sidebar"]');
   return el === null ? null : el.getAttribute("data-state");
@@ -261,9 +260,8 @@ describe("Shell", () => {
         ).not.toBeInTheDocument();
       });
 
-      // A nav item is its name and nothing else. The count that used to sit
-      // here said what the page it links to already says, and could not survive
-      // the rail. The page is loaded, so the number it would have shown exists.
+      // A nav item is its name and nothing else: the count that sat here said
+      // what the page already says, and could not survive the rail.
       await screen.findByRole("region", { name: "Action required" });
       const sidebar = document.querySelector('[data-slot="sidebar"]');
       const item = within(sidebar as HTMLElement).getByRole("link", {

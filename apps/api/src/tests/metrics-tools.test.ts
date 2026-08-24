@@ -201,9 +201,8 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    /* The stub answers with no series, which is a miss rather than a reading of
-       zero: a metric that does not exist answers identically. The window is
-       still echoed, since it is what makes the emptiness mean anything. */
+    // No series is a miss rather than a reading of zero: a metric that does not
+    // exist answers identically, so the window is still echoed.
     expect(result.toolOutcome).toBe("expected_miss");
 
     const params = mock.requests[0]!.params;
@@ -306,9 +305,8 @@ describe("metrics tools through the tool dispatch", () => {
     expect(result.content).toContain("parse error");
   });
 
-  /* Discovery, so an expression names a metric that exists. A PromQL query
-     against a metric nobody exports returns no series, which reads as "the
-     value is fine" rather than as a typo - the failure these tools remove. */
+  // A query against a metric nobody exports returns no series, which reads as
+  // "the value is fine" rather than as a typo.
   describe("reading what the source holds", () => {
     function installDiscoveryMock(payloads: Record<string, unknown>): void {
       vi.stubGlobal(

@@ -1,9 +1,8 @@
 import { getDb } from "../db.js";
 import type { ToolResult } from "../llm/types.js";
 
-/* The gate a session is parked on: four columns on the session row, since there
-   is at most one per session and nothing queried it by anything else. What a
-   person decided is not here - that is durable and lives on the transcript. */
+// Four columns on the session row, since there is at most one per session.
+// What a person decided lives on the transcript, which is the durable record.
 export interface PendingHumanInput {
   sessionId: string;
   toolUseId: string;
@@ -72,9 +71,8 @@ export function parkOnHumanInput(pending: PendingHumanInput): void {
     );
 }
 
-/* The mutex on answering. Claiming stamps the instant an attempt began, which is
-   what a boot after a crash reads to tell "nobody answered yet" from "a write may
-   already have run". Conditional, so two requests cannot both resolve one gate. */
+// Claiming stamps when an attempt began, which is what a boot after a crash
+// reads to tell "nobody answered" from "a write may already have run".
 export function claimPendingHumanInput(sessionId: string): boolean {
   const result = getDb()
     .prepare(

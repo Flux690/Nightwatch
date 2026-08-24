@@ -15,8 +15,7 @@ export function retryDelaysMs(retries: number): number[] {
   return Array.from({ length: Math.max(0, retries) }, (_, i) => 5_000 * 3 ** i);
 }
 
-// How many investigations may be in flight at once, counting the suspended ones:
-// a run waiting on an approval still holds its seat, because freeing it starts
+// Counts the suspended ones: freeing a seat held by an approval only starts
 // another run whose write needs the same person.
 export const DEFAULT_MAX_CONCURRENT_INVESTIGATIONS = 10;
 

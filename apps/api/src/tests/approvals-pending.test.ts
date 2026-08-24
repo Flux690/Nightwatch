@@ -142,9 +142,8 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     const items = await getTranscript(sessionId);
 
-    // The call and what it waits on arrive as one item, so the console has
-    // nothing to reconcile and nothing to drop. What it needs from the human
-    // rides on the state, never on a second label beside it.
+    // One item, so the console has nothing to reconcile. What it needs from
+    // the human rides on the state, never a second label beside it.
     const card = items.find((i) => i.kind === "tool_call");
     expect(card).toBeDefined();
     expect(card?.kind === "tool_call" && card.toolName).toBe(
@@ -166,9 +165,8 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     await resolvePending(sessionId);
 
-    // The decision has to come from the database rather than the browser that
-    // made it, and from what was recorded when the person was asked rather than
-    // from the tool's name - which says nothing about whether anyone answered.
+    // From the database rather than the browser that made it, and from what was
+    // recorded when asked: a tool's name says nothing about who answered.
     const items = await getTranscript(sessionId);
     const cards = items.filter(
       (i) => i.kind === "tool_call" && i.toolName === "RestartDockerService",

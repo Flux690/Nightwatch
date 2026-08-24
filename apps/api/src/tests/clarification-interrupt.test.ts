@@ -200,9 +200,8 @@ describe("clarification interrupts", () => {
     // Interrupt row gone after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    /* Answering ends the question. What the console is handed is one ordinary
-       call carrying what the person said - not a question card that outlives
-       its own answer, which is what it used to be given. */
+    // One ordinary call carrying what the person said, rather than a question
+    // card that outlives its own answer.
     const asked = buildTranscript(sessionId).filter(
       (item) => item.kind === "tool_call" && item.toolUseId === "tu-ans-1",
     );
@@ -284,9 +283,8 @@ describe("clarification interrupts", () => {
     close();
   });
 
-  /* The schema says at most four and providers honour maxItems unevenly, so the
-     harness has to hold the line itself. Refused whole: keeping four and
-     dropping the rest hides a choice the person may have needed. */
+  // Providers honour maxItems unevenly, so the harness holds the line. Refused
+  // whole, since dropping the rest hides a choice the person may have needed.
   it("refuses a question offering more options than a card can show, and is re-asked", async () => {
     const tooMany = Array.from({ length: 6 }, (_, i) => ({
       label: `Option ${i + 1}`,

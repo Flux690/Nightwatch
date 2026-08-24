@@ -4,9 +4,8 @@ import type { Provider } from "./provider.js";
 import type { ProviderCallOptions } from "./types.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
-// Both adapters are always compiled in; the global config picks one at runtime.
 // Taking a ResolvedLLMConfig means an unconfigured install cannot reach here:
-// the gate that proved provider/model are set is the only way to obtain one.
+// the readiness gate is the only way to obtain one.
 export function createProvider(
   system: string,
   config: ResolvedLLMConfig,

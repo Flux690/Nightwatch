@@ -104,9 +104,8 @@ export function sendCommand(
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  // Resolved synchronously, before the Promise: a routing error is a caller mistake and
-  // should throw rather than settle a pending command. The target key expands into the
-  // structured `service`; both addressing parameters are stripped before dispatch.
+  // Resolved before the Promise: a routing error is a caller mistake and should
+  // throw rather than settle a pending command.
   const { conn, identity } = resolveByService(commandInput);
   const { target: _target, runner: _runner, container, ...rest } = commandInput;
   const service =
@@ -114,9 +113,8 @@ export function sendCommand(
   return dispatch(conn, commandName, { ...rest, service }, timeoutMs);
 }
 
-// Reaches every runner that can serve it, in parallel, so a fan-out costs one timeout
-// rather than N. The result is ALWAYS enveloped, single runner included, so the model
-// and the console each have one shape to read.
+// In parallel, so a fan-out costs one timeout rather than N. Always enveloped,
+// single runner included, so there is one shape to read.
 export async function sendFleetCommand(
   commandName: string,
   commandInput: Record<string, unknown>,

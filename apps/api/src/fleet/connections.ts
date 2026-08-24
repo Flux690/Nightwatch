@@ -156,9 +156,8 @@ export function getFleetView(): FleetRunner[] {
   return views;
 }
 
-// This process's own container id, or null when it is not containerized. The
-// mountinfo pattern is anchored on the containers path because that file also
-// lists overlay layer directories, whose names are 64-hex and are not ids.
+// Anchored on the containers path, because mountinfo also lists overlay layer
+// directories whose names are 64-hex and are not ids.
 function ownContainerId(): string | null {
   const sources: Array<[string, RegExp]> = [
     ["/proc/self/mountinfo", /\/docker\/containers\/([0-9a-f]{64})/],
@@ -177,9 +176,8 @@ function ownContainerId(): string | null {
 
 const apiContainerId = ownContainerId();
 
-// Told on connect, so the runner can keep NightWarden out of everything it
-// enumerates. The runner already excludes itself; this covers the API beside it.
-// Docker only: a cluster runner lists workloads, and the API is not one of them.
+// The runner already excludes itself; this covers the API beside it. Docker
+// only, because a cluster runner lists workloads and the API is not one.
 function pushHiddenContainer(conn: RunnerConnection): void {
   if (!apiContainerId || conn.platform !== "docker") return;
   const msg: HideContainerMessage = {

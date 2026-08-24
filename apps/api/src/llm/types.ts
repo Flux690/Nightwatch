@@ -32,9 +32,8 @@ export interface ToolResult {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
-  /* Carried alongside the wire fields, never sent: adapters read the three above
-     and ignore these. They ride here so a result that crosses a suspend - parked
-     on the session row as JSON - comes back knowing how it went. */
+  // Carried alongside the wire fields, never sent, so a result parked on the
+  // session row across a suspend comes back knowing how it went.
   toolOutcome?: ToolOutcome;
   // Set only where a person was asked, which is the only place it can be known.
   humanDecision?: HumanDecision;

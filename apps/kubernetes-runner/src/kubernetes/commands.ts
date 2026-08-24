@@ -361,17 +361,15 @@ export async function getWorkloadEvents(
   const warningsOnly = input.warningsOnly ?? true;
   const sinceMinutes = input.sinceMinutes ?? DEFAULT_EVENT_WINDOW_MINUTES;
 
-  // type is a selectable field, so the narrowing the caller asked for happens at
-  // the apiserver. Kind and name cannot be expressed as one selector across a
-  // controller and its pods, so that half is matched below.
+  // type is selectable, so that narrowing happens at the apiserver. Kind and
+  // name cannot be one selector across a controller and its pods.
   const events = await coreApi.listNamespacedEvent({
     namespace: service.namespace,
     ...(warningsOnly && { fieldSelector: "type=Warning" }),
   });
 
-  // Kind as well as name: a Service sharing the workload's name is ordinary, and
-  // its events are not the workload's. Type is re-checked because the selector
-  // above moves less data, it is not what makes warningsOnly true.
+  // Kind as well as name: a Service sharing the workload's name is ordinary,
+  // and its events are not the workload's.
   const mine = events.items.filter((e) => {
     if (warningsOnly && e.type !== "Warning") return false;
     const { kind, name } = e.involvedObject;

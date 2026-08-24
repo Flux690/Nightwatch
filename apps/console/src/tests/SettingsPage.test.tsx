@@ -404,9 +404,8 @@ describe("SettingsPage", () => {
       expect(await screen.findByText(/somewhere else/i)).toBeInTheDocument();
     });
 
-    /* The four tabs are one component behind one route, so a tab change keeps
-       the draft in memory. Asking there offered to discard something that was
-       not going anywhere, and then asked again on every tab after it. */
+    // One component behind one route, so a tab change keeps the draft: asking
+    // there offered to discard something that was not going anywhere.
     it("does not ask between its own tabs, and still asks on the way out", async () => {
       const user = userEvent.setup();
       const { router } = setup();
@@ -502,9 +501,8 @@ describe("SettingsPage", () => {
       });
     });
 
-    /* An id the catalog does not list is left standing, not swept away: the box
-       keeps what was typed so the user can see it is not a model, the
-       ladder goes with the model it belonged to, and Save has nothing to do. */
+    // Left standing rather than swept away: the box keeps what was typed so the
+    // user can see it is not a model, and Save has nothing to do.
     it("keeps an unlisted id on screen and refuses to save it", async () => {
       const user = userEvent.setup();
       setup();

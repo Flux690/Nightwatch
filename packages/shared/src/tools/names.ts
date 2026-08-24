@@ -69,9 +69,8 @@ export const TOOL_NAMES = [
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-/* `actual` stays a plain string: a stored transcript holds names of tools since
-   retired and must still render. What is checked is the literal on our side -
-   naming a tool the build no longer declares fails to compile. */
+// `actual` stays a plain string, because a stored transcript holds retired
+// names. The literal on our side is what is checked.
 export function isTool(actual: string, ...names: readonly ToolName[]): boolean {
   return names.some((name) => name === actual);
 }

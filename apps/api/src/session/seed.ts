@@ -6,9 +6,8 @@ function hasToolCall(message: TranscriptRow): boolean {
   return message.parts.some((p) => p.type === "tool_call");
 }
 
-/* Every provider rejects a conversation ending on an unanswered tool_use, which
-   is what a crash leaves. `resuming` names the calls this dispatch is about to
-   answer, so their turn survives: they are unanswered on purpose. */
+// Every provider rejects a conversation ending on an unanswered tool_use.
+// `resuming` names the calls this dispatch answers, so their turn survives.
 function throughLastAnsweredExchange(
   rows: TranscriptRow[],
   resuming: readonly string[],
@@ -29,9 +28,8 @@ function throughLastAnsweredExchange(
   return rows;
 }
 
-// Replays the durable transcript for a resumed run, mapping our four kinds onto
-// the provider's two roles. An error row and the dead exchange it terminates are
-// dropped back to the last clean assistant turn; a harness row returns as user.
+// Maps our four kinds onto the provider's two roles. An error row and the dead
+// exchange it terminates drop back to the last clean assistant turn.
 export function buildSeed(
   sessionId: string,
   resuming: readonly string[] = [],

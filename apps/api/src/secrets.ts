@@ -15,9 +15,8 @@ import { logger } from "./logger.js";
 // integration tokens, the fleet ingest token, and the owner session signature.
 let secret: string | null = null;
 
-/* Boot resolves the key once and every reader takes it from here. Publishing it
-   through process.env instead made the ordering an undeclared contract: import
-   anything before boot ran and the failure named the env var, not the cause. */
+// Publishing the key through process.env made the ordering an undeclared
+// contract: import before boot and the failure named the env var, not why.
 export function initSecrets(): void {
   secret = resolveSecretKey();
 }
