@@ -8,9 +8,8 @@ import { asRecord, stringAt } from "@/shared/lib/toolResult";
 import type { ToolCallItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
 
-/* The raised form of a question, drawn only while it is unanswered. Pinned
-   unlike an approval, because a question stops the whole run rather than one
-   tool: there is nothing else for the reader to be doing. */
+// Pinned unlike an approval, because a question stops the whole run rather
+// than one tool: there is nothing else for the reader to do.
 
 export interface QuestionOption {
   label: string;
@@ -183,9 +182,8 @@ export function ClarificationCardPanel({
     onAnswer?.(otherTrimmed || picked[0]!);
   }
 
-  /* A printed number a keyboard cannot press is a promise not kept. Bound while
-     this card is what the run waits on, and never over a field: the message box
-     sits directly beneath it and must keep every key it is given. */
+  // A printed number a keyboard cannot press is a promise not kept. Never
+  // bound over a field: the message box beneath keeps every key it is given.
   useEffect(() => {
     if (submitting) return;
     const onKey = (event: KeyboardEvent): void => {

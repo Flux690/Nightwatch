@@ -89,9 +89,8 @@ export function ApprovalCardPanel({
   const { input } = item;
   const command = commandOf(input);
   const service = serviceOf(input);
-  // The agent's own words for why, which is the one part of this card it is
-  // entitled to author. Required on every write tool, so it is absent only on a
-  // row written before that was true.
+  // The one part of this card the agent authors. Required on every write tool,
+  // so it is absent only on a row written before that was true.
   const why = inputString(input, "reason");
   const riskLine = riskLineOf(inputString(input, "risk"));
 
@@ -139,9 +138,8 @@ export function ApprovalCardPanel({
       </div>
 
       {rejecting ? (
-        // The comment is fed back to the agent as this call's result, so it
-        // redirects the work rather than only recording a refusal. Optional,
-        // and said to be optional: a blank rejection is still a decision.
+        // Fed back as this call's result, so it redirects the work rather than
+        // recording a refusal. Optional, because a blank rejection decides too.
         <div className="flex flex-col gap-2">
           <p className={EXCHANGE_LABEL_CLASS}>Your reason (optional)</p>
           <Textarea

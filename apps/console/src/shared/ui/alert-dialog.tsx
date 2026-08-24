@@ -62,9 +62,9 @@ function AlertDialogHeader({
     <div
       data-slot="alert-dialog-header"
       className={cn(
-        /* Left, at every size. The centred default is a phone pattern, and it
-           only un-centred for one of the two sizes, so a small dialog asked its
-           question down the middle while a large one asked it from the edge. */
+        // Left at every size: the centred default un-centred for only one of
+        // the two, so a small dialog asked from the middle and a large one from
+        // the edge.
         "grid grid-rows-[auto_1fr] place-items-start gap-2 text-left has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 has-data-[slot=alert-dialog-media]:group-data-[size=default]/alert-dialog-content:grid-rows-[auto_1fr]",
         className,
       )}
@@ -137,9 +137,8 @@ function AlertDialogAction({
   );
 }
 
-/* Filled and unbordered, a step above the dialog it stands on. Outlined, it
-   took the stage's own fill, which is darker than the dialog and read as a hole
-   in it; and its line rung is a step from the dialog it would be drawn on. */
+// Filled and unbordered, a step above the dialog it stands on. Outlined, it
+// took the stage's fill, which is darker and read as a hole in it.
 function AlertDialogCancel({
   className,
   variant = "ghost",

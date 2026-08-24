@@ -1,8 +1,7 @@
 import type { SessionListRow, SessionRunStatus } from "@nightwarden/shared";
 
-// Triage order: what needs a person, then what is still moving, then the three
-// kinds of finished. The group headers and the record's stepper share it, so
-// stepping through the queue walks the list exactly as it was read.
+// The group headers and the record's stepper share this order, so stepping
+// through the queue walks the list exactly as it was read.
 const STATUS_ORDER: SessionRunStatus[] = [
   "action_required",
   "investigating",
@@ -26,9 +25,8 @@ interface StatusGroup {
   rows: SessionListRow[];
 }
 
-/* Non-empty groups only, in triage order. Nothing reorders within a group: the
-   status is the separation, and ranking a sender's own word would put a fleet
-   labelling alerts P1 last for using a word we do not recognise. */
+// Nothing reorders within a group: ranking a sender's own word would put a
+// fleet labelling alerts P1 last for using a word we do not recognise.
 export function groupByStatus(rows: SessionListRow[]): StatusGroup[] {
   return STATUS_ORDER.map((status) => ({
     status,

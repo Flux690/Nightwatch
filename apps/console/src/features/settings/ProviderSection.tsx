@@ -29,9 +29,8 @@ import { Spinner } from "@/shared/ui/spinner";
 import { SettingsGroup, SettingsRow } from "./SettingsRow";
 import { CONTROL } from "./layout";
 
-/* What the user did themselves. "input-clear" is absent on purpose: that is
-   Base UI wiping the box when the list closes on no match, and honouring it is
-   what threw away what had just been typed. */
+// "input-clear" is absent on purpose: that is Base UI wiping the box when the
+// list closes on no match, and honouring it threw away what was typed.
 const OPERATOR_EDIT = new Set([
   "input-change",
   "input-paste",
@@ -64,9 +63,8 @@ interface ProviderSectionProps {
   onSave: () => void;
 }
 
-/* The one block that is not autosaved: a provider with no key and no model
-   cannot run an investigation, so the five fields are one transaction and the
-   Save button belongs to them rather than to the page. */
+// The one block that is not autosaved: a provider with no key and no model
+// cannot run, so the five fields are one transaction.
 export function ProviderSection({
   form,
   block,

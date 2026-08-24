@@ -1,6 +1,5 @@
-// The console's one relative timestamp. Bare units, so an age can sit in a
-// right-aligned cluster; a caller that wants a sentence supplies the "ago".
-// Null renders as "never", so a nullable lastSeen passes straight in.
+// Bare units, so an age can sit in a right-aligned cluster and a caller
+// wanting a sentence supplies the "ago". Null renders as "never".
 export function timeAgo(dateString: string | null): string {
   if (dateString === null) return "never";
   const diff = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
@@ -23,9 +22,8 @@ export function elapsed(from: string, to: string): string | null {
   return mins % 60 === 0 ? `${hours}h` : `${hours}h ${mins % 60}m`;
 }
 
-// The console's one clock. Every absolute time it prints comes through here, so
-// a report's timeline and the chart beside it can never disagree about format.
-// 24-hour, because an incident is read against logs and metrics that are.
+// Every absolute time comes through here, so a report's timeline and the chart
+// beside it cannot disagree. 24-hour, because logs and metrics are.
 export function clock(at: string | number): string {
   const d = new Date(at);
   if (Number.isNaN(d.getTime())) return typeof at === "string" ? at : "";

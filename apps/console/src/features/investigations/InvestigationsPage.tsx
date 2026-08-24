@@ -26,9 +26,8 @@ function findingTone(row: SessionListRow): string {
   return "text-muted-foreground";
 }
 
-/* Two lines: what happened, then what the investigation says about it. The
-   severity word is the user's own and is never matched against a list, so
-   a fleet labelling its alerts P1 reads exactly as one labelling them critical. */
+// The severity word is the user's own and never matched against a list, so a
+// fleet labelling alerts P1 reads as one labelling them critical.
 function InvestigationRow({
   row,
   running,
@@ -82,9 +81,8 @@ function InvestigationRow({
   );
 }
 
-/* Alerts waiting for a seat are not sessions, so not rows: no transcript, no
-   finding, nothing to open. No colour either - nobody is holding this up, the
-   fleet is simply at the limit the reader can raise. */
+// Waiting alerts are not sessions, so not rows. No colour either: nobody is
+// holding this up, the fleet is at a limit the reader can raise.
 function QueueBand({ queue }: { queue: QueueState }): React.JSX.Element | null {
   if (queue.waiting === 0) return null;
   const alerts = queue.waiting === 1 ? "1 alert" : `${queue.waiting} alerts`;

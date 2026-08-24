@@ -30,9 +30,8 @@ import { DAY_GROUPS, dayGroup, timeAgo } from "@/shared/lib/time";
 import { toast } from "@/shared/lib/toast";
 import { apiFetch } from "@/shared/api/client";
 
-/* Only conversations a person started. An alert-opened session was never one,
-   and the kind filter is the whole of that rule: a session is what it is from
-   the moment it exists, so no row ever leaves this list. */
+// A session is what it is from the moment it exists, so the kind filter is
+// the whole rule and no row ever leaves this list.
 function ChatHistory({ onLeave }: { onLeave: () => void }): React.JSX.Element {
   const { sessions, isLoading, hasMore, isLoadingMore, loadMore } =
     useSessions("chat");
@@ -94,9 +93,8 @@ function ChatHistory({ onLeave }: { onLeave: () => void }): React.JSX.Element {
   );
 }
 
-/* The conversation runs the full stage, so this page has no measured body and
-   no controls row. Everything it offers rides the crumb: the history it belongs
-   to, and the two things you can do to the one you are in. */
+// The conversation runs the full stage, so this page has no measured body:
+// everything it offers rides the crumb.
 export function AgentPage(): React.JSX.Element {
   const { id } = useParams({ strict: false });
   const sessionId = id ?? null;

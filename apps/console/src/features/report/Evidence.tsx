@@ -1,6 +1,5 @@
-/* What a cited call is drawn as comes from the kind its tool declares, never
-   from guessing at the result's shape. A kind that finds nothing it can draw
-   renders nothing, and the one-line reading above stands as the whole answer. */
+// From the kind its tool declares, never from guessing at the result's shape.
+// Finding nothing to draw renders nothing, and the one-line reading stands.
 
 import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
@@ -129,9 +128,8 @@ function OpenedPullRequest({
   );
 }
 
-/* What was drawn, and beneath it what it is and what it cannot speak for. The
-   caption belongs to the drawing, so it may be absent without anything moving -
-   which is what a heading above could never be. */
+// The caption belongs to the drawing, so it may be absent without anything
+// moving, which a heading above could never be.
 interface Drawing {
   body: React.JSX.Element;
   of: string;

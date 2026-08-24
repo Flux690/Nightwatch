@@ -4,9 +4,8 @@ import { SessionView } from "@/features/session/SessionView";
 import { readStoredNumber, writeStoredNumber } from "@/shared/lib/persisted";
 import { cn } from "@/shared/lib/utils";
 
-/* How wide it should be is a question about the user's screen, not one this
-   layout can answer, so they set it and it outlives the session: a width you set
-   again every night is worse than one you cannot set at all. */
+// A question about the user's screen, not one this layout can answer, so the
+// width they set outlives the session.
 
 const WIDTH_KEY = "nightwarden.rail.width";
 // The floor is what --container-rail rests at: narrower and the transcript wraps
@@ -69,9 +68,8 @@ export function ChatRail({
     writeStoredNumber(WIDTH_KEY, next);
   };
 
-  /* Width, not presence, so it closes like the sidebar. Closed it is zero-wide
-     but still here, which is what takes it out of the accessibility tree and the
-     tab order without taking the conversation down with it. */
+  // Width, not presence, so it closes like the sidebar: zero-wide leaves the
+  // accessibility tree and tab order without unmounting the conversation.
   return (
     <aside
       ref={railRef}

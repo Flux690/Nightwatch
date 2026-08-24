@@ -11,9 +11,8 @@ import { useAuth } from "@/features/auth/AuthContext";
 
 const MIN_PASSWORD = 12;
 
-/* The error is revealed rather than reserved for: FieldError renders nothing
-   when there is no message, so no empty live region sits in the accessibility
-   tree, and the input is marked as well as the space. */
+// Revealed rather than reserved for, so no empty live region sits in the
+// accessibility tree waiting to say nothing.
 function AuthField({
   id,
   label,
@@ -50,9 +49,8 @@ function AuthField({
   );
 }
 
-/* A legend is pulled out of the fieldset's own flow, so a flex gap never
-   applies to it and the first field sits closer than every other. The form is
-   one group with one heading, which is a heading rather than a legend. */
+// A legend leaves the fieldset's flow, so a flex gap never applies and the
+// first field sits closer than every other.
 function FormHeading({
   children,
 }: {

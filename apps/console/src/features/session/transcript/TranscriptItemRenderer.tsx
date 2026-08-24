@@ -95,9 +95,8 @@ function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
   );
 }
 
-/* A fact about the run rather than about the incident, so it is a rule like an
-   arriving alert and not a card: nothing produced it. The second clause is the
-   reader's actual question - the model forgot, the record did not. */
+// A rule like an arriving alert rather than a card, since nothing produced it.
+// The second clause answers the real question: the record did not forget.
 function Compaction(): React.JSX.Element {
   return (
     <div
@@ -139,9 +138,8 @@ function ThinkingBlock({
 
   const trimmed = item.text.trim();
 
-  /* Empty reasoning is never an item: the working animation stands in for it. A
-     settled burst also has a floor, after a model emitted a single "." six
-     times; mid-stream has none, since the block is what says work is happening. */
+  // The working animation stands in for empty reasoning. A settled burst has a
+  // floor after a model emitted a single "." six times; mid-stream has none.
   if (!trimmed) return null;
   if (!item.streaming && trimmed.length < MIN_THINKING_CHARS) return null;
 

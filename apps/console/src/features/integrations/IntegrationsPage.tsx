@@ -76,9 +76,8 @@ function useAlertSource(kind: AlertSourceKind): AlertSourceStatus | undefined {
   }).data;
 }
 
-/* The status line is delivery, not configuration: a minted credential nobody
-   has posted with says so, because a card reading Connected on a sender that
-   has never delivered is the failure this whole surface exists to catch. */
+// Delivery, not configuration: a card reading Connected on a sender that has
+// never delivered is the failure this surface exists to catch.
 function alertSourceCard(
   kind: AlertSourceKind,
   status: AlertSourceStatus | undefined,
@@ -131,9 +130,8 @@ export function IntegrationsPage(): React.JSX.Element {
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
-  // Two entries, not one: a Docker host and a Kubernetes cluster install
-  // differently and are addressed differently. Each routes to its own list
-  // rather than its wizard, which is a step you choose from there.
+  // Two entries, because the two install and are addressed differently. Each
+  // routes to its own list rather than its wizard.
   function platformCard(
     platform: "docker" | "kubernetes",
     noun: string,
