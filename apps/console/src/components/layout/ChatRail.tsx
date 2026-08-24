@@ -91,7 +91,7 @@ export function ChatRail({
         // The edge says where the report stops. It fades out rather than
         // switching off, leaving no hairline.
         expanded
-          ? "absolute inset-y-0 right-0 z-10 w-full border-transparent bg-background"
+          ? "absolute inset-y-0 right-0 z-(--z-rail) w-full border-transparent bg-background"
           : open
             ? "relative w-(--container-rail) border-border"
             : "relative w-0 border-transparent",
@@ -114,7 +114,7 @@ export function ChatRail({
             event.preventDefault();
             nudge(event.key === "ArrowLeft" ? KEY_STEP : -KEY_STEP);
           }}
-          className="absolute inset-y-0 left-0 z-20 w-3 cursor-col-resize after:absolute after:inset-y-0 after:left-0 after:w-[2px] hover:after:bg-border-strong focus-visible:after:bg-border-strong"
+          className="absolute inset-y-0 left-0 z-(--z-rail-grip) w-3 cursor-col-resize after:absolute after:inset-y-0 after:left-0 after:w-[2px] hover:after:bg-border-strong focus-visible:after:bg-border-strong"
         />
       )}
       {/* The chat holds its own width while the panel narrows past it, so

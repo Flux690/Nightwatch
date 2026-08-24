@@ -68,7 +68,7 @@ function ShellContent({
     <>
       <a
         href="#main-content"
-        className="absolute left-2 top-[-40px] z-[100] rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground no-underline focus:top-2"
+        className="absolute left-2 top-[-40px] z-(--z-skip-link) rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground no-underline focus:top-2"
       >
         Skip to content
       </a>

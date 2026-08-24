@@ -504,15 +504,19 @@
 
 /* Tokens with no palette dimension. */
 @theme {
-  /* Fonts */
-  --font-sans: "Geist Sans";
+  /* One variable face rather than four static cuts, because the body weight
+     is 450: a half step above regular reads crisp at small sizes where 400
+     goes soft and 500 already reads as bold. */
+  --font-sans: "Geist Variable";
   --font-mono: "Geist Mono";
+  --font-weight-normal: 450;
 
-  /* Two radii, not five: 8px is everything on the stage, 12px is what floats
-     above it. The five names are Tailwind's namespace, not five rungs. */
+  /* Three rungs, not five: 8px sits on the stage, 10px is a panel resting on
+     it, 12px floats above it. Radius carries depth alongside the shadow, which
+     is what keeps the ladder legible where two fills land close together. */
   --radius-sm: 0.5rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.5rem;
+  --radius-lg: 0.625rem;
   --radius-xl: 0.75rem;
   --radius-2xl: 0.75rem;
 
@@ -566,6 +570,22 @@
   --container-sidebar: 250px;
   --container-sidebar-icon: 52px;
   --container-sidebar-sheet: 288px;
+
+  /* Layers. A backdrop sits one below the surface it dims, so nothing can land
+     between the two, and a menu outranks a dialog because a menu can be opened
+     from inside one and never the reverse. */
+  /* Ordering between siblings inside a container that isolates, where the
+     global ladder does not reach and any positive value would do. */
+  --z-within: 1;
+
+  --z-rail: 10;
+  --z-rail-grip: 20;
+  --z-dialog-backdrop: 39;
+  --z-dialog: 40;
+  --z-overlay-backdrop: 49;
+  --z-overlay: 50;
+  --z-tooltip: 60;
+  --z-skip-link: 70;
 
   /* Motion. Every transition takes these unless it states otherwise, so a bare
      `transition-colors` is already on the system. Durations have no Tailwind
@@ -686,7 +706,7 @@
   }
 
   body {
-    @apply bg-background text-foreground text-sm;
+    @apply bg-background text-foreground text-sm font-normal;
     margin: 0;
   }
 

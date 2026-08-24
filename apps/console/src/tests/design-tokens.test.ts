@@ -786,6 +786,18 @@ describe("radius", () => {
     expect(rungs.sort()).toEqual(["-2xl", "-lg", "-md", "-sm", "-xl"]);
   });
 
+  /* Radius rises with depth, so it says what the shadow says a second time.
+     Held at one value above the control rung, a panel and the menu over it
+     were separated by fill alone. */
+  it("rises from the control rung to the panel to what floats", () => {
+    const rem = (name: string): number =>
+      Number(new RegExp(`--${name}:\\s*([\\d.]+)rem`).exec(css)?.[1]);
+    expect(rem("radius-sm")).toBe(rem("radius-md"));
+    expect(rem("radius-lg")).toBeGreaterThan(rem("radius-md"));
+    expect(rem("radius-xl")).toBeGreaterThan(rem("radius-lg"));
+    expect(rem("radius-2xl")).toBe(rem("radius-xl"));
+  });
+
   it("rounds nothing to a value off that set", () => {
     expectUtilityValues(
       /(?<![-\w])rounded(?:-(?:t|b|l|r|s|e|tl|tr|bl|br))?-([^\s"'`]+)/g,
@@ -843,6 +855,41 @@ describe("shadow", () => {
       [...declared, "none"],
       "shadow",
     );
+  });
+});
+
+/* One ordered ladder, or nothing orders: every overlay sat on the same rung
+   and which one covered which was decided by document order. */
+describe("layers", () => {
+  it("names every layer, and pairs a backdrop with what it dims", () => {
+    const layer = (name: string): number =>
+      Number(new RegExp(`--z-${name}:\\s*(\\d+)`).exec(css)?.[1]);
+    for (const [backdrop, surface] of [
+      ["dialog-backdrop", "dialog"],
+      ["overlay-backdrop", "overlay"],
+    ] as const) {
+      expect(layer(backdrop), backdrop).toBe(layer(surface) - 1);
+    }
+    // A menu can be opened from inside a dialog; a dialog never from a menu.
+    expect(layer("overlay")).toBeGreaterThan(layer("dialog"));
+    expect(layer("tooltip")).toBeGreaterThan(layer("overlay"));
+    expect(layer("skip-link")).toBeGreaterThan(layer("tooltip"));
+    expect(layer("rail")).toBeLessThan(layer("dialog"));
+  });
+
+  it("spends only the named layers", () => {
+    const declared = [...css.matchAll(/--z-([a-z-]+):/g)].map(
+      (m) => m[1] ?? "",
+    );
+    expect(declared.length).toBeGreaterThan(0);
+    for (const [path, text] of SOURCES) {
+      for (const match of text.matchAll(/(?<![-\w])z-(?!index)([^\s"'`]+)/g)) {
+        const value = match[1] ?? "";
+        const named = /^\(--z-([a-z-]+)\)$/.exec(value)?.[1];
+        expect(named, `raw z-index \`${match[0]}\` in ${path}`).toBeDefined();
+        expect(declared, `\`${match[0]}\` in ${path}`).toContain(named);
+      }
+    }
   });
 });
 

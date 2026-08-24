@@ -31,7 +31,7 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-50"
+        className="isolate z-(--z-overlay)"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
@@ -39,7 +39,7 @@ function PopoverContent({
           /* Upstream, with this console's own overlay tokens: the ring, the
              shadow and the radius are the ones every other overlay here uses. */
           className={cn(
-            "z-50 flex w-72 origin-(--transform-origin) flex-col gap-2.5 rounded-xl bg-popover p-1 text-sm text-popover-foreground shadow-overlay ring-1 ring-border outline-hidden duration-(--duration-fast) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-(--z-overlay) flex w-72 origin-(--transform-origin) flex-col gap-2.5 rounded-xl bg-popover p-1 text-sm text-popover-foreground shadow-overlay ring-1 ring-border outline-hidden duration-(--duration-fast) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className,
           )}
           {...props}
