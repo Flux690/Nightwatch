@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findingFor } from "@/components/transcript/toolFindings";
+import { findingFor } from "@/features/session/transcript/toolFindings";
 
 // A corpus, not a set of examples: every shape below was captured from a real
 // runner during the Redis OOM dry run. A formatter that drifts from the shape

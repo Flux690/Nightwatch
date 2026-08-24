@@ -12,7 +12,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { AlertSourceKind, RunnerRecord } from "@nightwarden/shared";
 
-import { AlertSourcePage } from "../pages/AlertSourcePage.js";
+import { AlertSourcePage } from "../features/integrations/alerting/AlertSourcePage.js";
 
 const ROTATED_TOKEN = "nwi_rotated999999999999999999999999";
 const INGEST_URL = "http://api.test/alerts/ingest";

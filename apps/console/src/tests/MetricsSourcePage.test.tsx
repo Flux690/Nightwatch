@@ -15,7 +15,7 @@ import type {
 } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { MetricsSourcePage } from "../pages/MetricsSourcePage.js";
+import { MetricsSourcePage } from "../features/integrations/metrics/MetricsSourcePage.js";
 
 // The page navigates on disconnect, so it needs a real router around it.
 function renderPage(kind: MetricsSourceKind) {

@@ -8,9 +8,9 @@ import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
-import { router } from "./router.js";
+import { TooltipProvider } from "@/shared/ui/tooltip";
+import { Toaster } from "@/shared/ui/sonner";
+import { router } from "./app/router.js";
 
 const queryClient = new QueryClient();
 

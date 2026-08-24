@@ -12,8 +12,8 @@ import {
 import type { GitHubIntegrationStatus } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { GitHubConnectPage } from "@/pages/GitHubConnectPage";
-import { toast } from "@/lib/toast";
+import { GitHubConnectPage } from "@/features/integrations/github/GitHubConnectPage";
+import { toast } from "@/shared/lib/toast";
 
 const NOT_CONFIGURED: GitHubIntegrationStatus = {
   configured: false,

@@ -8,7 +8,7 @@ import type {
   ResolvedEvidence,
 } from "@nightwarden/shared";
 
-import { ReportPanel } from "@/components/report/ReportPanel";
+import { ReportPanel } from "@/features/report/ReportPanel";
 
 const RESOLVED = "2026-07-21T12:30:00.000Z";
 

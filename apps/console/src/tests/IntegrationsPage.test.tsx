@@ -15,7 +15,7 @@ import type {
 } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { IntegrationsPage } from "@/pages/IntegrationsPage";
+import { IntegrationsPage } from "@/features/integrations/IntegrationsPage";
 
 const NOT_CONFIGURED: GitHubIntegrationStatus = {
   configured: false,

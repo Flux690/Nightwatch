@@ -11,8 +11,8 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "@/auth/AuthContext";
-import { AuthGate } from "../auth/AuthGate.js";
+import { AuthProvider } from "@/features/auth/AuthContext";
+import { AuthGate } from "../app/AuthGate.js";
 import { MockEventSource } from "./mockEventSource.js";
 
 function makeRouter() {

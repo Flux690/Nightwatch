@@ -5,7 +5,7 @@ import type {
   SessionReportResponse,
 } from "@nightwarden/shared";
 
-import { reportToMarkdown } from "@/lib/reportMarkdown";
+import { reportToMarkdown } from "@/features/report/reportMarkdown";
 
 const AT = "2026-07-21T12:30:00.000Z";
 

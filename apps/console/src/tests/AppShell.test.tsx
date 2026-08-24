@@ -11,7 +11,7 @@ import {
 import type { SessionAlert, SessionListRow } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { routeTree } from "@/router";
+import { routeTree } from "@/app/router";
 import { MockEventSource } from "./mockEventSource.js";
 
 const OWNER_EMAIL = "admin@example.com";

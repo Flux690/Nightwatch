@@ -13,7 +13,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwarden/shared";
 
-import { AddRunnerPage } from "../pages/AddRunnerPage.js";
+import { AddRunnerPage } from "../features/integrations/runners/AddRunnerPage.js";
 
 const GENERATED_TOKEN = {
   id: "new-token-uuid",

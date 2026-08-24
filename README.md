@@ -630,7 +630,7 @@ These are exactly what CI runs. `.github/workflows/verify.yml` holds the definit
 pnpm build
 ```
 
-`@nightwarden/shared` and `@nightwarden/runner-transport` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so a megabyte of JavaScript ships as a quarter of that with no per-request work. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
+`@nightwarden/shared` and `@nightwarden/runner-transport` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
 
 ### Monorepo layout
 
@@ -679,22 +679,30 @@ apps/
       manifest/         what this cluster advertises to the API
   console/              React user UI
     src/
-      api/              one typed fetch boundary (apiFetch)
-      auth/             login and owner-password setup
-      components/
-        ui/             shadcn-style primitives (Base UI under the hood)
-        layout/         the page frame and its breadcrumb, the one sidebar and its collapse,
-                        the resizable chat rail, the wizard's stepper, integration page chrome,
-                        settings/ for the rows each settings tab is built from
+      styles.css        the whole theme: one base colour, one accent, one contrast
+                        number, and every surface, edge, control and ink derived from
+                        them (see "The console's theme" below)
+      app/              the router, the authenticated layout and the shell it mounts.
+                        Every page is loaded lazily, so a route costs nothing until visited
+      shared/           what more than one feature needs, and which knows of none of them
+        ui/             shadcn-style primitives (Base UI under the hood), the page frame
+                        and its breadcrumb. Primitives take props; none reads app state
+        lib/            class merging, toast, the one clock, relative time, icon props
+        api/            one typed fetch boundary (apiFetch), errors carrying their body
+        hooks/          the viewport tier, debouncing
+        events/         the console event-stream (SSE) provider
+      features/         grouped by the feature served, not by what kind of file it is
+        auth/           login, owner-password setup, the session context
+        integrations/   the catalogue every integration page reads, the shared connect
+                        chrome and disconnect flow, then one folder per product -
+                        github/ loki/ metrics/ alerting/ - and runners/ for the two
+                        fleets and the add-runner wizard, which live under /integrations
+        investigations/ the list, the record page, and the queue's ordering
+        session/        the transcript and the view that renders it, the agent page, the
+                        resizable chat rail, and the session readers behind them
         report/         the rendered report: its prose, the timeline, each claim and the
                         drawing of every call it cites, by the kind that call declares
-        transcript/     transcript dispatcher + per-card panels
-      hooks/            shared console event-stream (SSE) provider, the session and session-list
-                        readers, per-session report, config, and the viewport tier the shell reads
-      lib/              shared client helpers: class merging, toast, relative time, icon props,
-                        markdown for a copied chat or report, the investigation queue's ordering
-      pages/            login, the two fleet lists, add-runner wizard, agent + investigation pages,
-                        settings, and one page per integration with its copy beside it
+        settings/       the page and the rows each of its tabs is built from
 packages/
   runner-transport/     Everything about talking to NightWarden, shared by both runners
     src/
@@ -721,6 +729,42 @@ packages/
       auth.ts           owner auth payloads
       runner.ts         Platform, the two manifest shapes, and the fleet view
 ```
+
+### The console's theme
+
+`apps/console/src/styles.css` is the whole of it. Four numbers are the input - a
+base colour as lightness, chroma and hue, plus one contrast number - and every
+other value in the console is a departure from them, written in `lch()` so the
+browser does the conversion and devtools show a colour as what it means.
+
+Four rules carry it, and they are worth knowing before changing a value:
+
+- **The base never moves.** Every surface, edge, control and ink states how far
+  it sits from the ground it lands on, multiplied by contrast. Nothing but the
+  base is an absolute colour.
+- **A role re-anchors.** A container that changes the ground says so with
+  `data-ground`, and everything inside re-derives against that surface rather
+  than against the page. This is why a secondary button is visible on the stage,
+  on a card and inside a menu without a single depth-specific override.
+- **Lightness and chroma are separate laws.** Surfaces, borders and controls add
+  a departure; text mixes a proportion of the distance to white, so it barely
+  moves when the surface under it does. Chroma re-anchors too - fully for
+  surfaces, at half rate for ink. Holding chroma flat is what made a control on
+  a card read grey where it should read faintly violet.
+- **Status ramps are generated.** Each hue is one `[L, C, H]` triple; its text,
+  fill and tint follow from it, and a tint is its own ground washed with the hue
+  so it re-anchors like everything else.
+
+`src/tests/design-tokens.test.ts` holds the system to those rules. It asserts
+relationships rather than values - a ladder that rises, an edge above the ground
+it is drawn on, contrast floors measured within each ground - and then runs the
+whole suite again against a second, unrelated base. That last part is the point:
+at one base a hard-coded number and a real derivation are indistinguishable, so
+only a palette the sheet has never seen can tell them apart.
+
+`src/tests/architecture.test.ts` holds the folder layout to the same standard:
+`shared` may not import a feature, a feature may not import the router, and a
+primitive may not read application state.
 
 ## License
 

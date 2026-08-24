@@ -18,9 +18,9 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "@/auth/AuthContext";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { toast } from "@/lib/toast";
+import { AuthProvider } from "@/features/auth/AuthContext";
+import { SettingsPage } from "@/features/settings/SettingsPage";
+import { toast } from "@/shared/lib/toast";
 
 const OWNER_EMAIL = "admin@example.com";
 const AUTH_STATUS_RESPONSE = {

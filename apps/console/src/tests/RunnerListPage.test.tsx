@@ -12,7 +12,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwarden/shared";
 
-import { RunnerListPage } from "../pages/RunnerListPage.js";
+import { RunnerListPage } from "../features/integrations/runners/RunnerListPage.js";
 
 const NOW = new Date("2024-01-01T12:00:00Z").getTime();
 

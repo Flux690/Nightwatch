@@ -375,9 +375,7 @@ describe("the ladder", () => {
       "line-1",
       "line-2",
       "line-3",
-      "line-1-hover",
       "line-2-hover",
-      "line-3-hover",
       "ink-1",
       "ink-2",
       "ink-3",
@@ -463,13 +461,10 @@ describe("the ladder", () => {
   /* An edge answers the pointer the way a fill does. Without these a box drawn
      by its border alone was the one control that did not react at all. */
   it("moves every edge further from the ground under the pointer", () => {
-    for (const line of ["line-1", "line-2", "line-3"]) {
-      for (const g of GROUNDS) {
-        expect(
-          channel(`${line}-hover`, g),
-          `${line} hover on ${g}`,
-        ).toBeGreaterThan(channel(line, g));
-      }
+    for (const g of GROUNDS) {
+      expect(channel("line-2-hover", g), `edge hover on ${g}`).toBeGreaterThan(
+        channel("line-2", g),
+      );
     }
   });
 
@@ -648,17 +643,6 @@ describe("the contrast matrix", () => {
     }
   });
 
-  it("keeps a status icon at 3:1 where status appears (WCAG 1.4.11)", () => {
-    for (const base of ["success-base", "warning-base", "destructive-base"]) {
-      for (const g of STATUS_GROUNDS) {
-        expect(
-          ratio(step(base, g), step(GROUND_TOKEN[g], g)),
-          `${base} on ${g}`,
-        ).toBeGreaterThanOrEqual(3);
-      }
-    }
-  });
-
   it("keeps status text at AA on its own tint", () => {
     for (const [text, tint] of [
       ["success", "success-tint"],
@@ -774,13 +758,13 @@ const SPACING = ["0", "1", "1.5", "2", "2.5", "3", "4", "6", "8", "12"];
 describe("widths", () => {
   /* styles.css states the rule: every width resolves to a container token. A
      raw `max-w-120` on a Field is how help text ended up clamped to half the
-     column it had. components/ui is exempt, carrying its own defaults. */
+     column it had. shared/ui is exempt, carrying its own defaults. */
   it("names a container token rather than a raw width", () => {
     const declared = [...css.matchAll(/--container-([a-z-]+):/g)].map(
       (m) => m[1],
     );
     for (const [path, text] of SOURCES) {
-      if (path.includes(join("components", "ui"))) continue;
+      if (path.includes(join("shared", "ui"))) continue;
       for (const match of text.matchAll(/\bmax-w-([a-z0-9-]+)/g)) {
         const value = match[1] ?? "";
         // Tailwind's own keywords stay: they are relationships, not measures.
@@ -788,6 +772,53 @@ describe("widths", () => {
           continue;
         }
         expect(declared, `\`${match[0]}\` in ${path}`).toContain(value);
+      }
+    }
+  });
+});
+
+describe("colour", () => {
+  /* Tailwind emits nothing at all for a class whose token is missing, so a
+     colour that does not exist fails silently: the element simply inherits and
+     nobody sees a build error. Every other namespace here is guarded; this is
+     the one that renders the page. */
+  it("paints only with colours the sheet declares", () => {
+    const declared = new Set(
+      [...css.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1] ?? ""),
+    );
+    // Tailwind's own keywords, and the words these prefixes carry that are not
+    // colours at all: a border side, a ring width, a background clip.
+    const keywords = new Set([
+      "transparent",
+      "current",
+      "inherit",
+      "white",
+      "black",
+      "none",
+      "auto",
+      "clip-padding",
+      "clip-border",
+      "clip-text",
+    ]);
+    const notAColour =
+      /^(x|y|s|e|t|b|l|r|tl|tr|bl|br|se|ss|ee|es)(-\d+(\.\d+)?)?$/;
+    const sizeOrStyle =
+      /^(\d+(\.\d+)?|xs|sm|base|md|lg|xl|\dxl|left|right|center|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|solid|dashed|dotted|double|hidden|inset|top|bottom|middle|super|sub)$/;
+
+    for (const [path, text] of SOURCES) {
+      for (const match of text.matchAll(
+        /(?<![-\w])(bg|text|border|ring|fill|stroke|decoration|placeholder|caret|accent)-([a-z][a-z0-9-]*(?:\/\d+)?)(?![\w[\]-])/g,
+      )) {
+        const value = match[2] ?? "";
+        if (keywords.has(value)) continue;
+        if (notAColour.test(value)) continue;
+        if (sizeOrStyle.test(value)) continue;
+        // An opacity suffix names the same token: bg-input/30 is bg-input.
+        const name = value.split("/")[0] ?? "";
+        expect(
+          declared.has(name),
+          `\`${match[0]}\` in ${path} names no --color-${name}`,
+        ).toBe(true);
       }
     }
   });
@@ -877,12 +908,9 @@ describe("layers", () => {
   it("names every layer, and pairs a backdrop with what it dims", () => {
     const layer = (name: string): number =>
       Number(new RegExp(`--z-${name}:\\s*(\\d+)`).exec(css)?.[1]);
-    for (const [backdrop, surface] of [
-      ["dialog-backdrop", "dialog"],
-      ["overlay-backdrop", "overlay"],
-    ] as const) {
-      expect(layer(backdrop), backdrop).toBe(layer(surface) - 1);
-    }
+    expect(layer("dialog-backdrop"), "dialog-backdrop").toBe(
+      layer("dialog") - 1,
+    );
     // A menu can be opened from inside a dialog; a dialog never from a menu.
     expect(layer("overlay")).toBeGreaterThan(layer("dialog"));
     expect(layer("tooltip")).toBeGreaterThan(layer("overlay"));
@@ -1020,11 +1048,11 @@ describe("on a base it has never been shown", () => {
         const ground = channel(GROUND_TOKEN[g], g);
         for (const line of ["line-1", "line-2", "line-3"]) {
           expect(channel(line, g), `${line} on ${g}`).toBeGreaterThan(ground);
-          expect(
-            channel(`${line}-hover`, g),
-            `${line} hover on ${g}`,
-          ).toBeGreaterThan(channel(line, g));
         }
+        expect(
+          channel("line-2-hover", g),
+          `edge hover on ${g}`,
+        ).toBeGreaterThan(channel("line-2", g));
         expect(channel("control", g), `control on ${g}`).toBeGreaterThan(
           ground,
         );

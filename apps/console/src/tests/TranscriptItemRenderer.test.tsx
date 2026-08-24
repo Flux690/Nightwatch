@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { TestProviders } from "./renderWithProviders.js";
 
-import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
+import { TranscriptItemRenderer } from "@/features/session/transcript/TranscriptItemRenderer";
 import type {
   ToolOutcome,
   TranscriptItem,
-} from "@/components/transcript/types";
+} from "@/features/session/transcript/types";
 
 function wrap(
   item: TranscriptItem,
@@ -558,7 +558,7 @@ describe("TranscriptItemRenderer", () => {
   describe("reveal from the report", () => {
     it("marks the named tool row without opening it, leaving the others untouched", async () => {
       const { revealToolCall } =
-        await import("@/components/transcript/revealToolCall");
+        await import("@/features/session/transcript/revealToolCall");
 
       render(
         <>

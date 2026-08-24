@@ -4,11 +4,11 @@ import type { ConsoleEvent } from "@nightwarden/shared";
 import {
   applyLiveEvent,
   hasActiveStream,
-} from "@/components/transcript/liveConverter";
+} from "@/features/session/transcript/liveConverter";
 import type {
   TranscriptItem,
   ThinkingItem,
-} from "@/components/transcript/types";
+} from "@/features/session/transcript/types";
 
 function textDelta(delta: string, turn = 1): ConsoleEvent {
   return {

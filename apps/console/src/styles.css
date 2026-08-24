@@ -54,7 +54,6 @@
      Chroma is a constant per role, not a function of distance or contrast. */
   --d-control: 0.171444;
   --d-control-hover: 0.342852;
-  --d-control-active: 0.485704;
   /* Half a lift rather than half an opacity. A wash dimmed the ring and the
      drop with the fill, so a disabled control lost its shape instead of
      keeping it and going quiet. */
@@ -69,9 +68,7 @@
   /* An edge answers the pointer like a fill does. The first and third are the
      measured hovers of the weights they belong to; the second is derived, by
      applying the solid edge's own rest-to-hover ratio to its hairline rung. */
-  --d-line-1-hover: 0.4;
   --d-line-2-hover: 1.12;
-  --d-line-3-hover: 1.92;
 
   --dc-control: 0.289;
   --dc-control-lit: 0.675;
@@ -229,10 +226,6 @@
     calc(var(--ground-l) + var(--d-control-hover) * var(--contrast))
       var(--c-control-lit) var(--base-h)
   );
-  --control-active: lch(
-    calc(var(--ground-l) + var(--d-control-active) * var(--contrast))
-      var(--c-control-lit) var(--base-h)
-  );
   --state-hover: lch(
     calc(var(--ground-l) + var(--d-state-hover) * var(--contrast))
       var(--c-state) var(--base-h)
@@ -266,16 +259,8 @@
       var(--base-h)
   );
 
-  --line-1-hover: lch(
-    calc(var(--ground-l) + var(--d-line-1-hover) * var(--contrast))
-      var(--c-line) var(--base-h)
-  );
   --line-2-hover: lch(
     calc(var(--ground-l) + var(--d-line-2-hover) * var(--contrast))
-      var(--c-line) var(--base-h)
-  );
-  --line-3-hover: lch(
-    calc(var(--ground-l) + var(--d-line-3-hover) * var(--contrast))
       var(--c-line) var(--base-h)
   );
   --line-lit: lch(
@@ -381,8 +366,6 @@
   --border: var(--line-1);
   --border-strong: var(--line-3);
   --input: var(--line-2);
-  --border-hover: var(--line-1-hover);
-  --border-strong-hover: var(--line-3-hover);
   --input-hover: var(--line-2-hover);
 
   /* Inactive, not faded. Both re-anchor, so a disabled control keeps the
@@ -391,13 +374,10 @@
   --disabled-foreground: var(--ink-disabled);
 
   --success: var(--green-text);
-  --success-base: var(--green-base);
   --success-tint: var(--green-tint);
   --warning: var(--yellow-text);
-  --warning-base: var(--yellow-base);
   --warning-tint: var(--yellow-tint);
   --destructive: var(--red-text);
-  --destructive-base: var(--red-base);
   --destructive-tint: var(--red-tint);
   --destructive-tint-hover: var(--red-tint-hover);
   --destructive-fill: var(--red-fill);
@@ -451,7 +431,6 @@
   --color-surface-hover: var(--surface-hover);
   --color-control: var(--control);
   --color-control-hover: var(--control-hover);
-  --color-control-active: var(--control-active);
   --color-ink-subtle: var(--ink-subtle);
 
   --color-primary: var(--primary);
@@ -463,20 +442,15 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-input: var(--input);
-  --color-border-hover: var(--border-hover);
-  --color-border-strong-hover: var(--border-strong-hover);
   --color-input-hover: var(--input-hover);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
 
   --color-success: var(--success);
-  --color-success-base: var(--success-base);
   --color-success-tint: var(--success-tint);
   --color-warning: var(--warning);
-  --color-warning-base: var(--warning-base);
   --color-warning-tint: var(--warning-tint);
   --color-destructive: var(--destructive);
-  --color-destructive-base: var(--destructive-base);
   --color-destructive-tint: var(--destructive-tint);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-destructive-fill: var(--destructive-fill);
@@ -510,6 +484,12 @@
   --font-sans: "Geist Variable";
   --font-mono: "Geist Mono";
   --font-weight-normal: 450;
+  /* Letter spacing, by the job the type is doing. Three values were spelled
+     inline at five sites; a heading that drifts from its twin is invisible
+     until the two are seen side by side. */
+  --tracking-caps: 0.06em;
+  --tracking-heading: -0.1px;
+  --tracking-title: -0.3px;
 
   /* Three rungs, not five: 8px sits on the stage, 10px is a panel resting on
      it, 12px floats above it. Radius carries depth alongside the shadow, which
@@ -582,7 +562,6 @@
   --z-rail-grip: 20;
   --z-dialog-backdrop: 39;
   --z-dialog: 40;
-  --z-overlay-backdrop: 49;
   --z-overlay: 50;
   --z-tooltip: 60;
   --z-skip-link: 70;

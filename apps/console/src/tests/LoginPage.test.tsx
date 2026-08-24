@@ -10,8 +10,8 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "@/auth/AuthContext";
-import { LoginPage } from "../pages/LoginPage.js";
+import { AuthProvider } from "@/features/auth/AuthContext";
+import { LoginPage } from "../features/auth/LoginPage.js";
 
 function jsonResponse(status: number, body: object) {
   return {

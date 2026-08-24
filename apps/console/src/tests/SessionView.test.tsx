@@ -17,14 +17,14 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionView } from "../pages/SessionView.js";
-import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
-import { routeTree } from "@/router";
+import { SessionView } from "../features/session/SessionView.js";
+import { ConsoleEventsProvider } from "@/shared/events/ConsoleEventsProvider";
+import { routeTree } from "@/app/router";
 import { MockEventSource } from "./mockEventSource.js";
 
 // AuthProvider as well as the hook: the page tests drive the real route tree,
 // whose root mounts the provider before any page renders.
-vi.mock("@/auth/AuthContext", () => ({
+vi.mock("@/features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
     phase: { kind: "authenticated", email: "user@nightwarden.io" },
