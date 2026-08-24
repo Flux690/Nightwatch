@@ -94,37 +94,29 @@
   --green-text: lch(80 80 var(--hue-green));
   --green-fill: lch(50 64.37 var(--hue-green));
   --green-on-fill: lch(100 32.185 var(--hue-green));
-  --green-tint: lch(12.198 12.395 145.838);
 
   --yellow-base: lch(80 90 var(--hue-yellow));
   --yellow-text: lch(80 80 var(--hue-yellow));
   --yellow-fill: lch(50 90 var(--hue-yellow));
   --yellow-on-fill: lch(100 45 var(--hue-yellow));
-  --yellow-tint: lch(16.956 17.184 83.272);
 
   --red-base: lch(58 73 var(--hue-red));
   --red-text: lch(80 80 var(--hue-red));
   /* Darker than Linear's redBg, which carries its own foreground at 3.89:1. */
   --red-fill: lch(42 73 var(--hue-red));
   --red-fill-hover: lch(46 73 var(--hue-red));
-  --red-tint: lch(11.767 15.869 22.59);
-  --red-tint-hover: lch(15 15.869 22.59);
 
   --orange-base: lch(66 80 var(--hue-orange));
   --orange-text: lch(80 80 var(--hue-orange));
-  --orange-tint: lch(13.546 16.71 39.039);
 
   --blue-base: lch(80 70 var(--hue-blue));
   --blue-text: lch(80 80 var(--hue-blue));
-  --blue-tint: lch(16.956 19.309 267.26);
 
   --teal-base: lch(67.5 45 var(--hue-teal));
   --teal-text: lch(80 80 var(--hue-teal));
-  --teal-tint: lch(13.895 10.447 213.218);
 
   --purple-base: lch(48 59.31 var(--hue-purple));
   --purple-text: lch(80 80 var(--hue-purple));
-  --purple-tint: lch(9.772 13.365 285.643);
 
   /* One accent, stated once. A fill dark enough to carry white and an ink light
      enough to be read on the dark are one colour at two lightnesses, so only
@@ -196,6 +188,9 @@
    substitutes where it is declared - on :root alone these would never re-derive. */
 :root,
 [data-ground] {
+  /* The ground itself as a colour, which a wash has to composite over. */
+  --ground-color: lch(var(--ground-l) var(--ground-c) var(--base-h));
+
   /* Resolved per ground, so a role's chroma re-anchors with its lightness. */
   --c-control: calc(var(--ground-c) + var(--dc-control));
   --c-control-lit: calc(var(--ground-c) + var(--dc-control-lit));
@@ -203,7 +198,9 @@
   --c-highlight: calc(var(--ground-c) + var(--dc-highlight));
   --c-line: calc(var(--ground-c) + var(--dc-line));
   --c-line-lit: calc(var(--ground-c) + var(--dc-line-lit));
-  --c-ink: calc(var(--c-ink-base) + (var(--ground-c) - 0.4) * var(--t-ink-c));
+  --c-ink: calc(
+    var(--c-ink-base) + (var(--ground-c) - var(--base-c)) * var(--t-ink-c)
+  );
 
   --control: lch(
     calc(var(--ground-l) + var(--d-control) * var(--contrast)) var(--c-control)
@@ -265,6 +262,50 @@
   --ink-3: lch(
     calc(var(--ground-l) + var(--t-ink-3) * (100 - var(--ground-l)))
       var(--c-ink) var(--base-h)
+  );
+
+  /* A tint is its own ground washed with the hue, composited in linear light,
+     so it re-anchors like everything else: held as one absolute colour it went
+     darker than the menu it was drawn on. */
+  --green-tint: color-mix(
+    in srgb-linear,
+    var(--green-base) 3%,
+    var(--ground-color)
+  );
+  --yellow-tint: color-mix(
+    in srgb-linear,
+    var(--yellow-base) 3%,
+    var(--ground-color)
+  );
+  --red-tint: color-mix(
+    in srgb-linear,
+    var(--red-base) 3%,
+    var(--ground-color)
+  );
+  --red-tint-hover: color-mix(
+    in srgb-linear,
+    var(--red-base) 5%,
+    var(--ground-color)
+  );
+  --orange-tint: color-mix(
+    in srgb-linear,
+    var(--orange-base) 3%,
+    var(--ground-color)
+  );
+  --blue-tint: color-mix(
+    in srgb-linear,
+    var(--blue-base) 3%,
+    var(--ground-color)
+  );
+  --teal-tint: color-mix(
+    in srgb-linear,
+    var(--teal-base) 3%,
+    var(--ground-color)
+  );
+  --purple-tint: color-mix(
+    in srgb-linear,
+    var(--purple-base) 3%,
+    var(--ground-color)
   );
 }
 

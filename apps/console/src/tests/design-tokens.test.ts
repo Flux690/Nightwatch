@@ -146,24 +146,64 @@ function envFor(ground: Ground): Map<string, string> {
   return env;
 }
 
-function step(name: string, ground: Ground = "stage"): Step {
-  const env = envFor(ground);
+/* The three arguments of a color-mix(), split like slots() so a var() keeps
+   its own parens: "in srgb-linear", "<colour> <pct>%", "<colour>". */
+function mixParts(value: string): [string, number, string] | null {
+  const body = /^color-mix\(\s*in srgb-linear\s*,(.*)\)$/.exec(
+    value.trim(),
+  )?.[1];
+  if (body === undefined) return null;
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of body) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  out.push(current);
+  if (out.length !== 2) return null;
+  const weighted = /^(.*)\s+([\d.]+)%$/.exec((out[0] ?? "").trim());
+  if (!weighted) return null;
+  return [weighted[1] ?? "", Number(weighted[2]), (out[1] ?? "").trim()];
+}
+
+function stepOf(value: string, env: Map<string, string>): Step {
   const seen = new Set<string>();
-  let value = env.get(name);
-  while (value !== undefined) {
-    const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(value);
+  let current = value.trim();
+  for (;;) {
+    const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(current);
     if (!alias) break;
     const next = alias[1] ?? "";
-    if (seen.has(next)) throw new Error(`--${name} loops through --${next}`);
+    if (seen.has(next)) throw new Error(`--${next} loops through itself`);
     seen.add(next);
-    name = next;
-    value = env.get(next);
+    const resolved = env.get(next);
+    if (resolved === undefined) throw new Error(`--${next} is not declared`);
+    current = resolved.trim();
   }
-  if (value === undefined) throw new Error(`--${name} is not declared`);
-  const triple = slots(value);
-  if (!triple) throw new Error(`--${name} is not an lch() step: ${value}`);
+  const mix = mixParts(current);
+  if (mix) {
+    const [top, pct, bottom] = mix;
+    const over = linear(stepOf(top, env));
+    const under = linear(stepOf(bottom, env));
+    const p = pct / 100;
+    return lchOf(over.map((c, i) => p * c + (1 - p) * (under[i] ?? 0)));
+  }
+  const triple = slots(current);
+  if (!triple) throw new Error(`not an lch() step: ${current}`);
   const [L, C, H] = triple.map((slot) => evaluate(slot, env));
   return { L: L ?? NaN, C: C ?? NaN, H: H ?? NaN };
+}
+
+function step(name: string, ground: Ground = "stage"): Step {
+  const env = envFor(ground);
+  if (!env.has(name)) throw new Error(`--${name} is not declared`);
+  return stepOf(`var(--${name})`, env);
 }
 
 /* CSS Color 4 lch() is D50 Lab, so it is Bradford-adapted to D65 before the
@@ -191,18 +231,54 @@ const apply = (m: number[][], v: number[]): number[] =>
       (r[2] ?? 0) * (v[2] ?? 0),
   );
 
-function channels({ L, C, H }: Step): [number, number, number] {
+/* A wash composites in linear light, so a mix has to be taken before the
+   transfer function and read back after it. */
+const RGB_TO_XYZ = [
+  [0.41239079926595934, 0.357584339383878, 0.18048078840183424],
+  [0.21263900587151027, 0.7151686787677561, 0.07219231536073371],
+  [0.01933081871559181, 0.11919477979462595, 0.9505321522496607],
+];
+const D65_TO_D50 = [
+  [1.047929760567796, 0.022946950150051406, -0.050192316470654],
+  [0.029627803023954218, 0.9904343701001199, -0.01707376778317304],
+  [-0.009243028938201791, 0.015055225081508652, 0.7518742754143181],
+];
+const DELTA = 6 / 29;
+
+function linear({ L, C, H }: Step): number[] {
   const h = (H * Math.PI) / 180;
   const fy = (L + 16) / 116;
   const fx = fy + (C * Math.cos(h)) / 500;
   const fz = fy - (C * Math.sin(h)) / 200;
-  const d = 6 / 29;
-  const inv = (t: number) => (t > d ? t ** 3 : 3 * d * d * (t - 4 / 29));
+  const inv = (t: number) =>
+    t > DELTA ? t ** 3 : 3 * DELTA * DELTA * (t - 4 / 29);
   const xyz = [inv(fx) * D50[0], inv(fy) * D50[1], inv(fz) * D50[2]];
-  const [r, g, b] = apply(XYZ_TO_RGB, apply(D50_TO_D65, xyz)).map((c) => {
-    const s =
+  return apply(XYZ_TO_RGB, apply(D50_TO_D65, xyz));
+}
+
+function lchOf(rgb: number[]): Step {
+  const xyz = apply(D65_TO_D50, apply(RGB_TO_XYZ, rgb));
+  const f = (t: number) =>
+    t > DELTA ** 3 ? Math.cbrt(t) : t / (3 * DELTA * DELTA) + 4 / 29;
+  const [fx, fy, fz] = [
+    f((xyz[0] ?? 0) / D50[0]),
+    f((xyz[1] ?? 0) / D50[1]),
+    f((xyz[2] ?? 0) / D50[2]),
+  ];
+  const a = 500 * ((fx ?? 0) - (fy ?? 0));
+  const b = 200 * ((fy ?? 0) - (fz ?? 0));
+  return {
+    L: 116 * (fy ?? 0) - 16,
+    C: Math.hypot(a, b),
+    H: ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360,
+  };
+}
+
+function channels(s: Step): [number, number, number] {
+  const [r, g, b] = linear(s).map((c) => {
+    const v =
       c <= 0.0031308 ? 12.92 * c : 1.055 * Math.abs(c) ** (1 / 2.4) - 0.055;
-    return Math.min(1, Math.max(0, s));
+    return Math.min(1, Math.max(0, v));
   });
   return [r ?? 0, g ?? 0, b ?? 0];
 }
@@ -438,14 +514,22 @@ describe("the ladder", () => {
     }
   });
 
-  /* A tint is absolute within a polarity, so it cannot be used as a hover on a
-     ground lighter than itself. This is what put a destructive hover darker
-     than the menu it opened on. */
-  it("never hovers onto a fixed rung that its ground can outrun", () => {
-    for (const [, text] of sources(SRC)) {
-      for (const m of text.matchAll(/hover:bg-([a-z0-9-]+)/g)) {
-        expect(m[1], `hover onto a fixed tint in ${m[0]}`).not.toMatch(
-          /-tint$|-wash$/,
+  /* A tint washes its own ground rather than naming a fixed rung, which is what
+     lets it be a hover: held absolute it went darker than the menu it opened
+     on, and no ground could outrun it without inverting. */
+  it("washes every tint over the ground it is drawn on", () => {
+    const tints = [...declarations.keys()].filter((n) =>
+      /-tint(-hover)?$/.test(n),
+    );
+    expect(tints.length).toBeGreaterThan(0);
+    for (const tint of tints) {
+      const seen = GROUNDS.map((g) => step(tint, g).L);
+      expect(new Set(seen.map((l) => l.toFixed(4))).size, tint).toBe(
+        GROUNDS.length,
+      );
+      for (const g of GROUNDS) {
+        expect(channel(tint, g), `${tint} on ${g}`).toBeGreaterThan(
+          channel(GROUND_TOKEN[g], g),
         );
       }
     }
