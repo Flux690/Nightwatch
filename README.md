@@ -644,28 +644,31 @@ apps/
                         report.ts is the only place the investigation record is written
                         evidence-source.ts answers which source a cited call questioned
       alerts/           alert ingest, dedup, and routing a delivery to its group
-      auth/             owner password, runner token minting, fleet ingest credential
+      auth/             owner password, the owner row, session signing
       config/           user settings: the config store, its routes, health and the run-readiness gate
-      db/               SQLite schema and table modules (FKs on, no migrations)
-                        integrations.ts holds every configured connection in one table
-      env/              values fixed at boot from the environment: state-directory paths, NIGHTWARDEN_PUBLIC_URL, the master key
-      integrations/     GitHub / Loki clients and connect/status routes
+      fleet/            one runner in three parts - its row and token, its live socket,
+                        and the install artifact that creates it - plus command routing
+      integrations/     GitHub / Loki clients, connect/status routes, and the one table
+                        every configured connection lives in
                         metrics/ one Prometheus-API client, the per-product presets and
                         what each source cannot answer
       llm/              provider factory (Anthropic / OpenRouter)
-      runners/          runner registry and the one install-artifact endpoint
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
-      session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
-                        transcript.ts projects stored messages into the render-ready items the console draws,
-                        list.ts derives each session's row (its status word, severity)
+      session/          the session and everything that cascades from it: its row, its
+                        alerts and queue, its run state and seat, its transcript rows,
+                        then the routes, the SSE bus, the interrupt coordinator and
+                        approval executor, and the projection the console draws
       verification/     whether an alert's condition has actually cleared: the reconciler's
                         schedule, and sources/ for each way of asking
-      ws/               runner registry/routing, command transport
-      console.ts        serves the console the build embedded beside the bundle, with an SPA fallback
+      index.ts          boot: resolve the key, open the db, register every route
       dispatcher.ts     single entry point for every investigation, and the run pool's promotions
       run-pool.ts       how many runs may be in flight, counted per pool from the session rows
+      console.ts        serves the console the build embedded beside the bundle, with an SPA fallback
+      db.ts             the SQLite handle and the whole schema (FKs on, no migrations)
       logger.ts         the process logger
-      secrets.ts        encrypt/decrypt/mask for every credential stored at rest
+      secrets.ts        resolves the key at boot, then encrypt/decrypt/mask over it
+      paths.ts          the state directory and every path derived from it
+      public-url.ts     the address other machines reach this install on
   docker-runner/        Executor for one Docker host: the hands
     src/
       commands/         command dispatch (registry.ts, which decodes the wire) + host, file tools
