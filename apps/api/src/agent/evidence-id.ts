@@ -1,8 +1,7 @@
 import type { TranscriptRow } from "@nightwarden/shared";
 
-/* The handle the model cites a call by, because the provider's own id appears
-   nowhere it reads as content. Nothing is stored: e3 is the third tool call in
-   the transcript, so rendering it and resolving it count the same way. */
+// The provider's own id appears nowhere the model reads. Nothing is stored:
+// e3 is the third call, so rendering and resolving count the same way.
 const PREFIX = "e";
 
 // Calls, not results: a call that never answered still takes its number, so a

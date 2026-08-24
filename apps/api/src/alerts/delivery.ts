@@ -1,8 +1,7 @@
 import type { AlertGroupContext } from "@nightwarden/shared";
 
-// Everything a delivery says about itself, as opposed to about any alert in it.
-// Travels from the parser to the alert rows, so one more envelope fact is a
-// field here rather than another parameter down the chain.
+// What a delivery says about itself rather than about any alert in it, so one
+// more envelope fact is a field here and not another parameter.
 export interface DeliveryContext {
   droppedAlerts: number;
   groupContext: AlertGroupContext | null;

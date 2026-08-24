@@ -1,6 +1,5 @@
 // Read from the error's own code, never guessed from the URL: loopback, a
 // container name and a private address are all legitimate and alike by shape.
-// Node wraps the failure in a TypeError whose cause carries the code.
 function failureCode(err: unknown): string | null {
   const cause = (err as { cause?: unknown })?.cause ?? err;
   const code = (cause as { code?: unknown })?.code;

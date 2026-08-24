@@ -11,9 +11,8 @@ function optionalEnv(name: string): string | null {
   return value === undefined || value === "" ? null : value;
 }
 
-// A first-boot seed, never a live source: an integration the user has already
-// connected is never overwritten. Each is probed with the exact call the console's
-// Connect button makes, so a URL that cannot work fails at boot, not at 3am.
+// A first-boot seed that never overwrites a connected integration. Probed with
+// the call Connect makes, so a bad URL fails at boot rather than at 3am.
 export async function seedIntegrationsFromEnv(): Promise<void> {
   await seedPrometheus();
   await seedLoki();

@@ -11,9 +11,8 @@ import {
 import { ALERT_SOURCE_KINDS } from "@nightwarden/shared";
 import type { AlertSourceKind } from "@nightwarden/shared";
 
-/* An alert source is the one connection whose credential we verify rather than
-   present, so it is the only kind that fills `token_hash`. Nothing stores a
-   readable copy: the plaintext is shown once at mint and never again. */
+// The one connection whose credential we verify rather than present, so the
+// only kind filling `token_hash`. The plaintext is shown once at mint.
 
 interface AlertSourceRow {
   kind: string;

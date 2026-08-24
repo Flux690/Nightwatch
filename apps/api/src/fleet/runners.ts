@@ -28,9 +28,8 @@ export function hashToken(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-// Returns the plaintext exactly once; the DB stores only the SHA-256 hash.
-// platform has no default on purpose: a runner that does not know what it is at
-// mint time is the bug this whole shape exists to make impossible.
+// The plaintext is returned once and only its hash stored. platform has no
+// default: a runner not knowing what it is at mint time is the bug.
 export function generateRunnerToken(
   platform: Platform,
   label?: string,

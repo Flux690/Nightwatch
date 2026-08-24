@@ -1,6 +1,5 @@
-/* Every tool the build declares, in one list both ends compile against: the
-   console draws by comparing a name, so a rename used to change its behaviour
-   with nothing failing. Host tools sit here - a Docker host is one machine. */
+// One list both ends compile against: the console draws by comparing a name,
+// so a rename used to change its behaviour with nothing failing.
 export const DOCKER_TOOL_NAMES = [
   "ListDockerServices",
   "GetDockerLogs",

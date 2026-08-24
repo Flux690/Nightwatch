@@ -62,9 +62,8 @@ function isPermissionStatus(err: unknown): boolean {
   );
 }
 
-// GitHub already tells us which kind of failure this is; the user's next
-// move differs entirely between reconnecting a token and waiting out a 502, so
-// the code is what decides the class rather than the fact that something threw.
+// The code decides the class, not the fact that something threw: reconnecting
+// a token and waiting out a 502 are different next moves.
 export function classifyGitHubError(err: unknown): ToolOutcome {
   if (!(err instanceof GitHubApiError)) return "system";
   switch (err.code) {

@@ -10,9 +10,8 @@ const SESSION_LABEL = "nightwarden.session";
 const SANDBOX_IMAGE = "nightwarden-sandbox";
 const IMAGE_HASH_LABEL = "nightwarden.sandbox-image";
 
-// Built locally on top of the official node image: the runtime user is non-root
-// on a read-only rootfs, so global tooling must be baked in at build time (root).
-// Cache cleaned in the same layer - a later RUN cannot shrink an earlier one.
+// The runtime user is non-root on a read-only rootfs, so global tooling is
+// baked in at build time. Cache cleaned in the same layer, or it stays.
 const SANDBOX_DOCKERFILE = `FROM node:24
 RUN npm install -g pnpm && npm cache clean --force
 `;

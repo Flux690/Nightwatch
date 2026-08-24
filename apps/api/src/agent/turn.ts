@@ -63,9 +63,8 @@ function nearestOffered(wanted: string, offered: string[]): string | null {
     : null;
 }
 
-/* Three facts, because one sentence covered two situations: a real tool
-   withheld for want of a runner, and a name that never existed. Told the same
-   thing, a model guesses which by working through the namespace. */
+// Three facts, because one sentence covered both a tool withheld for want of
+// a runner and a name that never existed, leaving the model to guess.
 function unavailableMessage(
   wanted: string,
   offered: string[],

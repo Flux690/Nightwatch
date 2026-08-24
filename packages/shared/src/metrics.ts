@@ -61,9 +61,8 @@ export interface MetricsSourceStatus {
   // The product's own name, and what a tool call names in `metricsSource`.
   label: string;
   query: MetricsEndpointStatus;
-  /* Null when no rules endpoint is configured, which the console says out loud.
-     Without one an investigation cannot ask whether the alerting rule that
-     fired still holds, so it can never confirm recovery by that path. */
+  // Null when no rules endpoint is configured: without one an investigation
+  // cannot ask whether the rule that fired still holds.
   rules: MetricsEndpointStatus | null;
   validatedAt: string;
 }

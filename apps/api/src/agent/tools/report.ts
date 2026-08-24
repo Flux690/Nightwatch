@@ -18,9 +18,8 @@ import type { Tool, ToolExecuteResult } from "./types.js";
 // field, which stores a row nobody can read.
 const prose = z.string().trim().min(1);
 
-/* An empty string is how the draft-07 schema says "none", and absence is taken
-   the same way: a model that omits one wrote a thinner report, not a broken one,
-   and failing the call would discard the fields it did fill in. */
+// A model that omits one wrote a thinner report, not a broken one, and failing
+// the call would discard the fields it did fill in.
 const optionalProse = z
   .string()
   .optional()

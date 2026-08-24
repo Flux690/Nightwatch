@@ -222,9 +222,8 @@ interface FiringInstance {
   state: string;
 }
 
-/* Asks the rules API rather than re-evaluating ourselves: this is the same rule
-   on the same interval that fired the alert. `null` means no rule by that name -
-   renamed, removed, or from elsewhere - which is not "it is not firing". */
+// The same rule on the same interval that fired the alert. `null` means no
+// rule by that name, which is not the same as "it is not firing".
 export async function firingInstancesOf(
   endpoint: MetricsEndpoint,
   ruleName: string,

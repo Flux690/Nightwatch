@@ -25,9 +25,8 @@ async function pinnedManager(dir: string): Promise<string | null> {
   }
 }
 
-// A pinned pnpm/yarn goes through corepack, which runs that exact version. Unpinned
-// repos get the image's own binaries keyed off the lockfile, except yarn, which
-// stays on corepack so nothing depends on the base image shipping it.
+// A pinned pnpm or yarn goes through corepack for that exact version. Unpinned
+// repos use the image's binaries, except yarn, which stays on corepack.
 export async function resolveInstallPlan(
   dir: string,
 ): Promise<InstallPlan | null> {

@@ -38,9 +38,8 @@ async function removeWithHome(dir: string): Promise<void> {
   await rm(homeDirFor(dir), { recursive: true, force: true });
 }
 
-// Boot-time recovery of workspaces orphaned by any API death: the checkout is a host
-// bind mount, so unpushed work needs nothing from the dead process. Runs after the
-// reap and before sessions are accepted, failing open per directory so boot proceeds.
+// The checkout is a host bind mount, so unpushed work needs nothing from the
+// dead process. Fails open per directory, so boot proceeds regardless.
 export async function salvageWorkspaces(
   opts: SalvageOptions,
 ): Promise<SalvageResult> {

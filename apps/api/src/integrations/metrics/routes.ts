@@ -78,9 +78,8 @@ export async function registerMetricsRoutes(
     async () => statusPayload(),
   );
 
-  /* Connect: probe both endpoints with the exact calls an investigation makes,
-     before anything is written. A rules URL that answers nothing is refused
-     here rather than discovered at 3am by an investigation that cannot close. */
+  // Probed with the calls an investigation makes, so a rules URL answering
+  // nothing is refused here rather than found by a run that cannot close.
   fastify.post(
     "/integrations/metrics",
     { preHandler: requireSession },

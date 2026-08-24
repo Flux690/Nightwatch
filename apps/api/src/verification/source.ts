@@ -4,9 +4,8 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 // would otherwise read as recovery, the failure this whole mechanism prevents.
 export type ConditionState = "cleared" | "unknown";
 
-/* Who can answer whether an alert's condition is still true. Never the model: a
-   fix that improves the metric the agent happened to pick can leave the
-   condition firing, so the oracle is the condition, re-evaluated by its owner. */
+// Never the model: a fix that improves the metric the agent picked can leave
+// the condition firing, so the oracle is the condition itself.
 export interface VerificationSource {
   // Named for the log, so a user can see which source answered.
   readonly name: string;

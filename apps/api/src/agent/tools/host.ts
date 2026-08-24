@@ -1,8 +1,7 @@
 import type { Tool } from "./types.js";
 
-// Host facts come from a Docker runner, which is 1:1 with its machine. A Kubernetes
-// runner is one pod on one arbitrary node and its /proc is the pod's, so
-// GetK8sNodeStatus is the Kubernetes answer to node health, not these.
+// A Docker runner is 1:1 with its machine. A Kubernetes runner is one pod on
+// an arbitrary node, so GetK8sNodeStatus answers node health there.
 const RUNNER_PROPERTY = {
   type: "string",
   description:

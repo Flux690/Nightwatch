@@ -17,8 +17,7 @@ export async function executeApprovedTool(
   const { sessionId, toolUseId } = pending;
   const { name: toolName, input: toolInput } = call;
   try {
-    // The interrupt row is the write-ahead record: it is claimed before this runs
-    // and deleted only once the result is in hand, so a claim that outlives the
+    // The interrupt row is the write-ahead record, so a claim outliving the
     // process is what says an attempt may already have happened.
     const toolEntry = findTool(toolName);
     if (!toolEntry) {

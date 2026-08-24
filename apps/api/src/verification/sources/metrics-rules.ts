@@ -17,9 +17,8 @@ export const metricsRulesSource: VerificationSource = {
   },
 
   async checkCondition(alert): Promise<ConditionState> {
-    /* Every source with a rules endpoint is asked: which one holds the rule is not
-       knowable from the alert. One saying "cleared" is the answer; the rest
-       answering "no such rule" is not evidence against it. */
+    // Which source holds the rule is not knowable from the alert. One saying
+    // "cleared" is the answer; the rest saying "no such rule" is not.
     let cleared = false;
     for (const source of listMetricsSources()) {
       if (source.rules === null) continue;

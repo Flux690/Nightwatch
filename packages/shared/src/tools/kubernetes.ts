@@ -1,6 +1,5 @@
-// LLM tool payload types for the Kubernetes tools - matched to the tool schemas in
-// apps/api. A Kubernetes workload is not a container: every result identifies the
-// pod it was read from, and every read reports names and shapes, never secret values.
+// A Kubernetes workload is not a container: every result identifies the pod it
+// was read from, and every read reports names and shapes, never values.
 
 import type {
   K8sWorkloadKind,

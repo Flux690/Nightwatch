@@ -182,9 +182,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       return isRunning(sessionId);
     },
 
-    /* The run now covers this alert too, so a repeat of it dedups against this
-       session rather than being injected a second time. Durable first: the
-       sender was already answered 200, so a crash here must not lose it. */
+    // Durable first: the sender was already answered 200, so a crash here must
+    // not lose the alert.
     injectAlert(
       sessionId: string,
       groupKey: string,

@@ -1,8 +1,7 @@
 import { getSession } from "../../session/store.js";
 
-// Evidence windows anchor on when the alert fired, never on when the tool ran -
-// runs pause for approvals, so "now" drifts. The earliest of a batch, since that
-// is when the incident began showing. Chat sessions have no alert: "now".
+// Anchored on when the alert fired, never when the tool ran: runs pause for
+// approvals, so "now" drifts. The earliest of a batch; a chat gets "now".
 export function alertAnchorFor(sessionId: string): Date {
   const fired = (getSession(sessionId)?.alerts ?? [])
     .map((entry) => new Date(entry.alert.firedAt).getTime())

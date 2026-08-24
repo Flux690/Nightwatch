@@ -2,9 +2,8 @@
 // Anything describing a container or workload lives in its own file.
 export type RiskLevel = "low" | "medium" | "high";
 
-// An identity that resolved to nothing actionable. Propagated verbatim, so "not
-// running" is a finding the agent reasons about, not an exception. Each resolver
-// builds its own in its own vocabulary - there is no shared constructor.
+// Propagated verbatim, so "not running" is a finding the agent reasons about
+// rather than an exception. Each resolver builds its own.
 export interface NotFoundResult {
   found: false;
   reason: string;

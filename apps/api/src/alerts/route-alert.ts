@@ -14,9 +14,8 @@ interface Routed {
   skipped: number;
 }
 
-/* One webhook is one group, routed whole: splitting it and regrouping on our own
-   clock would replace the user's group_by with a guess. An alert joins a live or
-   suspended session only when that session already covers its group. */
+// One webhook is one group, routed whole: regrouping on our own clock would
+// replace the user's group_by with a guess.
 export function routeDelivery(
   groupKey: string,
   firing: NormalizedAlert[],

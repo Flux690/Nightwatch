@@ -1,6 +1,5 @@
-/* A provider offers two roles and neither is ours, so a harness turn is sent in
-   the user's and marked in its own text. The marker only means anything because
-   it is stripped from every source we did not write. */
+// A harness turn is sent in the user's role and marked in its own text. The
+// marker means something only because it is stripped from every other source.
 const TAG = "nightwarden";
 
 // Attributes and spacing included: the model reads the tag name, not the syntax.

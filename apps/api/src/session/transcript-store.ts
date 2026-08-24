@@ -126,9 +126,8 @@ export function appendRowsAndInterrupt(
        (session_id, seq, kind, content, canonical, timestamp)
      VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
   );
-  /* Suspending IS the gate, so the state that keeps this session's seat is
-     written with it rather than by whoever notices afterwards. One statement,
-     because the gate and the seat are now columns on the same row. */
+  // Suspending is the gate, so the state keeping this session's seat is
+  // written with it: the two are columns on the same row.
   const suspend = getDb().prepare(
     `UPDATE sessions
         SET run_state = 'suspended', awaiting_tool_use_id = @toolUseId,
