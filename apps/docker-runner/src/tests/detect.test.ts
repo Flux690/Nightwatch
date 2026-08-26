@@ -19,6 +19,7 @@ vi.mock("../docker/client.js", () => ({
 }));
 
 import { buildDockerManifest } from "../manifest/detect.js";
+import { setServerName } from "../identity.js";
 
 function makeContainer(
   id: string,
@@ -43,8 +44,13 @@ function makeContainer(
   } as Dockerode.ContainerInfo;
 }
 
+const SERVER = "web-01";
+
 describe("buildDockerManifest", () => {
   beforeEach(() => {
+    // The API pushes this before the manifest is ever asked for, because every
+    // key below is prefixed with it.
+    setServerName(SERVER);
     mockReadFile.mockRejectedValue(new Error("ENOENT"));
     mockListContainers.mockResolvedValue([]);
   });
@@ -72,7 +78,7 @@ describe("buildDockerManifest", () => {
     expect(manifest.services).toEqual([
       {
         identity: { project: "myapp", service: "api" },
-        target: "docker/myapp/api",
+        target: `${SERVER}/myapp/api`,
         status: "running",
       },
     ]);

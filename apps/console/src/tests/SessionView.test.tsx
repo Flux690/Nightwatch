@@ -944,7 +944,7 @@ describe("SessionView", () => {
               kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
-              input: { target: "docker/web-01/web-01", risk: "high" },
+              input: { target: "prod-1/web-01/web-01", risk: "high" },
               state: { phase: "awaiting_human", gate: "approval" },
             },
           },
@@ -1019,7 +1019,7 @@ describe("SessionView", () => {
               kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
-              input: { target: "docker/web-01/web-01", risk: "high" },
+              input: { target: "prod-1/web-01/web-01", risk: "high" },
               state: {
                 phase: "resolved",
                 decision: "approved",
@@ -1051,7 +1051,7 @@ describe("SessionView", () => {
           kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          input: { target: "docker/web-01/web-01", risk: "high" },
+          input: { target: "prod-1/web-01/web-01", risk: "high" },
           state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);
@@ -1101,7 +1101,7 @@ describe("SessionView", () => {
           kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          input: { target: "docker/web-01/web-01", risk: "high" },
+          input: { target: "prod-1/web-01/web-01", risk: "high" },
           state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);

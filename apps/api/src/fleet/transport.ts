@@ -7,7 +7,6 @@ import type {
 } from "@nightwarden/shared";
 import { logger } from "../logger.js";
 import { resolveByRunner, resolveByService } from "./router.js";
-import { addressName } from "../fleet/connections.js";
 import type { RunnerConnection } from "../fleet/connections.js";
 
 // Request/reply correlation for runner commands, owned entirely by this
@@ -97,7 +96,7 @@ function dispatch(
   });
 }
 
-// A service-routed command finds its one owner and returns that runner's result
+// A service-routed command finds its one owner and returns that server's result
 // unwrapped: the model asked about one service and gets one answer.
 export function sendCommand(
   commandName: string,
@@ -107,7 +106,7 @@ export function sendCommand(
   // Resolved before the Promise: a routing error is a caller mistake and should
   // throw rather than settle a pending command.
   const { conn, identity } = resolveByService(commandInput);
-  const { target: _target, runner: _runner, container, ...rest } = commandInput;
+  const { target: _target, server: _server, container, ...rest } = commandInput;
   const service =
     container !== undefined ? { ...identity, container } : identity;
   return dispatch(conn, commandName, { ...rest, service }, timeoutMs);
@@ -127,30 +126,30 @@ export async function sendFleetCommand(
   succeeded: number;
   failed: number;
 }> {
-  const conns = resolveByRunner(commandInput, platform);
-  const { runner: _runner, ...payloadInput } = commandInput;
+  const { conns, omitted } = resolveByRunner(commandInput, platform);
+  const { server: _server, ...payloadInput } = commandInput;
 
   const settled = await Promise.allSettled(
     conns.map((conn) => dispatch(conn, commandName, payloadInput, timeoutMs)),
   );
 
   let succeeded = 0;
-  const byRunner = settled.map((toolOutcome, i) => {
-    const runner = addressName(conns[i]!) ?? conns[i]!.runnerId;
+  const byServer = settled.map((toolOutcome, i) => {
+    const server = conns[i]!.serverName;
     if (toolOutcome.status === "fulfilled") {
       succeeded++;
-      return { runner, result: toolOutcome.value };
+      return { server, result: toolOutcome.value };
     }
-    // One runner's failure is that entry's result, not the whole call's: the
+    // One server's failure is that entry's result, not the whole call's: the
     // others still carry evidence.
     const err: unknown = toolOutcome.reason;
     const message = err instanceof Error ? err.message : String(err);
-    return { runner, result: `Error: ${message}` };
+    return { server, result: `Error: ${message}` };
   });
 
   return {
-    envelope: { byRunner },
+    envelope: { byServer, ...(omitted > 0 && { serversOmitted: omitted }) },
     succeeded,
-    failed: byRunner.length - succeeded,
+    failed: byServer.length - succeeded,
   };
 }

@@ -74,29 +74,34 @@ export interface HarnessOptions {
 }
 
 function manifestFor(
-  spec: Required<Pick<RunnerSpec, "platform">> & RunnerSpec,
+  spec: Required<Pick<RunnerSpec, "platform" | "name">> & RunnerSpec,
 ) {
   const services = spec.services ?? [];
+  const server = spec.name;
   if (spec.platform === "kubernetes") {
     return kubernetesManifest(
-      spec.name ?? "test-cluster",
+      server,
       services.map((service) => {
         const [namespace, workload] = service.split("/");
-        return kubernetesWorkload(namespace ?? "default", workload ?? service);
+        return kubernetesWorkload(
+          server,
+          namespace ?? "default",
+          workload ?? service,
+        );
       }),
     );
   }
   /* "project/service" where a Compose pair matters, a bare name where it does
      not - which is the anonymous-container convention dockerService builds. */
   return manifest(
-    spec.name ?? "test-host",
+    server,
     services.map((service) => {
-      if (!service.includes("/")) return dockerService(service);
+      if (!service.includes("/")) return dockerService(server, service);
       const [project, name] = service.split("/") as [string, string];
       const identity = { project, service: name };
       return {
         identity,
-        target: dockerServiceKey(identity),
+        target: dockerServiceKey(server, identity),
         status: "running",
       };
     }),
@@ -111,14 +116,16 @@ export async function harness(options: HarnessOptions = {}): Promise<Harness> {
     (spec, index) => {
       const platform = spec.platform ?? "docker";
       const name = spec.name ?? `test-runner-${index + 1}`;
-      const id = generateRunnerToken(platform, name, name).id;
+      const id = generateRunnerToken(platform, name).id;
       const commands: Command[] = [];
       const connection = registerRunner({
         runnerId: id,
         platform,
         serverName: name,
         send: (raw: string) => {
-          const { payload } = JSON.parse(raw) as RunnerCommandMessage;
+          const msg = JSON.parse(raw) as RunnerCommandMessage;
+          if (msg.type !== "command") return;
+          const { payload } = msg;
           const command = {
             commandName: payload.commandName,
             commandInput: payload.commandInput,

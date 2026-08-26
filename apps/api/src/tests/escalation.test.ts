@@ -132,7 +132,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
             id: toolUseId,
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "prod-1/web-01/web-01",
             },
           },
         ],

@@ -45,7 +45,7 @@ const RESTART_TURN = (): ScriptedTurn => ({
       id: `tu-${randomUUID()}`,
       name: "RestartDockerService",
       input: {
-        target: "docker/web-01/web-01",
+        target: "prod-1/web-01/web-01",
         reason: "r",
         risk: "low",
         estimatedDowntimeSeconds: 1,
@@ -76,8 +76,10 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const conn = registerRunner({
       runnerId: token,
       platform: "docker",
+      serverName: label,
       send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
+        if (msg.type !== "command") return;
         resolveCommand({
           correlationId: msg.payload.correlationId,
           success: true,

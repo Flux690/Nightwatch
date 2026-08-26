@@ -79,7 +79,7 @@ describe("durable approval interrupts", () => {
             id: "tu-sus-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -146,7 +146,7 @@ describe("durable approval interrupts", () => {
             id: "tu-apr-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -227,7 +227,7 @@ describe("durable approval interrupts", () => {
     expect(decisions[0]).toMatchObject({
       toolUseId: "tu-apr-1",
       toolName: "RestartDockerService",
-      target: "docker/web-01/web-01",
+      target: "approval-host/web-01/web-01",
       decision: "approved",
     });
 
@@ -243,7 +243,7 @@ describe("durable approval interrupts", () => {
             id: "tu-rej-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -312,7 +312,7 @@ describe("durable approval interrupts", () => {
             id: "tu-ctx-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -380,7 +380,7 @@ describe("durable approval interrupts", () => {
             id: "tu-409-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -450,7 +450,7 @@ describe("durable approval interrupts", () => {
             id: "tu-h4-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "concurrent",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -526,7 +526,7 @@ describe("durable approval interrupts", () => {
             id: "tu-busy-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -592,7 +592,7 @@ describe("durable approval interrupts", () => {
             id: "tu-val-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "validation",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -658,7 +658,7 @@ describe("durable approval interrupts", () => {
             id: "tu-rr-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -732,7 +732,7 @@ describe("durable approval interrupts", () => {
             id: "tu-mix-gate",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -810,7 +810,7 @@ describe("durable approval interrupts", () => {
             id: `tu-crit-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "critical",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -874,7 +874,7 @@ describe("durable approval interrupts", () => {
             id: "tu-notmo-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "approval-host/web-01/web-01",
               reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,

@@ -476,7 +476,7 @@ describe("clarification interrupts", () => {
             id: restart1Id,
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "clar-host/web-01/web-01",
               reason: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -491,7 +491,7 @@ describe("clarification interrupts", () => {
             id: restart2Id,
             name: "RestartDockerService",
             input: {
-              target: "docker/web-01/web-01",
+              target: "clar-host/web-01/web-01",
               reason: "confirmed",
               risk: "low",
               estimatedDowntimeSeconds: 2,

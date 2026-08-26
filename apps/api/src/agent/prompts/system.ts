@@ -23,13 +23,13 @@ Some of what reaches you is written by NightWarden rather than by a person. It a
 // summary that is not there is how a metrics source became a target.
 const ADDRESSING_PROTOCOL = `
 
-Tools come in two kinds, and they address their target differently.
+A server is one Docker host or one Kubernetes cluster, named in the <fleet-summary> block. Everything you can reach lives on one of them, and there are two ways to say which.
 
-Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the <fleet-summary> block or in a list tool's result, for example docker/web/api. Copy the whole string; never build one yourself out of parts, and never pass anything that is not a key from one of those two places.
+Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the <fleet-summary> block or in a list tool's result, for example web-01/shop/api. A key has three parts - the server it is on, the scope it sits in, and its name - so it already says which machine it means and takes nothing else to address it. Copy the whole string; never build one yourself out of parts, and never pass anything that is not a key from one of those two places.
 
-Fleet-level tools act on a whole machine or cluster rather than one service, and take an optional "runner": the name of one Docker host or Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it entirely to read every host or cluster of that platform at once, which returns one labelled result for each. There is no value meaning "all"; omitting the parameter is how you say that.
+Server-level tools act on a whole server rather than one service, so there is no target key to copy. They take a "server" instead: the name of one Docker host or Kubernetes cluster, written exactly as the <fleet-summary> block lists it, which is the same name a target key starts with. Omit it to read every server of that platform at once, which returns one labelled result for each. There is no value meaning "all"; omitting the parameter is how you say that. ReadHostFile is the exception that requires it, because reading a file only makes sense on one named machine.
 
-Service-level tools also accept "runner", but only to resolve an ambiguity: when two hosts advertise the same target key, the <fleet-summary> block marks that target as shared, and you must then say which one you mean. Leave it out in every other case. A runner name is never part of a target key.`;
+Never pass "server" to a service-level tool and never pass "target" to a server-level one. Each tool takes exactly one of the two, and its description says which.`;
 
 export function toolProtocol(fleetTools: boolean): string {
   return fleetTools ? GATE_PROTOCOL + ADDRESSING_PROTOCOL : GATE_PROTOCOL;

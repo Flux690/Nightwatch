@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  DockerServiceIdentity,
   Platform,
   RunnerManifest,
   RunnerCommandMessage,
@@ -18,35 +17,38 @@ import {
   sendCommand,
   sendFleetCommand,
 } from "../fleet/transport.js";
-import { isSharedTarget } from "../fleet/router.js";
-import { dockerService, kubernetesWorkload } from "./manifest-helper.js";
+import { dockerService, kubernetesWorkload, svc } from "./manifest-helper.js";
 
-function svc(name: string): DockerServiceIdentity {
-  return { project: name, service: name };
+// The flat key dockerService(server, name) advertises: <server>/<project>/<service>.
+function key(server: string, name: string): string {
+  return `${server}/${name}/${name}`;
 }
 
-// The flat target key svc(name) advertises: docker/<project>/<service>.
-function key(name: string): string {
-  return `docker/${name}/${name}`;
+// Deliberately unlike the server name: only the assigned name is an address, and
+// a test that used the hostname would pass for the wrong reason.
+function hostnameOf(server: string): string {
+  return `${server}.internal`;
 }
 
 function makeManifest(
-  hostname: string,
+  server: string,
   containers: string[],
   platform: Platform = "docker",
 ): RunnerManifest {
   return platform === "docker"
     ? {
         platform,
-        hostname,
+        hostname: hostnameOf(server),
         runnerVersion: "3.0.0",
-        services: containers.map((name) => dockerService(name)),
+        services: containers.map((name) => dockerService(server, name)),
       }
     : {
         platform,
-        hostname,
+        hostname: hostnameOf(server),
         runnerVersion: "3.0.0",
-        services: containers.map((name) => kubernetesWorkload("default", name)),
+        services: containers.map((name) =>
+          kubernetesWorkload(server, "default", name),
+        ),
       };
 }
 
@@ -55,6 +57,7 @@ function makeSend(
 ) {
   return (raw: string): void => {
     const msg = JSON.parse(raw) as RunnerCommandMessage;
+    if (msg.type !== "command") return;
     const { commandName, commandInput, correlationId } = msg.payload;
     log.push({ commandName, commandInput });
     resolveCommand({ correlationId, success: true, result: { ok: true } });
@@ -65,10 +68,9 @@ describe("router", () => {
   const conns: RunnerConnection[] = [];
 
   function connect(
-    hostname: string,
+    server: string,
     containers: string[],
     opts: {
-      serverName?: string;
       platform?: Platform;
       // Accepts the command and never answers, so the caller times out.
       silent?: boolean;
@@ -91,12 +93,12 @@ describe("router", () => {
         platform: opts.platform ?? "docker",
         send: opts.silent === true ? () => {} : makeSend(commands),
         close: () => {},
-        serverName: opts.serverName ?? null,
+        serverName: server,
       }),
     );
     setRunnerManifest(
       runnerId,
-      makeManifest(hostname, containers, opts.platform),
+      makeManifest(server, containers, opts.platform),
     );
     return { runnerId, commands };
   }
@@ -106,40 +108,39 @@ describe("router", () => {
     vi.restoreAllMocks();
   });
 
-  it("getFleetView returns every connected runner with its advertised service identities", () => {
+  it("getFleetView returns every connected server with its advertised service identities", () => {
     connect("web-01", ["nginx", "api"]);
     connect("db-02", ["postgres"]);
 
     const fleet = getFleetView();
-    const byHostname = new Map(fleet.map((r) => [r.hostname, r]));
+    const byServer = new Map(fleet.map((r) => [r.serverName, r]));
 
-    expect(byHostname.get("web-01")?.services).toEqual([
-      dockerService("nginx"),
-      dockerService("api"),
+    expect(byServer.get("web-01")?.services).toEqual([
+      dockerService("web-01", "nginx"),
+      dockerService("web-01", "api"),
     ]);
-    expect(byHostname.get("db-02")?.services).toEqual([
-      dockerService("postgres"),
+    expect(byServer.get("db-02")?.services).toEqual([
+      dockerService("db-02", "postgres"),
     ]);
-    expect(byHostname.get("web-01")?.online).toBe(true);
+    expect(byServer.get("web-01")?.online).toBe(true);
   });
 
   describe("service routes", () => {
-    it("routes a command to the one runner that advertises the target", async () => {
+    it("routes a command to the one server that advertises the target", async () => {
       const a = connect("web-01", ["nginx"]);
       const b = connect("db-02", ["postgres"]);
 
-      await sendCommand("GetDockerLogs", { target: key("postgres") });
+      await sendCommand("GetDockerLogs", { target: key("db-02", "postgres") });
 
       expect(b.commands).toHaveLength(1);
       expect(a.commands).toHaveLength(0);
     });
 
-    it("strips both addressing parameters, leaving the runner the structured identity", async () => {
-      const a = connect("web-01", ["nginx"], { serverName: "prod-1" });
+    it("strips the target, leaving the server the structured identity", async () => {
+      const a = connect("web-01", ["nginx"]);
 
       await sendCommand("GetDockerLogs", {
-        target: key("nginx"),
-        runner: "prod-1",
+        target: key("web-01", "nginx"),
         tailLines: 50,
       });
 
@@ -149,12 +150,12 @@ describe("router", () => {
       });
     });
 
-    it("rejects an unknown target even when only one runner is connected", () => {
+    it("rejects an unknown target even when only one server is connected", () => {
       connect("web-01", ["nginx"]);
 
       expect(() =>
-        sendCommand("GetDockerLogs", { target: key("ghost") }),
-      ).toThrow(/No runner has target/);
+        sendCommand("GetDockerLogs", { target: key("web-01", "ghost") }),
+      ).toThrow(/No server advertises target/);
     });
 
     it("rejects a service-routed command that carries no target", () => {
@@ -165,57 +166,35 @@ describe("router", () => {
       );
     });
 
-    describe("a target two runners advertise", () => {
-      it("names both and asks for a runner, rather than silently picking one", () => {
-        connect("web-01", ["nginx"], { serverName: "prod-1" });
-        connect("web-02", ["nginx"], { serverName: "prod-2" });
+    // The whole point of the server segment: one name, one machine, nothing to
+    // disambiguate and no second argument to supply.
+    describe("the same service running on two servers", () => {
+      it("is two distinct keys, each routing to its own server", async () => {
+        const a = connect("web-01", ["nginx"]);
+        const b = connect("web-02", ["nginx"]);
 
-        expect(() =>
-          sendCommand("GetDockerLogs", { target: key("nginx") }),
-        ).toThrow(/advertised by more than one runner \(prod-1, prod-2\)/);
-      });
+        await sendCommand("GetDockerLogs", { target: key("web-01", "nginx") });
+        expect(a.commands).toHaveLength(1);
+        expect(b.commands).toHaveLength(0);
 
-      it("routes to the runner the model named", async () => {
-        const a = connect("web-01", ["nginx"], { serverName: "prod-1" });
-        const b = connect("web-02", ["nginx"], { serverName: "prod-2" });
-
-        await sendCommand("GetDockerLogs", {
-          target: key("nginx"),
-          runner: "prod-2",
-        });
-
+        await sendCommand("GetDockerStats", { target: key("web-02", "nginx") });
         expect(b.commands).toHaveLength(1);
-        expect(a.commands).toHaveLength(0);
+        expect(a.commands).toHaveLength(1);
       });
 
-      it("fails loud when the named runner does not advertise the target", () => {
-        connect("web-01", ["nginx"], { serverName: "prod-1" });
-        connect("web-02", ["nginx"], { serverName: "prod-2" });
+      it("names every known target when the server segment matches nothing", () => {
+        connect("web-01", ["nginx"]);
+        connect("web-02", ["nginx"]);
 
         expect(() =>
-          sendCommand("GetDockerLogs", {
-            target: key("nginx"),
-            runner: "ghost-99",
-          }),
-        ).toThrow(/No runner named 'ghost-99'/);
+          sendCommand("GetDockerLogs", { target: key("web-99", "nginx") }),
+        ).toThrow(/web-01\/nginx\/nginx.*web-02\/nginx\/nginx/);
       });
-    });
-
-    it("ignores a stale runner name when the target has exactly one owner", async () => {
-      // One possible destination is not worth failing a call over.
-      const a = connect("web-01", ["nginx"], { serverName: "prod-1" });
-
-      await sendCommand("GetDockerLogs", {
-        target: key("nginx"),
-        runner: "long-gone",
-      });
-
-      expect(a.commands).toHaveLength(1);
     });
   });
 
-  describe("runner routes", () => {
-    it("fans out to every runner of the platform when no runner is named", async () => {
+  describe("server routes", () => {
+    it("fans out to every server of the platform when none is named", async () => {
       const a = connect("web-01", ["nginx"]);
       const b = connect("db-02", ["postgres"]);
 
@@ -223,27 +202,28 @@ describe("router", () => {
 
       expect(a.commands).toHaveLength(1);
       expect(b.commands).toHaveLength(1);
-      expect(envelope.byRunner.map((e) => e.runner).sort()).toEqual([
+      expect(envelope.byServer.map((e) => e.server).sort()).toEqual([
         "db-02",
         "web-01",
       ]);
     });
 
-    it("envelopes a single runner's result too, so there is one shape to read", async () => {
-      connect("web-01", ["nginx"], { serverName: "prod-1" });
+    it("envelopes a single server's result too, so there is one shape to read", async () => {
+      connect("web-01", ["nginx"]);
 
       const { envelope } = await sendFleetCommand(
         "GetHostDisk",
-        { runner: "prod-1" },
+        { server: "web-01" },
         "docker",
       );
 
-      expect(envelope.byRunner).toEqual([
-        { runner: "prod-1", result: { ok: true } },
+      expect(envelope.byServer).toEqual([
+        { server: "web-01", result: { ok: true } },
       ]);
+      expect(envelope.serversOmitted).toBeUndefined();
     });
 
-    it("reaches only runners of that platform", async () => {
+    it("reaches only servers of that platform", async () => {
       const dockerHost = connect("web-01", ["nginx"]);
       const cluster = connect("k8s-01", ["api"], { platform: "kubernetes" });
 
@@ -253,58 +233,65 @@ describe("router", () => {
       expect(cluster.commands).toHaveLength(0);
     });
 
-    it("says which platform is missing, rather than claiming no runner is connected", async () => {
+    it("says which platform is missing, rather than claiming no server is connected", async () => {
       connect("k8s-01", ["api"], { platform: "kubernetes" });
 
       await expect(
         sendFleetCommand("GetHostDisk", {}, "docker"),
-      ).rejects.toThrow(/No connected runner runs docker/);
+      ).rejects.toThrow(/No connected server runs docker/);
     });
 
-    it("caps a fan-out at eight runners", async () => {
+    // A reading that covers eight of ten servers is not a reading of the fleet,
+    // and the model cannot tell the difference unless the envelope says so.
+    it("caps a fan-out at eight servers and states how many it left out", async () => {
       for (let i = 0; i < 10; i++) connect(`host-${i}`, ["nginx"]);
 
       const { envelope } = await sendFleetCommand("GetHostDisk", {}, "docker");
 
-      expect(envelope.byRunner).toHaveLength(8);
+      expect(envelope.byServer).toHaveLength(8);
+      expect(envelope.serversOmitted).toBe(2);
     });
 
-    it("strips the runner parameter before dispatch", async () => {
-      const a = connect("web-01", ["nginx"], { serverName: "prod-1" });
+    it("strips the server parameter before dispatch", async () => {
+      const a = connect("web-01", ["nginx"]);
 
       await sendFleetCommand(
         "GetHostDmesg",
-        { runner: "prod-1", tailLines: 20 },
+        { server: "web-01", tailLines: 20 },
         "docker",
       );
 
       expect(a.commands[0]?.commandInput).toEqual({ tailLines: 20 });
     });
 
-    it("fails loud on an unknown runner name", async () => {
+    it("fails loud on an unknown server name", async () => {
       connect("web-01", ["nginx"]);
 
       await expect(
-        sendFleetCommand("GetHostDisk", { runner: "ghost-99" }, "docker"),
-      ).rejects.toThrow(/No docker runner named 'ghost-99'/);
+        sendFleetCommand("GetHostDisk", { server: "ghost-99" }, "docker"),
+      ).rejects.toThrow(/No docker server named 'ghost-99'/);
     });
 
-    it("the user-assigned name is the address, beating the OS hostname", async () => {
+    it("the assigned name is the address; the OS hostname is not one", async () => {
       // Two boxes could both self-report "ubuntu"; only assigned names are unique.
-      const a = connect("ubuntu", ["nginx"], { serverName: "prod-1" });
+      const a = connect("prod-1", ["nginx"]);
 
-      await sendFleetCommand("GetHostDisk", { runner: "prod-1" }, "docker");
+      await sendFleetCommand("GetHostDisk", { server: "prod-1" }, "docker");
       expect(a.commands).toHaveLength(1);
 
       await expect(
-        sendFleetCommand("GetHostDisk", { runner: "ubuntu" }, "docker"),
-      ).rejects.toThrow(/No docker runner named 'ubuntu'/);
+        sendFleetCommand(
+          "GetHostDisk",
+          { server: hostnameOf("prod-1") },
+          "docker",
+        ),
+      ).rejects.toThrow(/No docker server named/);
     });
 
-    describe("a runner failing inside a fan-out", () => {
+    describe("a server failing inside a fan-out", () => {
       it("becomes that entry's result, and the others still return", async () => {
-        const ok = connect("web-01", ["nginx"], { serverName: "prod-1" });
-        connect("web-02", ["nginx"], { serverName: "prod-2", silent: true });
+        const ok = connect("prod-1", ["nginx"]);
+        connect("prod-2", ["nginx"], { silent: true });
 
         const {
           envelope,
@@ -315,13 +302,13 @@ describe("router", () => {
         expect(ok.commands).toHaveLength(1);
         expect(succeeded).toBe(1);
         expect(failedCount).toBe(1);
-        const failed = envelope.byRunner.find((e) => e.runner === "prod-2");
+        const failed = envelope.byServer.find((e) => e.server === "prod-2");
         expect(failed?.result).toMatch(/timed out/);
       });
 
-      it("reports the call as failed only when no runner succeeded", async () => {
-        connect("web-01", ["nginx"], { serverName: "prod-1", silent: true });
-        connect("web-02", ["nginx"], { serverName: "prod-2", silent: true });
+      it("reports the call as failed only when no server succeeded", async () => {
+        connect("prod-1", ["nginx"], { silent: true });
+        connect("prod-2", ["nginx"], { silent: true });
 
         const { succeeded, envelope } = await sendFleetCommand(
           "GetHostDisk",
@@ -331,23 +318,8 @@ describe("router", () => {
         );
 
         expect(succeeded).toBe(0);
-        expect(envelope.byRunner).toHaveLength(2);
+        expect(envelope.byServer).toHaveLength(2);
       });
-    });
-  });
-
-  describe("isSharedTarget", () => {
-    it("is true only for a key more than one runner advertises", () => {
-      connect("web-01", ["nginx", "api"]);
-      connect("web-02", ["nginx"]);
-
-      expect(isSharedTarget(key("nginx"))).toBe(true);
-      expect(isSharedTarget(key("api"))).toBe(false);
-      expect(isSharedTarget(key("ghost"))).toBe(false);
-    });
-
-    it("is false when no runner is connected at all", () => {
-      expect(isSharedTarget(key("nginx"))).toBe(false);
     });
   });
 });

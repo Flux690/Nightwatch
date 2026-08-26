@@ -67,19 +67,19 @@ function worstLine(lines: string[]): { line: string; severe: boolean } | null {
   return last === undefined ? null : { line: last, severe: false };
 }
 
-// Always enveloped, even for one runner, so a formatter reads the entries
+// Always enveloped, even for one server, so a formatter reads the entries
 // rather than the shape underneath. A failed entry carries a string, skipped.
-function byRunner(
+function byServer(
   record: Record<string, unknown>,
-): Array<{ runner: string; result: Record<string, unknown> }> | null {
-  const entries = arr(record, "byRunner");
+): Array<{ server: string; result: Record<string, unknown> }> | null {
+  const entries = arr(record, "byServer");
   if (!entries) return null;
   return entries.flatMap((entry) => {
     if (typeof entry !== "object" || entry === null) return [];
-    const { runner, result } = entry as Record<string, unknown>;
-    if (typeof runner !== "string") return [];
+    const { server, result } = entry as Record<string, unknown>;
+    if (typeof server !== "string") return [];
     if (typeof result !== "object" || result === null) return [];
-    return [{ runner, result: result as Record<string, unknown> }];
+    return [{ server, result: result as Record<string, unknown> }];
   });
 }
 
@@ -130,21 +130,21 @@ const FORMATTERS: Record<string, Formatter> = {
   },
 
   GetHostMemory: (record) => {
-    // A fan-out answers for several runners at once. The worst reading is the
-    // finding, and it is named, because "which host" is half the answer.
-    const readings = byRunner(record);
+    // A fan-out answers for several servers at once. The worst reading is the
+    // finding, and it is named, because "which server" is half the answer.
+    const readings = byServer(record);
     if (readings === null) return null;
-    // Counted from the envelope, not from the readings: a runner that errored was
+    // Counted from the envelope, not from the readings: a server that errored was
     // still asked, so its neighbour's answer still needs attributing.
-    const fannedOut = (arr(record, "byRunner") ?? []).length > 1;
+    const fannedOut = (arr(record, "byServer") ?? []).length > 1;
 
-    const scored = readings.flatMap(({ runner, result }) => {
+    const scored = readings.flatMap(({ server, result }) => {
       const total = num(result, "totalBytes");
       const available = num(result, "availableBytes");
       if (total === null || available === null) return [];
       return [
         {
-          runner,
+          server,
           text: `${formatBytes(available)} free of ${formatBytes(total)}`,
           oom: result["oomKillerFiredRecently"] === true,
           freeRatio: total > 0 ? available / total : 1,
@@ -164,7 +164,7 @@ const FORMATTERS: Record<string, Formatter> = {
     );
     if (worst === null) return null;
 
-    const named = fannedOut ? `${worst.runner}: ` : "";
+    const named = fannedOut ? `${worst.server}: ` : "";
     return worst.oom
       ? { text: `${named}OOM killer fired · ${worst.text}`, tone: "bad" }
       : { text: `${named}${worst.text}`, tone: "normal" };
@@ -200,13 +200,13 @@ const FORMATTERS: Record<string, Formatter> = {
 // Their numbers live in arrays, so nothing above reaches them and without a
 // line here they render as a bare tool name.
 FORMATTERS["GetHostDisk"] = (record) => {
-  const mounts = (byRunner(record) ?? [{ runner: "", result: record }]).flatMap(
-    ({ runner, result }) =>
+  const mounts = (byServer(record) ?? [{ server: "", result: record }]).flatMap(
+    ({ server, result }) =>
       (arr(result, "filesystems") ?? []).flatMap((entry) => {
         const fs = entry as Record<string, unknown>;
         const used = num(fs, "usedPercent");
         const mount = str(fs, "mount");
-        return used === null || mount === null ? [] : [{ runner, used, mount }];
+        return used === null || mount === null ? [] : [{ server, used, mount }];
       }),
   );
   const worst = mounts.reduce<(typeof mounts)[number] | null>(
@@ -214,7 +214,7 @@ FORMATTERS["GetHostDisk"] = (record) => {
     null,
   );
   if (worst === null) return null;
-  const named = worst.runner ? `${worst.runner}: ` : "";
+  const named = worst.server ? `${worst.server}: ` : "";
   return {
     text: `${named}${worst.mount} ${formatPercent(worst.used)} full`,
     tone: worst.used >= 90 ? "bad" : "normal",

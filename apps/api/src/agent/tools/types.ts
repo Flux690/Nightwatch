@@ -66,8 +66,8 @@ interface ToolCommon {
 }
 
 // Where a tool executes is declared, never inferred. A service-routed command finds its
-// owner from the target key; a runner-routed one names its platform, so a fan-out
-// reaches only runners of that platform.
+// owner from the target key; a server-routed one names its platform, so a fan-out
+// reaches only servers of that platform.
 export type Tool = ToolCommon &
   (
     | {
@@ -78,5 +78,5 @@ export type Tool = ToolCommon &
         ): Promise<ToolExecuteResult>;
       }
     | { on: "runner"; routeBy: "service" }
-    | { on: "runner"; routeBy: "runner"; platform: Platform }
+    | { on: "runner"; routeBy: "server"; platform: Platform }
   );

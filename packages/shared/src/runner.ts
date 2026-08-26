@@ -55,7 +55,7 @@ export interface RunnerRecord {
   id: string;
   token: string;
   platform: Platform;
-  serverName: string | null;
+  serverName: string;
   hostname: string | null;
   createdAt: string;
   online: boolean;
@@ -67,9 +67,9 @@ export interface RunnerRecord {
 // lets a caller partition the fleet before matching.
 interface FleetRunnerBase {
   runnerId: string;
-  // The model-visible address: user-assigned server name, or the
-  // self-reported hostname for tokens minted without one.
-  serverName: string | null;
+  // The model-visible address, assigned at mint and the first segment of every
+  // target key this runner advertises.
+  serverName: string;
   hostname: string;
   online: boolean;
   lastSeen: number;

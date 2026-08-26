@@ -66,7 +66,7 @@ const RESPONSE: SessionReportResponse = {
       toolUseId: "tu-stats",
       toolName: "GetDockerStats",
       kind: "metric",
-      input: { target: "docker/encodr/payments-worker" },
+      input: { target: "prod-1/encodr/payments-worker" },
       result: JSON.stringify({
         cpuPercent: 3.1,
         memoryUsedBytes: 511 * 1024 * 1024,

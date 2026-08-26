@@ -30,28 +30,40 @@ function k8sRunner(
   return { ...base(name), platform: "kubernetes", services };
 }
 
-function docker(project: string, service: string): DockerServiceEntry {
-  const identity = { project, service };
-  return {
-    identity,
-    target: dockerServiceKey(identity),
-    status: "running",
+// Curried on the server, because a fixture's entries have to carry the same
+// server their runner is named for or the key would address a different machine.
+function docker(
+  server: string,
+): (project: string, service: string) => DockerServiceEntry {
+  return (project, service) => {
+    const identity = { project, service };
+    return {
+      identity,
+      target: dockerServiceKey(server, identity),
+      status: "running",
+    };
   };
 }
 
 function k8s(
+  server: string,
+): (
   namespace: string,
   workload: string,
   kind: K8sWorkloadKind,
-): KubernetesWorkloadEntry {
-  return kubernetesWorkload(namespace, workload, kind);
+) => KubernetesWorkloadEntry {
+  return (namespace, workload, kind) =>
+    kubernetesWorkload(server, namespace, workload, kind);
 }
 
 describe("resolveAlertTarget", () => {
   describe("Docker", () => {
     const FLEET = [
-      runner("prod-1", [docker("encodr", "cache"), docker("encodr", "api")]),
-      runner("prod-2", [docker("encodr", "cache")]),
+      runner("prod-1", [
+        docker("prod-1")("encodr", "cache"),
+        docker("prod-1")("encodr", "api"),
+      ]),
+      runner("prod-2", [docker("prod-2")("encodr", "cache")]),
     ];
 
     it("resolves an alert carrying only Compose labels, with nothing a user configured", () => {
@@ -66,8 +78,7 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toEqual({
         kind: "resolved",
-        key: "docker/encodr/api",
-        identity: { project: "encodr", service: "api" },
+        keys: ["prod-1/encodr/api"],
       });
     });
 
@@ -83,11 +94,13 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toMatchObject({
         kind: "resolved",
-        key: "docker/encodr/api",
+        keys: ["prod-1/encodr/api"],
       });
     });
 
-    it("names both runners when the same service runs on each, rather than picking one", () => {
+    // The server segment makes each key a real address, so a service running on
+    // two machines resolves to two callable keys.
+    it("gives one address per server when the same service runs on each", () => {
       const res = resolveAlertTarget(
         {
           "com.docker.compose.project": "encodr",
@@ -96,22 +109,21 @@ describe("resolveAlertTarget", () => {
         FLEET,
       );
 
-      expect(res).toMatchObject({
-        kind: "ambiguous",
-        key: "docker/encodr/cache",
-      });
-      expect((res as { runners: string[] }).runners.sort()).toEqual([
-        "prod-1",
-        "prod-2",
+      expect(res.kind).toBe("resolved");
+      expect((res as { keys: string[] }).keys.sort()).toEqual([
+        "prod-1/encodr/cache",
+        "prod-2/encodr/cache",
       ]);
     });
 
     it("matches an anonymous container by its live name", () => {
-      const fleet = [runner("prod-1", [docker("redis-cache", "redis-cache")])];
+      const fleet = [
+        runner("prod-1", [docker("prod-1")("redis-cache", "redis-cache")]),
+      ];
 
       expect(resolveAlertTarget({ name: "redis-cache" }, fleet)).toMatchObject({
         kind: "resolved",
-        key: "docker/redis-cache/redis-cache",
+        keys: ["prod-1/redis-cache/redis-cache"],
       });
     });
 
@@ -155,16 +167,16 @@ describe("resolveAlertTarget", () => {
   describe("Kubernetes", () => {
     const FLEET = [
       k8sRunner("cluster-1", [
-        k8s("shop", "api", "Deployment"),
-        k8s("shop", "db", "StatefulSet"),
-        k8s("kube-system", "node-exporter", "DaemonSet"),
+        k8s("cluster-1")("shop", "api", "Deployment"),
+        k8s("cluster-1")("shop", "db", "StatefulSet"),
+        k8s("cluster-1")("kube-system", "node-exporter", "DaemonSet"),
       ]),
     ];
 
     it("resolves a workload named outright by its controller label", () => {
       expect(
         resolveAlertTarget({ namespace: "shop", deployment: "api" }, FLEET),
-      ).toMatchObject({ kind: "resolved", key: "kubernetes/shop/api" });
+      ).toMatchObject({ kind: "resolved", keys: ["cluster-1/shop/api"] });
     });
 
     it("resolves KubePodCrashLooping, which carries only namespace, pod and container", () => {
@@ -180,14 +192,14 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toMatchObject({
         kind: "resolved",
-        key: "kubernetes/shop/api",
+        keys: ["cluster-1/shop/api"],
       });
     });
 
     it("resolves a StatefulSet pod by its ordinal suffix", () => {
       expect(
         resolveAlertTarget({ namespace: "shop", pod: "db-0" }, FLEET),
-      ).toMatchObject({ kind: "resolved", key: "kubernetes/shop/db" });
+      ).toMatchObject({ kind: "resolved", keys: ["cluster-1/shop/db"] });
     });
 
     it("resolves a DaemonSet pod, whose name has no template hash", () => {
@@ -198,7 +210,7 @@ describe("resolveAlertTarget", () => {
         ),
       ).toMatchObject({
         kind: "resolved",
-        key: "kubernetes/kube-system/node-exporter",
+        keys: ["cluster-1/kube-system/node-exporter"],
       });
     });
 
@@ -230,7 +242,7 @@ describe("resolveAlertTarget", () => {
 
     it("will not resolve a pod against a workload whose kind gives it the wrong shape", () => {
       // `db-0` is a StatefulSet shape; a Deployment named `db` is not its owner.
-      const fleet = [k8sRunner("c", [k8s("shop", "db", "Deployment")])];
+      const fleet = [k8sRunner("c", [k8s("c")("shop", "db", "Deployment")])];
 
       expect(
         resolveAlertTarget({ namespace: "shop", pod: "db-0" }, fleet),
@@ -242,7 +254,9 @@ describe("resolveAlertTarget", () => {
         // A CronJob's pod is backup-<unix-minutes>-<5 random>: eight digits then five
         // characters, which is structurally the Deployment shape. It is rejected because
         // a unix-minute timestamp begins with `2`, not a template-hash character.
-        const fleet = [k8sRunner("c", [k8s("batch", "backup", "Deployment")])];
+        const fleet = [
+          k8sRunner("c", [k8s("c")("batch", "backup", "Deployment")]),
+        ];
 
         expect(
           resolveAlertTarget(
@@ -253,7 +267,9 @@ describe("resolveAlertTarget", () => {
       });
 
       it("accepts a real template hash, which uses only the ten characters Kubernetes emits", () => {
-        const fleet = [k8sRunner("c", [k8s("batch", "backup", "Deployment")])];
+        const fleet = [
+          k8sRunner("c", [k8s("c")("batch", "backup", "Deployment")]),
+        ];
 
         expect(
           resolveAlertTarget(
@@ -266,8 +282,8 @@ describe("resolveAlertTarget", () => {
       it("refuses to choose when two advertised workloads both claim the pod name", () => {
         const fleet = [
           k8sRunner("c", [
-            k8s("shop", "api", "Deployment"),
-            k8s("shop", "api-7d9f4c8b6", "DaemonSet"),
+            k8s("c")("shop", "api", "Deployment"),
+            k8s("c")("shop", "api-7d9f4c8b6", "DaemonSet"),
           ]),
         ];
 
@@ -280,7 +296,7 @@ describe("resolveAlertTarget", () => {
       });
 
       it("rejects a suffix that is not exactly five pod-alphabet characters", () => {
-        const fleet = [k8sRunner("c", [k8s("shop", "api", "Deployment")])];
+        const fleet = [k8sRunner("c", [k8s("c")("shop", "api", "Deployment")])];
 
         for (const pod of [
           "api-5f7d9bc4c-x2k4", // four
@@ -301,8 +317,8 @@ describe("resolveAlertTarget", () => {
       // Docker container is named. Matching both would produce two distinct keys
       // and force a perfectly resolvable alert to unresolved.
       const fleet = [
-        runner("docker-host", [docker("api", "api")]),
-        k8sRunner("cluster-1", [k8s("shop", "api", "Deployment")]),
+        runner("docker-host", [docker("docker-host")("api", "api")]),
+        k8sRunner("cluster-1", [k8s("cluster-1")("shop", "api", "Deployment")]),
       ];
 
       const res = resolveAlertTarget(
@@ -317,19 +333,19 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toMatchObject({
         kind: "resolved",
-        key: "kubernetes/shop/api",
+        keys: ["cluster-1/shop/api"],
       });
     });
 
     it("still resolves a Docker alert, which carries no namespace", () => {
       const fleet = [
-        runner("docker-host", [docker("api", "api")]),
-        k8sRunner("cluster-1", [k8s("shop", "api", "Deployment")]),
+        runner("docker-host", [docker("docker-host")("api", "api")]),
+        k8sRunner("cluster-1", [k8s("cluster-1")("shop", "api", "Deployment")]),
       ];
 
       expect(resolveAlertTarget({ container: "api" }, fleet)).toMatchObject({
         kind: "resolved",
-        key: "docker/api/api",
+        keys: ["docker-host/api/api"],
       });
     });
   });
@@ -341,12 +357,12 @@ describe("resolveAlertTarget", () => {
   });
 
   it("keys a resolved Kubernetes target with three segments, like every other key", () => {
-    const fleet = [k8sRunner("c", [k8s("shop", "api", "Deployment")])];
+    const fleet = [k8sRunner("c", [k8s("c")("shop", "api", "Deployment")])];
     const res = resolveAlertTarget(
       { namespace: "shop", deployment: "api" },
       fleet,
     );
 
-    expect((res as { key: string }).key.split("/")).toHaveLength(3);
+    expect((res as { keys: string[] }).keys[0]!.split("/")).toHaveLength(3);
   });
 });

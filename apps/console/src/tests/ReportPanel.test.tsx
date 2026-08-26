@@ -89,7 +89,7 @@ const EVIDENCE: ResolvedEvidence[] = [
     toolUseId: "tu-stats",
     toolName: "GetDockerStats",
     kind: "metric",
-    input: { target: "docker/encodr/payments-worker" },
+    input: { target: "prod-1/encodr/payments-worker" },
     result: JSON.stringify({
       cpuPercent: 3.1,
       memoryUsedBytes: 511 * 1024 * 1024,
@@ -299,7 +299,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-1",
             toolName: "RestartDockerService",
-            target: "docker/encodr/cache",
+            target: "prod-1/encodr/cache",
             at: "2026-07-21T12:20:00.000Z",
             decision: "approved",
             result: '{"restarted":true}',
@@ -396,7 +396,7 @@ describe("ReportPanel", () => {
             toolUseId: "tu-log",
             toolName: "GetDockerLogs",
             kind: "logs",
-            input: { target: "docker/encodr/payments-worker" },
+            input: { target: "prod-1/encodr/payments-worker" },
             result: JSON.stringify({
               lines: [
                 "fatal: cannot allocate 2.2GB buffer",
@@ -553,7 +553,7 @@ describe("ReportPanel", () => {
 
   // A host tool declares a measurement but answers plain readings, so the
   // chart reader found nothing and the claim showed a bare tool name.
-  it("draws the readings of a measurement that carries no series, per runner", () => {
+  it("draws the readings of a measurement that carries no series, per server", () => {
     render(
       panel({
         record: {
@@ -568,9 +568,9 @@ describe("ReportPanel", () => {
             kind: "metric",
             input: {},
             result: JSON.stringify({
-              byRunner: [
+              byServer: [
                 {
-                  runner: "web-01",
+                  server: "web-01",
                   result: {
                     totalBytes: 16_000_000_000,
                     availableBytes: 800_000_000,
@@ -712,7 +712,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-1",
             toolName: "RestartDockerService",
-            target: "docker/encodr-prod/encodr/cache",
+            target: "encodr-prod/encodr/cache",
             at: "2026-07-21T12:10:00.000Z",
             decision: "approved",
             result: '{"restarted":true}',

@@ -6,15 +6,7 @@ import type { Tool } from "./types.js";
 const TARGET_PROPERTY = {
   type: "string",
   description:
-    "The service's target key, copied exactly as it appears in the <fleet-summary> block or in a ListDockerServices result, for example docker/web/api. Copy the whole string; never assemble one yourself from parts.",
-} as const;
-
-// Consulted only when the target key is ambiguous. Supplied by the model from the fleet
-// summary, stripped by the transport before dispatch, never stored, and never part of a key.
-const RUNNER_PROPERTY = {
-  type: "string",
-  description:
-    "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Supply this only when the <fleet-summary> block marks this target as shared, meaning two hosts advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
+    "The service's target key, copied exactly as it appears in the <fleet-summary> block or in a ListDockerServices result, for example web-01/shop/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -29,7 +21,7 @@ export const DOCKER_TOOLS: Tool[] = [
         type: "object",
         additionalProperties: false,
         properties: {
-          runner: {
+          server: {
             type: "string",
             description:
               "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
@@ -42,7 +34,7 @@ export const DOCKER_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "state",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -55,7 +47,6 @@ export const DOCKER_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           tailLines: {
             type: "number",
             description:
@@ -106,7 +97,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -124,7 +115,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -144,7 +135,6 @@ export const DOCKER_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           sinceMinutes: {
             type: "number",
             description:
@@ -168,7 +158,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -188,7 +178,6 @@ export const DOCKER_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           delaySeconds: {
             type: "number",
             description:
@@ -226,7 +215,6 @@ export const DOCKER_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           command: {
             type: "array",
             items: { type: "string" },

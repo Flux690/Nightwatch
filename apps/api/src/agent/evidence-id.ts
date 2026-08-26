@@ -28,7 +28,7 @@ export function evidenceHeader(
   toolName: string,
   input: Record<string, unknown>,
 ): string {
-  const aim = ["target", "runner", "query", "path", "metric", "contains"]
+  const aim = ["target", "server", "query", "path", "metric", "contains"]
     .map((key) => input[key])
     .find((value) => typeof value === "string" && value.trim() !== "");
   const label = typeof aim === "string" ? ` \u00b7 ${aim}` : "";

@@ -3,6 +3,7 @@ import { startWebSocketClient } from "@nightwarden/runner-transport";
 import { createDispatchRegistry } from "./commands/registry.js";
 import { buildKubernetesManifest } from "./manifest/detect.js";
 import { logger } from "./logger.js";
+import { setServerName } from "./identity.js";
 
 const token = process.env["NIGHTWARDEN_TOKEN"];
 if (!token) {
@@ -24,6 +25,7 @@ const stopWebSocketClient = startWebSocketClient({
   dispatch: createDispatchRegistry(),
   buildManifest: buildKubernetesManifest,
   logger,
+  onIdentity: setServerName,
 });
 logger.info("kubernetes runner started");
 

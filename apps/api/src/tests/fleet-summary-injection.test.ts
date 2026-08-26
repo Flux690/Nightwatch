@@ -26,6 +26,10 @@ const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
 import { generateRunnerToken } from "../fleet/runners.js";
+
+// The two servers this file connects, named once so keys and addresses agree.
+const SERVER_A = "web-01";
+const SERVER_B = "db-02";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import {
@@ -41,10 +45,13 @@ import { dockerService, manifest } from "./manifest-helper.js";
 const FINISH: ScriptedTurn = { toolUses: [], text: "Investigation complete." };
 
 function dockerManifest(
-  hostname: string,
+  server: string,
   serviceNames: string[],
 ): RunnerManifest {
-  return manifest(hostname, serviceNames.map(dockerService));
+  return manifest(
+    `${server}.internal`,
+    serviceNames.map((name) => dockerService(server, name)),
+  );
 }
 
 function makeAlert(service: string): NormalizedAlert {
@@ -112,26 +119,28 @@ describe("fleet summary injection", () => {
 
   describe("multi-runner fleet", () => {
     beforeAll(() => {
-      runnerIdA = generateRunnerToken("docker", "fleet-summary-a").id;
-      runnerIdB = generateRunnerToken("docker", "fleet-summary-b").id;
+      runnerIdA = generateRunnerToken("docker", SERVER_A).id;
+      runnerIdB = generateRunnerToken("docker", SERVER_B).id;
     });
 
     it("first user message lists every server and its advertised services", async () => {
       connA = registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: SERVER_A,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx", "api"]));
 
       connB = registerRunner({
         runnerId: runnerIdB,
         platform: "docker",
+        serverName: SERVER_B,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
+      setRunnerManifest(runnerIdB, dockerManifest(SERVER_B, ["postgres"]));
 
       setScript([FINISH]);
 
@@ -152,22 +161,24 @@ describe("fleet summary injection", () => {
       expect(msg).toContain("postgres");
     });
 
-    it("marks a key two runners advertise, so the model learns it needs `runner` before burning a turn", async () => {
+    it("gives the same service on two servers two distinct keys, and marks neither", async () => {
       connA = registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: SERVER_A,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx", "api"]));
 
       connB = registerRunner({
         runnerId: runnerIdB,
         platform: "docker",
+        serverName: SERVER_B,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["nginx"]));
+      setRunnerManifest(runnerIdB, dockerManifest(SERVER_B, ["nginx"]));
 
       setScript([FINISH]);
 
@@ -177,30 +188,51 @@ describe("fleet summary injection", () => {
 
       const msg = captureStartMessage();
 
-      // Constant-size on purpose: naming the other holders would annotate every
-      // key on a homogeneous fleet with all of its peers.
-      expect(msg).toContain("docker/nginx/nginx (shared)");
-      // A key only one runner has carries no marker.
-      expect(msg).toContain("docker/api/api");
-      expect(msg).not.toContain("docker/api/api (shared)");
+      // Each key names its own server, so the summary marks neither and no call
+      // needs a second argument to say which machine it means.
+      expect(msg).toContain(`${SERVER_A}/nginx/nginx`);
+      expect(msg).toContain(`${SERVER_B}/nginx/nginx`);
+      expect(msg).not.toContain("(shared)");
+    });
+
+    // The platform is stated once per server line, not in every key.
+    it("names each server's platform on its own line", async () => {
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        serverName: SERVER_A,
+        send: () => {},
+        close: () => {},
+      });
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx"]));
+
+      setScript([FINISH]);
+
+      const sessionId = randomUUID();
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+      expect(captureStartMessage()).toContain(`${SERVER_A} (Docker host):`);
     });
 
     it("a neighbouring server's service identity appears so the agent can reference it", async () => {
       connA = registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: SERVER_A,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx"]));
 
       connB = registerRunner({
         runnerId: runnerIdB,
         platform: "docker",
+        serverName: SERVER_B,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdB, dockerManifest("cache-01", ["redis"]));
+      setRunnerManifest(runnerIdB, dockerManifest(SERVER_B, ["redis"]));
 
       setScript([FINISH]);
 
@@ -211,9 +243,9 @@ describe("fleet summary injection", () => {
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
 
-      // The alert is on web-01/nginx; redis on cache-01 is a NEIGHBOUR.
+      // The alert is on SERVER_A/nginx; redis on SERVER_B is a NEIGHBOUR.
       // The fleet summary must expose it so the agent can reason about it.
-      expect(msg).toContain("cache-01");
+      expect(msg).toContain(SERVER_B);
       expect(msg).toContain("redis");
     });
 
@@ -221,18 +253,20 @@ describe("fleet summary injection", () => {
       connA = registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: SERVER_A,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx"]));
 
       connB = registerRunner({
         runnerId: runnerIdB,
         platform: "docker",
+        serverName: SERVER_B,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
+      setRunnerManifest(runnerIdB, dockerManifest(SERVER_B, ["postgres"]));
 
       setScript([FINISH]);
 
@@ -252,17 +286,18 @@ describe("fleet summary injection", () => {
 
   describe("graceful degradation", () => {
     beforeAll(() => {
-      runnerIdA = generateRunnerToken("docker", "fleet-summary-single").id;
+      runnerIdA = generateRunnerToken("docker", SERVER_A).id;
     });
 
     it("single-runner fleet: fleet summary still lists the one server", async () => {
       connA = registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: SERVER_A,
         send: () => {},
         close: () => {},
       });
-      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
+      setRunnerManifest(runnerIdA, dockerManifest(SERVER_A, ["nginx", "api"]));
 
       setScript([FINISH]);
 

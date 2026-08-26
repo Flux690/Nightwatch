@@ -36,19 +36,20 @@ export async function registerTokenRoutes(
         ? request.body.label.trim() || undefined
         : undefined;
 
+    // Required, because it is the first segment of every target key this runner
+    // will advertise: a nameless runner has nothing to address its services by.
     const rawServerName = request.body?.serverName;
-    let serverName: string | undefined;
-    if (rawServerName !== undefined) {
-      if (typeof rawServerName !== "string") {
-        return reply.code(400).send({ error: "serverName must be a string" });
-      }
-      const err = validateServerName(rawServerName);
-      if (err) return reply.code(400).send({ error: err });
-      serverName = rawServerName.trim();
+    if (typeof rawServerName !== "string") {
+      return reply
+        .code(400)
+        .send({ error: "serverName is required and must be a string" });
     }
+    const nameError = validateServerName(rawServerName);
+    if (nameError) return reply.code(400).send({ error: nameError });
+    const serverName = rawServerName.trim();
 
     try {
-      const generated = generateRunnerToken(platform, label, serverName);
+      const generated = generateRunnerToken(platform, serverName, label);
       return reply.code(201).send({
         id: generated.id,
         token: generated.plaintext,

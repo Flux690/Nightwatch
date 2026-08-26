@@ -15,13 +15,9 @@ export {
   deriveDockerServiceIdentity,
   dockerServiceKey,
   kubernetesWorkloadKey,
+  parseTargetKey,
 } from "./service-identity.js";
-export type {
-  RiskLevel,
-  NotFoundResult,
-  RunnerScopedResult,
-  FleetResult,
-} from "./tools/common.js";
+export type { RiskLevel, NotFoundResult, FleetResult } from "./tools/common.js";
 export type {
   DockerContainerInstance,
   DockerServiceListResult,
@@ -103,6 +99,7 @@ export type { ToolName } from "./tools/names.js";
 export type {
   WsEnvelope,
   RunnerCommandMessage,
+  RunnerIdentityMessage,
   HideContainerMessage,
   RunnerManifestMessage,
   RunnerResultMessage,

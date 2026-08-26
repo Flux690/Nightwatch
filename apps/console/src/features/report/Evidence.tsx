@@ -32,10 +32,10 @@ function Readings({ groups }: { groups: ReadingGroup[] }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-3">
       {groups.map((group, at) => (
-        <div key={group.runner ?? at}>
-          {group.runner !== null && (
+        <div key={group.server ?? at}>
+          {group.server !== null && (
             <p className="m-0 mb-1 font-mono text-sm text-ink-subtle">
-              {group.runner}
+              {group.server}
             </p>
           )}
           <dl className="m-0 flex flex-col gap-1">

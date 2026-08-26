@@ -1,5 +1,6 @@
 import {
   dockerServiceKey,
+  type DockerServiceIdentity,
   kubernetesWorkloadKey,
   type DockerManifest,
   type DockerServiceEntry,
@@ -33,16 +34,24 @@ export function kubernetesManifest(
 }
 
 // Anonymous-container convention (no Compose labels): project === service === name.
-export function dockerService(name: string): DockerServiceEntry {
+export function svc(name: string): DockerServiceIdentity {
+  return { project: name, service: name };
+}
+
+export function dockerService(
+  server: string,
+  name: string,
+): DockerServiceEntry {
   const identity = { project: name, service: name };
   return {
     identity,
-    target: dockerServiceKey(identity),
+    target: dockerServiceKey(server, identity),
     status: "running",
   };
 }
 
 export function kubernetesWorkload(
+  server: string,
   namespace: string,
   workload: string,
   kind: K8sWorkloadKind = "Deployment",
@@ -50,7 +59,7 @@ export function kubernetesWorkload(
   const identity = { namespace, workload };
   return {
     identity,
-    target: kubernetesWorkloadKey(identity),
+    target: kubernetesWorkloadKey(server, identity),
     status: "running",
     kind,
   };

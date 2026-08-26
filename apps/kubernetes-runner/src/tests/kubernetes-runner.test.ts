@@ -43,6 +43,7 @@ import {
   parseCpuMillicores,
   parseMemoryBytes,
 } from "../kubernetes/commands.js";
+import { setServerName } from "../identity.js";
 
 const K8S_SERVICE = {
   namespace: "production",
@@ -142,6 +143,8 @@ describe("Kubernetes runner command handlers", () => {
   };
 
   beforeEach(() => {
+    // The API pushes this on connect; a workload key is prefixed with it.
+    setServerName("prod-cluster");
     MockKubeConfig.mockReset();
     MockMetrics.mockReset();
     MockExec.mockReset();
@@ -432,7 +435,7 @@ describe("Kubernetes runner command handlers", () => {
       expect(workloads).toHaveLength(3);
       const api = workloads.find((w) => w.name === "api-server")!;
       // Three segments, byte-identical to what the manifest advertises.
-      expect(api.target).toBe("kubernetes/production/api-server");
+      expect(api.target).toBe("prod-cluster/production/api-server");
       expect(api).toMatchObject({
         kind: "Deployment",
         imageTag: "1.2.3",

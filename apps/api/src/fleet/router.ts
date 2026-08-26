@@ -3,44 +3,33 @@ import type {
   KubernetesWorkloadIdentity,
   Platform,
 } from "@nightwarden/shared";
-import { addressName, manifestedConnections } from "../fleet/connections.js";
+import { manifestedConnections } from "../fleet/connections.js";
 import type { RunnerConnection } from "../fleet/connections.js";
 
 // A fan-out wider than this is noise, not evidence: the model cannot read ten
-// hosts' filesystems in one turn and the token cost is real.
+// servers' filesystems in one turn and the token cost is real.
 const MAX_FANOUT = 8;
 
 // Lets the transport expand a flat key back into its structured payload. The
-// identity only ever returns to the runner that advertised it.
+// identity only ever returns to the server that advertised it.
 interface ResolvedService {
   conn: RunnerConnection;
   identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
 }
 
-// Raised when runners are connected but none runs this platform. Distinct from
-// RunnerOfflineError, which means no runner at all - the two need different fixes.
+// Raised when servers are connected but none runs this platform. Distinct from
+// RunnerOfflineError, which means no server at all - the two need different fixes.
 export class NoPlatformRunnerError extends Error {
   constructor(platform: Platform) {
     super(
-      `No connected runner runs ${platform}. This command is only available on a ${platform} runner.`,
+      `No connected server runs ${platform}. This command is only available on a ${platform} server.`,
     );
     this.name = "NoPlatformRunnerError";
   }
 }
 
-// Every runner advertising a target key, in fleet order. Each entry carries the key
-// its own runner built, so this compares strings and never rebuilds one.
-function ownersOf(target: string): ResolvedService[] {
-  const owners: ResolvedService[] = [];
-  for (const conn of manifestedConnections()) {
-    const match = conn.manifest?.services.find((s) => s.target === target);
-    if (match) owners.push({ conn, identity: match.identity });
-  }
-  return owners;
-}
-
-// The key the model echoed must match an advertising runner. Two runners
-// advertising one key is normal, disambiguated by the `runner` parameter.
+// The key names its own server, so at most one connection can advertise it and
+// there is nothing to disambiguate. This compares strings and never rebuilds one.
 export function resolveByService(
   commandInput: Record<string, unknown>,
 ): ResolvedService {
@@ -52,86 +41,54 @@ export function resolveByService(
     );
   }
 
-  const owners = ownersOf(target);
-  const [only] = owners;
-  // One owner: route to it whatever `runner` says. A stale runner name is not
-  // worth failing a call that has exactly one possible destination.
-  if (owners.length === 1 && only) return only;
-
-  if (owners.length > 1) {
-    const names = owners.map((o) => addressName(o.conn) ?? "unnamed");
-    const requested = requestedRunner(commandInput);
-    if (requested === null) {
-      throw new Error(
-        `Target '${target}' is advertised by more than one runner (${names.join(", ")}). Retry with runner set to the one you mean.`,
-      );
-    }
-    const picked = owners.find((o) => addressName(o.conn) === requested);
-    if (picked) return picked;
-    throw new Error(
-      `No runner named '${requested}' advertises target '${target}'. It is advertised by: ${names.join(", ")}.`,
-    );
+  const conns = manifestedConnections();
+  for (const conn of conns) {
+    const match = conn.manifest?.services.find((s) => s.target === target);
+    if (match) return { conn, identity: match.identity };
   }
 
   // Annotated because `services` is a union of two array types, which flatMap
   // cannot widen on its own; only the key is read here, which both arms carry.
-  const known = manifestedConnections()
+  const known = conns
     .flatMap((c): Array<{ target: string }> => c.manifest?.services ?? [])
     .map((s) => s.target)
     .join(", ");
   throw new Error(
-    `No runner has target '${target}'. Known targets: ${known || "none"}`,
+    `No server advertises target '${target}'. Known targets: ${known || "none"}`,
   );
 }
 
-// A fan-out reaches only runners of that platform, so a Kubernetes cluster is
+// A fan-out reaches only servers of that platform, so a Kubernetes cluster is
 // never asked for a Docker host's filesystems.
 export function resolveByRunner(
   commandInput: Record<string, unknown>,
   platform: Platform,
-): RunnerConnection[] {
+): { conns: RunnerConnection[]; omitted: number } {
   const capable = manifestedConnections().filter(
     (c) => c.platform === platform,
   );
   if (capable.length === 0) throw new NoPlatformRunnerError(platform);
 
-  const available = (): string =>
-    capable
-      .map((c) => addressName(c))
-      .filter(Boolean)
-      .join(", ") || "none";
-
-  const requested = requestedRunner(commandInput);
-  if (requested === null) return capable.slice(0, MAX_FANOUT);
-
-  const matches = capable.filter((c) => addressName(c) === requested);
-  const [match] = matches;
-  if (matches.length === 1 && match) return [match];
-
-  if (matches.length > 1) {
-    throw new Error(
-      `Runner name '${requested}' matches more than one connected runner. Assign unique names in the console, then retry.`,
-    );
+  const requested = requestedServer(commandInput);
+  if (requested === null) {
+    return {
+      conns: capable.slice(0, MAX_FANOUT),
+      omitted: Math.max(0, capable.length - MAX_FANOUT),
+    };
   }
+
+  const match = capable.find((c) => c.serverName === requested);
+  if (match) return { conns: [match], omitted: 0 };
+
+  const available = capable.map((c) => c.serverName).join(", ");
   throw new Error(
-    `No ${platform} runner named '${requested}'. Available: ${available()}`,
+    `No ${platform} server named '${requested}'. Available: ${available}`,
   );
 }
 
-// The address the model supplies, which the transport strips before dispatch. Never
-// stored, and never part of a target key.
-function requestedRunner(commandInput: Record<string, unknown>): string | null {
-  const runner = commandInput["runner"];
-  return typeof runner === "string" && runner !== "" ? runner : null;
-}
-
-// Whether a target key is advertised by more than one runner, so the fleet summary
-// can mark it and the model learns it needs `runner` before it burns a turn.
-export function isSharedTarget(target: string): boolean {
-  try {
-    return ownersOf(target).length > 1;
-  } catch {
-    // No manifested runner at all: nothing is shared.
-    return false;
-  }
+// The address the model supplies for a fan-out tool, which the transport strips
+// before dispatch. Never stored, and never part of a target key.
+function requestedServer(commandInput: Record<string, unknown>): string | null {
+  const server = commandInput["server"];
+  return typeof server === "string" && server !== "" ? server : null;
 }

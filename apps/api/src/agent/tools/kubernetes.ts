@@ -6,7 +6,7 @@ import type { Tool } from "./types.js";
 const TARGET_PROPERTY = {
   type: "string",
   description:
-    "The workload's target key, copied exactly as it appears in the <fleet-summary> block or in a ListK8sWorkloads result, for example kubernetes/shop/api. Copy the whole string; never assemble one yourself from parts.",
+    "The workload's target key, copied exactly as it appears in the <fleet-summary> block or in a ListK8sWorkloads result, for example prod-cluster/shop/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
 // The container sub-selector is not part of the key: it rides alongside `target`
@@ -15,14 +15,6 @@ const CONTAINER_PROPERTY = {
   type: "string",
   description:
     "Which container to read, when the workload's pod runs more than one, for example an application container alongside a sidecar. Omit it for a single-container pod. If you omit it for a pod that has several, the result lists the containers you can choose from.",
-} as const;
-
-// Consulted only when the target key is ambiguous. Supplied by the model from the fleet
-// summary, stripped by the transport before dispatch, never stored, and never part of a key.
-const RUNNER_PROPERTY = {
-  type: "string",
-  description:
-    "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Supply this only when the <fleet-summary> block marks this target as shared, meaning two clusters advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -42,7 +34,7 @@ export const K8S_TOOLS: Tool[] = [
             description:
               "Which Kubernetes namespace to list. Defaults to the namespace named 'default', so pass this whenever the workload you want lives elsewhere.",
           },
-          runner: {
+          server: {
             type: "string",
             description:
               "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
@@ -55,7 +47,7 @@ export const K8S_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "state",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "kubernetes",
   },
   {
@@ -68,7 +60,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           tailLines: {
             type: "number",
@@ -112,7 +103,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
         },
         required: ["target"],
@@ -134,7 +124,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
         },
         required: ["target"],
@@ -156,7 +145,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           sinceMinutes: {
             type: "number",
@@ -188,7 +176,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
         },
         required: ["target"],
@@ -208,7 +195,7 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -227,7 +214,7 @@ export const K8S_TOOLS: Tool[] = [
         type: "object",
         additionalProperties: false,
         properties: {
-          runner: {
+          server: {
             type: "string",
             description:
               "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
@@ -240,7 +227,7 @@ export const K8S_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "state",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "kubernetes",
   },
   {
@@ -253,7 +240,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           reason: REASON_PROPERTY,
           risk: {
@@ -287,7 +273,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           command: {
             type: "array",

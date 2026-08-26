@@ -10,12 +10,6 @@ import {
 import { timeAgo } from "@/shared/lib/time";
 import { cn } from "@/shared/lib/utils";
 
-// The user-assigned server name is the primary label everywhere; the
-// self-reported OS hostname is the fallback when no name was given.
-export function runnerDisplayName(runner: RunnerRecord): string {
-  return runner.serverName ?? runner.hostname ?? runner.id;
-}
-
 const COLLAPSED_SERVICES = 6;
 
 // A server owns a variable-length list of services, which is why this is a card
@@ -40,7 +34,7 @@ export function ServerCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium">{runnerDisplayName(runner)}</p>
+          <p className="font-medium">{runner.serverName}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {runner.hostname !== null && runner.hostname !== runner.serverName
               ? `host ${runner.hostname}`

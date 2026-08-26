@@ -172,7 +172,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
             id: "tu-write-1",
             name: "RestartDockerService",
             input: {
-              target: "docker/svc-01/svc-01",
+              target: "access-gate-host/svc-01/svc-01",
               reason: "service wedged",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -315,7 +315,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
             id: "tu-c-write",
             name: "RestartDockerService",
             input: {
-              target: "docker/svc-01/svc-01",
+              target: "access-gate-host/svc-01/svc-01",
               reason: "confirmed by user",
               risk: "low",
               estimatedDowntimeSeconds: 2,

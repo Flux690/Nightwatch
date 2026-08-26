@@ -20,11 +20,17 @@ import { logger } from "../logger.js";
 import { mountApi } from "./api-server.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
+// The server name is the row's, assigned at mint; the hostname is what the box
+// calls itself. Keys are prefixed with the first, never the second.
 function runnerManifest(
+  server: string,
   hostname: string,
   containers: string[],
 ): RunnerManifest {
-  return manifest(hostname, containers.map(dockerService));
+  return manifest(
+    hostname,
+    containers.map((name) => dockerService(server, name)),
+  );
 }
 
 // Connect a fake runner, wait for the server's `connected` ack, then send its manifest.
@@ -105,12 +111,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      runnerManifest("web-01", ["nginx", "api"]),
+      runnerManifest("one-up-a", "web-01", ["nginx", "api"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      runnerManifest("db-02", ["postgres"]),
+      runnerManifest("one-up-b", "db-02", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {
@@ -132,10 +138,12 @@ describe("flat runner registry", () => {
     expect(ra?.hostname).toBe("web-01");
     expect(rb?.hostname).toBe("db-02");
     expect(ra?.manifest?.services).toEqual([
-      dockerService("nginx"),
-      dockerService("api"),
+      dockerService("one-up-a", "nginx"),
+      dockerService("one-up-a", "api"),
     ]);
-    expect(rb?.manifest?.services).toEqual([dockerService("postgres")]);
+    expect(rb?.manifest?.services).toEqual([
+      dockerService("one-up-b", "postgres"),
+    ]);
     expect(ra?.manifest).not.toHaveProperty("token");
     expect(rb?.manifest).not.toHaveProperty("token");
 
@@ -158,12 +166,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      runnerManifest("web-01", ["nginx"]),
+      runnerManifest("close-one-a", "web-01", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      runnerManifest("db-02", ["postgres"]),
+      runnerManifest("close-one-b", "db-02", ["postgres"]),
     );
     await waitFor(async () => {
       const live = (await getRunners()).filter(
@@ -195,7 +203,7 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       token,
-      runnerManifest("displace-host", ["nginx"]),
+      runnerManifest("displace", "displace-host", ["nginx"]),
     );
     await waitFor(async () => {
       const live = (await getRunners()).filter(
@@ -211,7 +219,7 @@ describe("flat runner registry", () => {
     const b = await connectRunner(
       port,
       token,
-      runnerManifest("displace-host", ["nginx"]),
+      runnerManifest("displace", "displace-host", ["nginx"]),
     );
     await aClosed;
 
@@ -246,12 +254,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      runnerManifest("host-a", ["nginx"]),
+      runnerManifest("cross-a", "host-a", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      runnerManifest("host-b", ["postgres"]),
+      runnerManifest("cross-b", "host-b", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {
@@ -283,7 +291,7 @@ describe("flat runner registry", () => {
       const ws = await connectRunner(
         port,
         token,
-        runnerManifest("inflight-host", ["inflight-svc"]),
+        runnerManifest("inflight", "inflight-host", ["inflight-svc"]),
       );
       await waitFor(async () => {
         const live = (await getRunners()).filter(
@@ -304,7 +312,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand("GetDockerLogs", {
-        target: "docker/inflight-svc/inflight-svc",
+        target: "inflight/inflight-svc/inflight-svc",
       }).catch((err: unknown) => err);
 
       await waitFor(() => (correlationId ? true : undefined));
@@ -337,7 +345,9 @@ describe("flat runner registry", () => {
       const a = await connectRunner(
         port,
         token,
-        runnerManifest("inflight-d-host", ["displace-svc"]),
+        runnerManifest("inflight-displace", "inflight-d-host", [
+          "displace-svc",
+        ]),
       );
       await waitFor(async () => {
         const live = (await getRunners()).filter(
@@ -353,7 +363,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand("GetDockerLogs", {
-        target: "docker/displace-svc/displace-svc",
+        target: "inflight-displace/displace-svc/displace-svc",
       }).catch((err: unknown) => err);
       await waitFor(() => (sawCommand ? true : undefined));
 
@@ -363,7 +373,9 @@ describe("flat runner registry", () => {
       const b = await connectRunner(
         port,
         token,
-        runnerManifest("inflight-d-host", ["displace-svc"]),
+        runnerManifest("inflight-displace", "inflight-d-host", [
+          "displace-svc",
+        ]),
       );
       await aClosed;
 
@@ -389,12 +401,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      runnerManifest("web-01", ["nginx", "api"]),
+      runnerManifest("fleet-a", "web-01", ["nginx", "api"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      runnerManifest("db-02", ["postgres"]),
+      runnerManifest("fleet-b", "db-02", ["postgres"]),
     );
 
     const fleet = await waitFor(async () => {
@@ -407,11 +419,11 @@ describe("flat runner registry", () => {
 
     const byHostname = new Map(fleet.map((r) => [r.hostname, r]));
     expect(byHostname.get("web-01")?.services).toEqual([
-      dockerService("nginx"),
-      dockerService("api"),
+      dockerService("fleet-a", "nginx"),
+      dockerService("fleet-a", "api"),
     ]);
     expect(byHostname.get("db-02")?.services).toEqual([
-      dockerService("postgres"),
+      dockerService("fleet-b", "postgres"),
     ]);
     expect(byHostname.get("web-01")?.online).toBe(true);
     expect(byHostname.get("web-01")).not.toHaveProperty("token");
@@ -476,7 +488,7 @@ describe("protocol ping/pong liveness", () => {
       const ws = await connectRunner(
         port,
         token,
-        runnerManifest("no-pong-host", ["no-pong-svc"]),
+        runnerManifest("no-pong", "no-pong-host", ["no-pong-svc"]),
       );
       // Dead-peer stand-in: suppress the client's automatic protocol pong.
       ws.pong = () => {};
@@ -521,7 +533,7 @@ describe("protocol ping/pong liveness", () => {
       const ws = await connectRunner(
         port,
         token,
-        runnerManifest("pong-live-host", ["pong-live-svc"]),
+        runnerManifest("pong-live", "pong-live-host", ["pong-live-svc"]),
       );
       await flushIo();
 

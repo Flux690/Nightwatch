@@ -51,12 +51,33 @@ function composeLabel(
   );
 }
 
-// Platform-prefixed so the two can never collide, always three segments, and
-// nothing a user typed ever enters one.
-export function dockerServiceKey(id: DockerServiceIdentity): string {
-  return `docker/${id.project}/${id.service}`;
+// Where it lives, its scope, its name. The server segment is what makes one key
+// mean one thing on a fleet where two machines run the same service.
+export function dockerServiceKey(
+  server: string,
+  id: DockerServiceIdentity,
+): string {
+  return `${server}/${id.project}/${id.service}`;
 }
 
-export function kubernetesWorkloadKey(id: KubernetesWorkloadIdentity): string {
-  return `kubernetes/${id.namespace}/${id.workload}`;
+export function kubernetesWorkloadKey(
+  server: string,
+  id: KubernetesWorkloadIdentity,
+): string {
+  return `${server}/${id.namespace}/${id.workload}`;
+}
+
+export interface ParsedTargetKey {
+  server: string;
+  scope: string;
+  name: string;
+}
+
+// Null for anything that is not three non-empty segments, which is how a key the
+// model assembled itself is caught before it routes anywhere.
+export function parseTargetKey(target: string): ParsedTargetKey | null {
+  const [server, scope, name, ...rest] = target.split("/");
+  if (rest.length > 0) return null;
+  if (!server || !scope || !name) return null;
+  return { server, scope, name };
 }

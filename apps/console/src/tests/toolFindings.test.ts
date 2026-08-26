@@ -51,17 +51,17 @@ describe("findingFor", () => {
   });
 
   describe("GetHostMemory", () => {
-    // Runner-routed results are always enveloped, even for one runner.
+    // Server-routed results are always enveloped, even for one server.
     const envelope = (
-      entries: Array<{ runner: string; result: unknown }>,
-    ): unknown => ({ byRunner: entries });
+      entries: Array<{ server: string; result: unknown }>,
+    ): unknown => ({ byServer: entries });
 
-    it("reports free against total, unqualified when one runner answered", () => {
+    it("reports free against total, unqualified when one server answered", () => {
       const finding = findingFor(
         "GetHostMemory",
         envelope([
           {
-            runner: "prod-1",
+            server: "prod-1",
             result: {
               totalBytes: 8326942720,
               availableBytes: 7025766400,
@@ -75,16 +75,16 @@ describe("findingFor", () => {
       expect(finding?.tone).toBe("normal");
     });
 
-    it("names the worst host across a fan-out, since which host is half the answer", () => {
+    it("names the worst server across a fan-out, since which server is half the answer", () => {
       const finding = findingFor(
         "GetHostMemory",
         envelope([
           {
-            runner: "healthy-1",
+            server: "healthy-1",
             result: { totalBytes: 8326942720, availableBytes: 7025766400 },
           },
           {
-            runner: "starved-2",
+            server: "starved-2",
             result: { totalBytes: 8326942720, availableBytes: 83269427 },
           },
         ]),
@@ -98,11 +98,11 @@ describe("findingFor", () => {
         "GetHostMemory",
         envelope([
           {
-            runner: "roomy-1",
+            server: "roomy-1",
             result: { totalBytes: 8326942720, availableBytes: 8000000000 },
           },
           {
-            runner: "oom-2",
+            server: "oom-2",
             result: {
               totalBytes: 8326942720,
               availableBytes: 8000000000,
@@ -117,13 +117,13 @@ describe("findingFor", () => {
       expect(finding?.tone).toBe("bad");
     });
 
-    it("reads the runners that answered, ignoring one that errored", () => {
+    it("reads the servers that answered, ignoring one that errored", () => {
       const finding = findingFor(
         "GetHostMemory",
         envelope([
-          { runner: "down-1", result: "Error: timed out after 15000ms" },
+          { server: "down-1", result: "Error: timed out after 15000ms" },
           {
-            runner: "up-2",
+            server: "up-2",
             result: { totalBytes: 8326942720, availableBytes: 7025766400 },
           },
         ]),

@@ -7,24 +7,24 @@ import { compact } from "./format.js";
 import { dayClock } from "@/shared/lib/time";
 import { formatBytes } from "@/features/session/transcript/toolFindings";
 
-// One runner's answer inside a fan-out, or the result itself when there is no
-// envelope. A fleet tool is enveloped even for a single runner.
+// One server's answer inside a fan-out, or the result itself when there is no
+// envelope. A server-routed tool is enveloped even for a single server.
 interface Scoped {
-  runner: string | null;
+  server: string | null;
   result: Record<string, unknown>;
 }
 
 function scopes(result: unknown): Scoped[] {
   const record = asRecord(result);
   if (record === null) return [];
-  const fanned = record["byRunner"];
-  if (!Array.isArray(fanned)) return [{ runner: null, result: record }];
+  const fanned = record["byServer"];
+  if (!Array.isArray(fanned)) return [{ server: null, result: record }];
   return fanned.flatMap((entry): Scoped[] => {
     const scoped = asRecord(entry);
     const inner = scoped === null ? null : asRecord(scoped["result"]);
     if (scoped === null || inner === null) return [];
-    const runner = stringAt(scoped, "runner");
-    return [{ runner, result: inner }];
+    const server = stringAt(scoped, "server");
+    return [{ server, result: inner }];
   });
 }
 
@@ -65,8 +65,8 @@ function label(key: string): string {
 }
 
 export interface ReadingGroup {
-  // The runner this group answers for, or null when nothing fanned out.
-  runner: string | null;
+  // The server this group answers for, or null when nothing fanned out.
+  server: string | null;
   // `key` is the field the reading came from: two fields can read out under one
   // label once their units are stripped, and the field they came from cannot.
   rows: Array<{ key: string; label: string; value: string }>;
@@ -81,7 +81,7 @@ export function readingGroups(result: unknown): ReadingGroup[] {
         ? [{ key, label: label(key), value: readingOf(key, value) }]
         : [],
     );
-    return rows.length === 0 ? [] : [{ runner: scope.runner, rows }];
+    return rows.length === 0 ? [] : [{ server: scope.server, rows }];
   });
 }
 
@@ -97,7 +97,7 @@ export function stateGroups(result: unknown): ReadingGroup[] {
         ? [{ key, label: label(key), value: readable(value) }]
         : [];
     });
-    return rows.length === 0 ? [] : [{ runner: scope.runner, rows }];
+    return rows.length === 0 ? [] : [{ server: scope.server, rows }];
   });
 }
 

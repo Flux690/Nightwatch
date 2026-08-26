@@ -680,7 +680,7 @@ describe("the investigation record", () => {
       appendCall(
         sessionId,
         0,
-        restart("tu-1", "docker/web/api"),
+        restart("tu-1", "prod-1/web/api"),
         "ok",
         "T1",
         undefined,
@@ -689,7 +689,7 @@ describe("the investigation record", () => {
       appendCall(
         sessionId,
         2,
-        restart("tu-2", "docker/web/api"),
+        restart("tu-2", "prod-1/web/api"),
         "ok",
         "T2",
         undefined,
@@ -699,7 +699,7 @@ describe("the investigation record", () => {
       appendCall(
         sessionId,
         4,
-        restart("tu-3", "docker/web/cache"),
+        restart("tu-3", "prod-1/web/cache"),
         "ok",
         "T3",
         undefined,
@@ -708,7 +708,7 @@ describe("the investigation record", () => {
       appendCall(
         sessionId,
         6,
-        restart("tu-4", "docker/web/api"),
+        restart("tu-4", "prod-1/web/api"),
         "ok",
         "T4",
         undefined,
@@ -783,7 +783,7 @@ describe("the investigation record", () => {
         {
           id: "tu-restart",
           name: "RestartDockerService",
-          input: { target: "docker/app/web" },
+          input: { target: "prod-1/app/web" },
         },
         "restarted",
         at,
@@ -1021,7 +1021,7 @@ describe("the investigation record", () => {
         {
           id: "tu-refused",
           name: "DockerBash",
-          input: { target: "docker/app/web", command: "df -h" },
+          input: { target: "prod-1/app/web", command: "df -h" },
         },
         'Tool "DockerBash" is not available in this investigation.',
         "2026-07-03T02:05:00.000Z",
@@ -1566,7 +1566,7 @@ describe("the investigation record", () => {
           {
             id: "tu-released",
             name: "RestartDockerService",
-            input: { target: "docker/app/web" },
+            input: { target: "prod-1/app/web" },
           },
           "restarted",
           "2026-07-03T02:05:00.000Z",

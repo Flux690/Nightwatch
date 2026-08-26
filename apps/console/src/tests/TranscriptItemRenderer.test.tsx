@@ -86,7 +86,7 @@ describe("TranscriptItemRenderer", () => {
         ...approvalItem,
         toolName: "DockerBash",
         input: {
-          target: "docker/encodr-prod/encodr/cache",
+          target: "encodr-prod/encodr/cache",
           command: ["redis-cli", "CONFIG", "SET", "maxmemory", "8gb"],
           reason: "writes are being rejected",
         },
@@ -437,7 +437,7 @@ describe("TranscriptItemRenderer", () => {
         kind: "tool_call",
         toolUseId: "tu-5",
         toolName: "SomeToolWeDoNotRender",
-        input: { target: "docker/api/api" },
+        input: { target: "web-01/api/api" },
         state: { phase: "complete", result: "cpu 0.91\nmem 0.44" },
       });
 
@@ -521,7 +521,7 @@ describe("TranscriptItemRenderer", () => {
     });
 
     it("says so when only some runners in a fan-out answered", () => {
-      const cell = finding("partial", JSON.stringify({ byRunner: [] }));
+      const cell = finding("partial", JSON.stringify({ byServer: [] }));
       expect(cell.textContent).toContain("Some runners failed");
       expect(cell).not.toHaveClass("text-fail");
     });
@@ -567,7 +567,7 @@ describe("TranscriptItemRenderer", () => {
               kind: "tool_call",
               toolUseId: "tu-logs",
               toolName: "GetDockerLogs",
-              input: { target: "docker/encodr/cache" },
+              input: { target: "prod-1/encodr/cache" },
               state: {
                 phase: "complete",
                 result: JSON.stringify({
@@ -582,7 +582,7 @@ describe("TranscriptItemRenderer", () => {
               kind: "tool_call",
               toolUseId: "tu-stats",
               toolName: "GetDockerStats",
-              input: { target: "docker/encodr/cache" },
+              input: { target: "prod-1/encodr/cache" },
               state: {
                 phase: "complete",
                 result: JSON.stringify({ cpuPercent: 0.35 }),

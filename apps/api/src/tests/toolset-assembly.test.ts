@@ -81,6 +81,7 @@ describe("toolset assembly by fleet capabilities", () => {
       const conn = registerRunner({
         runnerId: "caps-unit-docker",
         platform: "docker",
+        serverName: "caps-unit",
         send: () => {},
         close: () => {},
       });
@@ -294,8 +295,10 @@ describe("toolset assembly by fleet capabilities", () => {
       connK8s = registerRunner({
         runnerId: K8S_TOKEN,
         platform: "kubernetes",
+        serverName: "toolset-k8s-001",
         send: (raw: string) => {
           const msg = JSON.parse(raw) as RunnerCommandMessage;
+          if (msg.type !== "command") return;
           const { commandName, correlationId } = msg.payload;
           executedCommands.push(commandName);
           resolveCommand({
@@ -309,7 +312,11 @@ describe("toolset assembly by fleet capabilities", () => {
       setRunnerManifest(
         K8S_TOKEN,
         kubernetesManifest("k8s-host", [
-          kubernetesWorkload(K8S_SERVICE.namespace, K8S_SERVICE.workload),
+          kubernetesWorkload(
+            "toolset-k8s-001",
+            K8S_SERVICE.namespace,
+            K8S_SERVICE.workload,
+          ),
         ]),
       );
 
@@ -338,7 +345,7 @@ describe("toolset assembly by fleet capabilities", () => {
               id: "tu-k8s-write-1",
               name: "RestartK8sWorkload",
               input: {
-                target: "kubernetes/production/api-server",
+                target: "toolset-k8s-001/production/api-server",
                 reason: "K8s workload wedged",
                 risk: "low",
                 estimatedDowntimeSeconds: 10,

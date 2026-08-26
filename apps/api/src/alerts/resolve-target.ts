@@ -1,5 +1,6 @@
 import {
   composeServiceLabels,
+  parseTargetKey,
   type DockerFleetRunner,
   type DockerServiceIdentity,
   type FleetRunner,
@@ -8,22 +9,10 @@ import {
   type KubernetesWorkloadIdentity,
 } from "@nightwarden/shared";
 
-// Resolved names the key to act on, ambiguous the runners to choose between,
-// unresolved the raw labels that formatAlert renders in full.
+// Resolved names every key to act on - one per server running the service that
+// matched - and unresolved the raw labels that formatAlert renders in full.
 type AlertResolution =
-  | {
-      kind: "resolved";
-      identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
-      key: string;
-    }
-  | { kind: "ambiguous"; key: string; runners: string[] }
-  | { kind: "unresolved" };
-
-interface Match {
-  key: string;
-  identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
-  runner: string;
-}
+  { kind: "resolved"; keys: string[] } | { kind: "unresolved" };
 
 // Walks what the fleet advertises and asks whether these labels describe it.
 // The other direction mints keys nothing advertises, each needing an answer.
@@ -33,56 +22,47 @@ export function resolveAlertTarget(
 ): AlertResolution {
   // Partitioned by platform, so no matcher has to ask what it was handed. The
   // labels reach both, which is why each keeps its own precondition.
-  const matches: Match[] = [];
+  const keys: string[] = [];
   for (const runner of fleet) {
-    matches.push(
+    keys.push(
       ...(runner.platform === "docker"
         ? dockerMatches(labels, runner)
         : kubernetesMatches(labels, runner)),
     );
   }
 
-  const keys = new Set(matches.map((m) => m.key));
+  // Compared without the server segment, so the same service on two machines is
+  // one candidate with two addresses rather than two rival candidates.
+  const services = new Set(keys.map(serviceOf));
   // More than one distinct service, or none: no candidate outranks another, so we
   // say nothing rather than pick. The agent has every label and a list tool.
-  if (keys.size !== 1) return { kind: "unresolved" };
+  if (services.size !== 1) return { kind: "unresolved" };
 
-  const first = matches[0]!;
-  const runners = [...new Set(matches.map((m) => m.runner))];
-  if (runners.length > 1) {
-    return { kind: "ambiguous", key: first.key, runners };
-  }
-  return { kind: "resolved", identity: first.identity, key: first.key };
+  return { kind: "resolved", keys: [...new Set(keys)] };
 }
 
-function runnerName(runner: FleetRunner): string {
-  return runner.serverName ?? runner.hostname;
+// The key minus its server, which is what "the same service" means across a fleet.
+function serviceOf(key: string): string {
+  const parsed = parseTargetKey(key);
+  return parsed === null ? key : `${parsed.scope}/${parsed.name}`;
 }
 
 function dockerMatches(
   labels: Record<string, string>,
   runner: DockerFleetRunner,
-): Match[] {
+): string[] {
   return runner.services
     .filter((entry) => describesDockerService(labels, entry.identity))
-    .map((entry) => ({
-      key: entry.target,
-      identity: entry.identity,
-      runner: runnerName(runner),
-    }));
+    .map((entry) => entry.target);
 }
 
 function kubernetesMatches(
   labels: Record<string, string>,
   runner: KubernetesFleetRunner,
-): Match[] {
+): string[] {
   return runner.services
     .filter((entry) => describesK8sWorkload(labels, entry.identity, entry.kind))
-    .map((entry) => ({
-      key: entry.target,
-      identity: entry.identity,
-      runner: runnerName(runner),
-    }));
+    .map((entry) => entry.target);
 }
 
 function describesDockerService(

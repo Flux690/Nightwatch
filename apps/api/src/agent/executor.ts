@@ -43,7 +43,7 @@ function runnerFailureMessage(
     return `${name} found nothing to read: ${msg}. That is an answer, not a fault - the service is not running there. Confirm it with a list tool before concluding, and say so if it is the finding.`;
   }
   if (toolOutcome === "retryable") {
-    return `${name} could not reach the runner it needs: ${msg}. Nothing was read, so this says nothing about the service. Try again, or work from what another tool can tell you.`;
+    return `${name} could not reach the server it needs: ${msg}. Nothing was read, so this says nothing about the service. Try again, or work from what another tool can tell you.`;
   }
   return `${name} failed: ${msg}. Nothing was read, so draw no conclusion from it. Check the arguments against the tool's description, and if they were right, this is a fault rather than a finding.`;
 }
@@ -66,8 +66,8 @@ export async function executeRunnerTool(
       tool.platform,
       ctx.toolTimeoutMs,
     );
-    // A fan-out has three answers, not two: every runner answered, some did, or
-    // none did. Each runner's own reason rides in the envelope either way.
+    // A fan-out has three answers, not two: every server answered, some did, or
+    // none did. Each server's own reason rides in the envelope either way.
     if (failed === 0) return { content: envelope };
     return succeeded > 0
       ? { content: envelope, toolOutcome: "partial" }

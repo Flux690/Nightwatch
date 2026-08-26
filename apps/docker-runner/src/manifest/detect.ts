@@ -8,6 +8,7 @@ import {
 } from "@nightwarden/shared";
 import { getDocker, listVisibleContainers } from "../docker/client.js";
 import { PROC_PATH } from "../commands/host.js";
+import { serverName } from "../identity.js";
 
 // The root package.json version, inlined at build time. "dev" under tsx, which
 // runs from source and so has no build step to inline anything.
@@ -44,6 +45,7 @@ async function detectHostname(): Promise<string> {
 }
 
 async function listServices(): Promise<DockerServiceEntry[]> {
+  const server = serverName();
   const docker = getDocker();
   // `all: true` so a service whose only container is currently stopped is still advertised - otherwise
   // routing would reject the call before the runner ever gets to JIT-resolve it and report a clean finding.
@@ -52,7 +54,7 @@ async function listServices(): Promise<DockerServiceEntry[]> {
   for (const c of list) {
     const name = (c.Names[0] ?? "").replace(/^\//, "");
     const identity = deriveDockerServiceIdentity(c.Labels, name);
-    const target = dockerServiceKey(identity);
+    const target = dockerServiceKey(server, identity);
     const existing = byKey.get(target);
     // Prefer "running" over any stopped state when multiple containers share an identity (e.g. scaled
     // Compose replicas or a restarted container that left a stopped predecessor in the list).

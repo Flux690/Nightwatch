@@ -4,30 +4,57 @@ import {
   deriveDockerServiceIdentity,
   dockerServiceKey,
   kubernetesWorkloadKey,
+  parseTargetKey,
 } from "../service-identity.js";
 
 describe("target keys", () => {
-  it("produces docker/<project>/<service>", () => {
-    expect(dockerServiceKey({ project: "myapp", service: "postgres" })).toBe(
-      "docker/myapp/postgres",
-    );
+  it("produces <server>/<project>/<service>", () => {
+    expect(
+      dockerServiceKey("web-01", { project: "myapp", service: "postgres" }),
+    ).toBe("web-01/myapp/postgres");
   });
 
-  it("produces kubernetes/<namespace>/<workload>", () => {
+  it("produces <server>/<namespace>/<workload>", () => {
     expect(
-      kubernetesWorkloadKey({
+      kubernetesWorkloadKey("prod-cluster", {
         namespace: "production",
         workload: "api-server",
       }),
-    ).toBe("kubernetes/production/api-server");
+    ).toBe("prod-cluster/production/api-server");
   });
 
   it("the container sub-selector is excluded, so calls differing only by container address one workload", () => {
     const base = { namespace: "shop", workload: "api" };
-    expect(kubernetesWorkloadKey({ ...base, container: "sidecar" })).toBe(
-      kubernetesWorkloadKey(base),
+    expect(kubernetesWorkloadKey("c", { ...base, container: "sidecar" })).toBe(
+      kubernetesWorkloadKey("c", base),
     );
   });
+
+  // The same service on two machines is two keys, which is the whole point of
+  // the server segment: one key can never mean two containers.
+  it("distinguishes the same service on two servers", () => {
+    const id = { project: "encodr", service: "cache" };
+    expect(dockerServiceKey("prod-1", id)).not.toBe(
+      dockerServiceKey("prod-2", id),
+    );
+  });
+});
+
+describe("parseTargetKey", () => {
+  it("splits a key into the server, the scope and the name", () => {
+    expect(parseTargetKey("web-01/shop/api")).toEqual({
+      server: "web-01",
+      scope: "shop",
+      name: "api",
+    });
+  });
+
+  it.each(["", "web-01", "web-01/shop", "web-01/shop/api/extra", "//api"])(
+    "refuses %o, which is not three non-empty segments",
+    (bad) => {
+      expect(parseTargetKey(bad)).toBeNull();
+    },
+  );
 });
 
 describe("composeServiceLabels", () => {

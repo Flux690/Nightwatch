@@ -7,7 +7,7 @@ import { CodeBlock } from "@/shared/ui/code-block";
 import { Textarea } from "@/shared/ui/textarea";
 import { SECTION_HEADING } from "@/shared/ui/Page";
 import type { ToolCallItem } from "./types.js";
-import { SHELL_TOOLS } from "./toolPresentation.js";
+import { SHELL_TOOLS, targetOf } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
 import { InterruptCard } from "./InterruptCard.js";
 
@@ -29,15 +29,6 @@ function commandOf(input: Record<string, unknown>): string | null {
   if (Array.isArray(command))
     return command.map((part) => String(part)).join(" ");
   return typeof command === "string" ? command : null;
-}
-
-function serviceOf(input: Record<string, unknown>): string | null {
-  const target = input["target"];
-  if (typeof target === "string") {
-    const parts = target.split("/");
-    return parts[parts.length - 1] ?? target;
-  }
-  return inputString(input, "server");
 }
 
 // The three levels the schema asks for read as a sentence; anything else is
@@ -64,7 +55,7 @@ function ordinal(n: number): string {
 // A verb and its object beat "Approve": a generic label is the one users learn
 // to click without reading. Derived from the tool, so it cannot overstate.
 function actionLabel(toolName: string, input: Record<string, unknown>): string {
-  const service = serviceOf(input);
+  const service = targetOf(input);
   if (isTool(toolName, "RestartDockerService", "RestartK8sWorkload")) {
     return service ? `Restart ${service}` : "Restart service";
   }
@@ -88,7 +79,7 @@ export function ApprovalCardPanel({
 
   const { input } = item;
   const command = commandOf(input);
-  const service = serviceOf(input);
+  const service = targetOf(input);
   // The one part of this card the agent authors. Required on every write tool,
   // so it is absent only on a row written before that was true.
   const why = inputString(input, "reason");

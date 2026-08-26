@@ -12,11 +12,7 @@ import {
 import { initSecrets } from "../secrets.js";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type {
-  DockerServiceIdentity,
-  RunnerManifest,
-  RunnerCommandMessage,
-} from "@nightwarden/shared";
+import type { RunnerManifest, RunnerCommandMessage } from "@nightwarden/shared";
 
 // Stateful scripted provider — same pattern as approval-cycle.test.ts so the
 // loop runs against a deterministic turn sequence without a real LLM.
@@ -58,6 +54,7 @@ import {
   kubernetesManifest,
   kubernetesWorkload,
   manifest,
+  svc,
 } from "./manifest-helper.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -66,23 +63,23 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
-// Anonymous-container convention (no Compose labels): project === service === name.
-function svc(name: string): DockerServiceIdentity {
-  return { project: name, service: name };
-}
-
-function makeManifest(hostname: string, containers: string[]): RunnerManifest {
-  return manifest(hostname, containers.map(dockerService));
+// The server name doubles as the hostname here: this file is about where a
+// command lands, and router.test.ts is where the two are told apart.
+function makeManifest(server: string, containers: string[]): RunnerManifest {
+  return manifest(
+    server,
+    containers.map((name) => dockerService(server, name)),
+  );
 }
 
 function makeK8sManifest(
-  hostname: string,
+  server: string,
   workloads: Array<{ workload: string; namespace: string }>,
 ): RunnerManifest {
   return kubernetesManifest(
-    hostname,
+    server,
     workloads.map(({ workload, namespace }) =>
-      kubernetesWorkload(namespace, workload),
+      kubernetesWorkload(server, namespace, workload),
     ),
   );
 }
@@ -96,6 +93,7 @@ function makeSend(
 ) {
   return (raw: string) => {
     const msg = JSON.parse(raw) as RunnerCommandMessage;
+    if (msg.type !== "command") return;
     const { commandName, commandInput, correlationId } = msg.payload;
     log.push({ commandName, commandInput });
     if (runnerError !== null) {
@@ -150,13 +148,14 @@ describe("multi-runner routing", () => {
     initSecrets();
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    runnerIdA = generateRunnerToken("docker", "routing-a").id;
-    runnerIdB = generateRunnerToken("docker", "routing-b").id;
+    runnerIdA = generateRunnerToken("docker", "web-01").id;
+    runnerIdB = generateRunnerToken("docker", "db-02").id;
 
     conns.push(
       registerRunner({
         runnerId: runnerIdA,
         platform: "docker",
+        serverName: "web-01",
         send: makeSend(commandsA),
         close: () => {},
       }),
@@ -167,28 +166,31 @@ describe("multi-runner routing", () => {
       registerRunner({
         runnerId: runnerIdB,
         platform: "docker",
+        serverName: "db-02",
         send: makeSend(commandsB),
         close: () => {},
       }),
     );
     setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
-    runnerId2 = generateRunnerToken("docker", "routing-cross").id;
+    runnerId2 = generateRunnerToken("docker", "cache-01").id;
     conns.push(
       registerRunner({
         runnerId: runnerId2,
         platform: "docker",
+        serverName: "cache-01",
         send: makeSend(commandsC),
         close: () => {},
       }),
     );
     setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
 
-    runnerIdK = generateRunnerToken("kubernetes", "routing-k8s").id;
+    runnerIdK = generateRunnerToken("kubernetes", "k8s-cluster-01").id;
     conns.push(
       registerRunner({
         runnerId: runnerIdK,
         platform: "kubernetes",
+        serverName: "k8s-cluster-01",
         send: makeSend(commandsK),
         close: () => {},
       }),
@@ -246,7 +248,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-1",
             name: "GetDockerLogs",
-            input: { target: "docker/postgres/postgres" },
+            input: { target: "db-02/postgres/postgres" },
           },
         ],
       },
@@ -268,7 +270,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-2",
             name: "GetDockerStats",
-            input: { target: "docker/nginx/nginx" },
+            input: { target: "web-01/nginx/nginx" },
           },
         ],
       },
@@ -290,7 +292,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-3",
             name: "GetDockerLogs",
-            input: { target: "docker/ghost-svc/ghost-svc" },
+            input: { target: "web-01/ghost-svc/ghost-svc" },
           },
         ],
       },
@@ -323,7 +325,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-missing",
             name: "GetDockerLogs",
-            input: { target: "docker/nginx/nginx" },
+            input: { target: "web-01/nginx/nginx" },
           },
         ],
       },
@@ -351,7 +353,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-4",
             name: "GetHostMemory",
-            input: { runner: "db-02" },
+            input: { server: "db-02" },
           },
         ],
       },
@@ -383,7 +385,7 @@ describe("multi-runner routing", () => {
     // Each answer is attributed, so the model can tell which host is the sick one.
     const messages = getTranscriptRows(sessionId);
     const result = messages.find(
-      (m) => m.kind === "user" && m.content.includes("byRunner"),
+      (m) => m.kind === "user" && m.content.includes("byServer"),
     );
     expect(result?.content).toMatch(/web-01/);
     expect(result?.content).toMatch(/db-02/);
@@ -398,7 +400,7 @@ describe("multi-runner routing", () => {
             id: "tu-restart",
             name: "RestartDockerService",
             input: {
-              target: "docker/postgres/postgres",
+              target: "db-02/postgres/postgres",
               reason: "OOM killed",
               risk: "low",
               estimatedDowntimeSeconds: 5,
@@ -472,7 +474,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-cross",
             name: "GetDockerLogs",
-            input: { target: "docker/redis/redis" },
+            input: { target: "cache-01/redis/redis" },
           },
         ],
       },
@@ -495,7 +497,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-k8s",
             name: "GetK8sLogs",
-            input: { target: "kubernetes/production/api-server" },
+            input: { target: "k8s-cluster-01/production/api-server" },
           },
         ],
       },

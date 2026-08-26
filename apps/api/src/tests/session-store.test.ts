@@ -405,7 +405,7 @@ describe("API-local session store", () => {
               type: "tool_call",
               id: "tu-exec",
               name: "RestartDockerService",
-              input: { target: "docker/app/web" },
+              input: { target: "prod-1/app/web" },
             },
             { type: "tool_result", toolCallId: "tu-exec", output: "ok" },
           ],

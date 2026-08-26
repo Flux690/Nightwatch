@@ -4,6 +4,7 @@ import type {
   FleetRunner,
   HideContainerMessage,
   Platform,
+  RunnerIdentityMessage,
   RunnerManifest,
 } from "@nightwarden/shared";
 
@@ -15,9 +16,9 @@ export interface RunnerConnection {
   // Read from the runner's row at authentication, so it is known before any
   // manifest arrives and cannot be contradicted by what the runner reports.
   platform: Platform;
-  // User-assigned server name (unique by DB constraint) — the model-visible
-  // address for host routing. Null for legacy tokens minted without one.
-  serverName: string | null;
+  // User-assigned server name (unique by DB constraint) - the model-visible
+  // address, and the first segment of every target key this runner advertises.
+  serverName: string;
   send: (msg: string) => void;
   close: () => void;
   manifest: RunnerManifest | null;
@@ -28,7 +29,7 @@ export interface RunnerConnection {
 interface RunnerView {
   runnerId: string;
   platform: Platform;
-  serverName: string | null;
+  serverName: string;
   hostname: string | null;
   manifest: RunnerManifest | null;
   lastSeen: number;
@@ -39,15 +40,9 @@ const connectionsByRunnerId = new Map<string, RunnerConnection>();
 
 export class RunnerOfflineError extends Error {
   constructor() {
-    super("No runner is connected for this deployment");
+    super("No server is connected for this deployment");
     this.name = "RunnerOfflineError";
   }
-}
-
-// The name the model addresses this server by: the user-assigned name,
-// falling back to the self-reported OS hostname only for legacy unnamed tokens.
-export function addressName(conn: RunnerConnection): string | null {
-  return conn.serverName ?? conn.hostname;
 }
 
 interface RunnerRegistration {
@@ -55,7 +50,7 @@ interface RunnerRegistration {
   platform: Platform;
   send: (msg: string) => void;
   close: () => void;
-  serverName?: string | null;
+  serverName: string;
 }
 
 export function registerRunner({
@@ -63,7 +58,7 @@ export function registerRunner({
   platform,
   send,
   close,
-  serverName = null,
+  serverName,
 }: RunnerRegistration): RunnerConnection {
   // A reconnect can beat the old socket's close event; displace the stale
   // socket loudly instead of trusting close ordering.
@@ -79,6 +74,7 @@ export function registerRunner({
     lastSeen: Date.now(),
   };
   connectionsByRunnerId.set(runnerId, conn);
+  pushIdentity(conn);
   pushHiddenContainer(conn);
   return conn;
 }
@@ -140,7 +136,7 @@ export function getFleetView(): FleetRunner[] {
     if (!manifest) continue;
     const base = {
       runnerId: conn.runnerId,
-      serverName: addressName(conn),
+      serverName: conn.serverName,
       hostname: manifest.hostname,
       online: now - conn.lastSeen < LIVENESS_TTL_MS,
       lastSeen: conn.lastSeen,
@@ -154,6 +150,17 @@ export function getFleetView(): FleetRunner[] {
     );
   }
   return views;
+}
+
+// Sent before anything else: the runner cannot build a target key until it knows
+// the name those keys are prefixed with, so it holds its manifest back until this.
+function pushIdentity(conn: RunnerConnection): void {
+  const msg: RunnerIdentityMessage = {
+    messageId: randomUUID(),
+    type: "identity",
+    payload: { serverName: conn.serverName },
+  };
+  conn.send(JSON.stringify(msg));
 }
 
 // Anchored on the containers path, because mountinfo also lists overlay layer

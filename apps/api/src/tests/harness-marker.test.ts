@@ -145,7 +145,7 @@ describe("the marker the harness speaks by", () => {
           {
             id: "tu-logs-1",
             name: "GetDockerLogs",
-            input: { target: "docker/web-01/web-01" },
+            input: { target: "marker-host/web-01/web-01" },
           },
         ],
       },

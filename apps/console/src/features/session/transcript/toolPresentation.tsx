@@ -13,7 +13,7 @@ import {
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/shared/lib/utils";
 import { clock, dayClock, zoneName } from "@/shared/lib/time";
-import { isTool } from "@nightwarden/shared";
+import { isTool, parseTargetKey } from "@nightwarden/shared";
 import type { ToolName } from "@nightwarden/shared";
 import { asRecord, stringAt as inputString } from "@/shared/lib/toolResult";
 import type {
@@ -38,13 +38,12 @@ export const SHELL_TOOLS: readonly ToolName[] = [
   "Bash",
 ];
 
-// Fleet tools address a service by target key; host tools name a server. Shared
-// with the report, so a cited call names its target the same way there.
+// Service tools address one service by target key; server tools name a server.
+// Shared with the report, so a cited call names its target the same way there.
 export function targetOf(input: Record<string, unknown>): string | null {
   const target = input["target"];
   if (typeof target === "string") {
-    const parts = target.split("/");
-    return parts[parts.length - 1] ?? target;
+    return parseTargetKey(target)?.name ?? target;
   }
   return inputString(input, "server");
 }

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   RunnerManifest,
   RunnerCommandMessage,
+  RunnerIdentityMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
   HideContainerMessage,
@@ -25,6 +26,9 @@ export interface TransportOptions {
   dispatch: Map<string, CommandHandler>;
   buildManifest: () => Promise<RunnerManifest>;
   logger: TransportLogger;
+  // The name this runner is addressed by, which the API sends before the manifest
+  // goes out because every target key in that manifest is prefixed with it.
+  onIdentity: (serverName: string) => void;
   // Docker only: the API naming its own container so the runner can keep the
   // control plane out of what it enumerates.
   onHideContainer?: (containerId: string) => void;
@@ -42,6 +46,10 @@ const MANIFEST_REFRESH_INTERVAL_MS = 30_000;
 // its own, so silence from the API is the only reliable death signal here.
 const PING_WATCHDOG_MS = 90_000;
 
+// The API sends identity on registration, so this only expires against an API
+// too old to send one. Reconnecting beats advertising unprefixed keys.
+const IDENTITY_TIMEOUT_MS = 10_000;
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -57,13 +65,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function startWebSocketClient(options: TransportOptions): () => void {
-  const { wsUrl, token, dispatch, buildManifest, logger, onHideContainer } =
-    options;
+  const {
+    wsUrl,
+    token,
+    dispatch,
+    buildManifest,
+    logger,
+    onIdentity,
+    onHideContainer,
+  } = options;
 
   let ws: WebSocket | null = null;
   let retryCount = 0;
   let manifestTimer: ReturnType<typeof setInterval> | null = null;
   let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  let identityTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
@@ -79,6 +95,24 @@ export function startWebSocketClient(options: TransportOptions): () => void {
       clearTimeout(watchdogTimer);
       watchdogTimer = null;
     }
+  }
+
+  function clearIdentityWatchdog(): void {
+    if (identityTimer) {
+      clearTimeout(identityTimer);
+      identityTimer = null;
+    }
+  }
+
+  function armIdentityWatchdog(socket: WebSocket): void {
+    clearIdentityWatchdog();
+    identityTimer = setTimeout(() => {
+      logger.warn(
+        { timeoutMs: IDENTITY_TIMEOUT_MS },
+        "no identity from API; terminating socket to force reconnect",
+      );
+      socket.terminate();
+    }, IDENTITY_TIMEOUT_MS);
   }
 
   function armWatchdog(socket: WebSocket): void {
@@ -176,10 +210,9 @@ export function startWebSocketClient(options: TransportOptions): () => void {
 
     ws.on("open", () => {
       logger.info({}, "ws connected");
-      sendManifest(ws!).catch((err: unknown) =>
-        logger.error({ err }, "manifest send failed"),
-      );
-      startManifestRefresh(ws!);
+      // The manifest waits for identity: every target key in it is prefixed with
+      // the name the API is about to send.
+      armIdentityWatchdog(ws!);
       // Armed on open so a connection that never gets pinged is also detected.
       armWatchdog(ws!);
     });
@@ -199,7 +232,19 @@ export function startWebSocketClient(options: TransportOptions): () => void {
         return;
       }
 
-      if (parsed["type"] === "command") {
+      if (parsed["type"] === "identity") {
+        const msg = parsed as unknown as RunnerIdentityMessage;
+        clearIdentityWatchdog();
+        onIdentity(msg.payload.serverName);
+        logger.info(
+          { serverName: msg.payload.serverName },
+          "identity received",
+        );
+        sendManifest(ws!).catch((err: unknown) =>
+          logger.error({ err }, "manifest send failed"),
+        );
+        startManifestRefresh(ws!);
+      } else if (parsed["type"] === "command") {
         handleCommand(ws!, parsed as unknown as RunnerCommandMessage).catch(
           (err: unknown) => logger.error({ err }, "command handler error"),
         );
@@ -212,6 +257,7 @@ export function startWebSocketClient(options: TransportOptions): () => void {
     ws.on("close", (code) => {
       clearManifestRefresh();
       clearWatchdog();
+      clearIdentityWatchdog();
       if (stopped) return;
       logger.warn({ code }, "ws closed");
       scheduleReconnect();
@@ -232,6 +278,7 @@ export function startWebSocketClient(options: TransportOptions): () => void {
     stopped = true;
     clearManifestRefresh();
     clearWatchdog();
+    clearIdentityWatchdog();
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;

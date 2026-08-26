@@ -77,7 +77,7 @@ const ALERTMANAGER_BODY = {
 
 // The anonymous Docker fallback identity every body in this file resolves to
 // (no Compose labels, just `container: "web-01"`).
-const WEB_01_SERVICE = dockerService("web-01");
+const WEB_01_SERVICE = dockerService("host-a", "web-01");
 
 describe("POST /alerts/ingest auth", () => {
   let server: FastifyInstance;
@@ -94,6 +94,7 @@ describe("POST /alerts/ingest auth", () => {
     connAuth = registerRunner({
       runnerId: "auth-test-runner-token",
       platform: "docker",
+      serverName: "auth-host",
       send: () => {},
       close: () => {},
     });
@@ -303,6 +304,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connA = registerRunner({
       runnerId: "runner-a-token",
       platform: "docker",
+      serverName: "host-a",
       send: () => {},
       close: () => {},
     });
@@ -325,6 +327,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connA = registerRunner({
       runnerId: "runner-a-token",
       platform: "docker",
+      serverName: "host-a",
       send: () => {},
       close: () => {},
     });
@@ -332,6 +335,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connB = registerRunner({
       runnerId: "runner-b-token",
       platform: "docker",
+      serverName: "host-b",
       send: () => {},
       close: () => {},
     });
@@ -353,6 +357,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connA = registerRunner({
       runnerId: "runner-a-token",
       platform: "docker",
+      serverName: "host-a",
       send: () => {},
       close: () => {},
     });
@@ -377,6 +382,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connA = registerRunner({
       runnerId: "runner-a-token",
       platform: "docker",
+      serverName: "host-a",
       send: () => {},
       close: () => {},
     });
@@ -384,6 +390,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     connB = registerRunner({
       runnerId: "runner-b-token",
       platform: "docker",
+      serverName: "host-b",
       send: () => {},
       close: () => {},
     });

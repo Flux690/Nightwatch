@@ -3,6 +3,7 @@ import { startWebSocketClient } from "@nightwarden/runner-transport";
 import { createDispatchRegistry } from "./commands/registry.js";
 import { buildDockerManifest } from "./manifest/detect.js";
 import { hideContainer } from "./docker/client.js";
+import { setServerName } from "./identity.js";
 import { logger } from "./logger.js";
 
 const token = process.env["NIGHTWARDEN_TOKEN"];
@@ -23,6 +24,7 @@ const stopWebSocketClient = startWebSocketClient({
   dispatch: createDispatchRegistry(),
   buildManifest: buildDockerManifest,
   logger,
+  onIdentity: setServerName,
   onHideContainer: hideContainer,
 });
 logger.info("docker runner started");

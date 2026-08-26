@@ -20,7 +20,7 @@ const WEB_RUNNER: RunnerRecord = {
   id: "token-abc123",
   token: "token-abc123",
   platform: "docker" as const,
-  serverName: null,
+  serverName: "web-01",
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
   online: true,
@@ -32,12 +32,12 @@ const WEB_RUNNER: RunnerRecord = {
     services: [
       {
         identity: { project: "nginx", service: "nginx" },
-        target: "docker/nginx/nginx",
+        target: "web-01/nginx/nginx",
         status: "running",
       },
       {
         identity: { project: "api", service: "api" },
-        target: "docker/api/api",
+        target: "web-01/api/api",
         status: "running",
       },
     ],
@@ -123,8 +123,8 @@ describe("RunnerListPage", () => {
 
       // A row clipped this to its first key; the user needs the whole list,
       // since these are exactly what an alert's labels have to match.
-      expect(await screen.findByText("docker/nginx/nginx")).toBeInTheDocument();
-      expect(screen.getByText("docker/api/api")).toBeInTheDocument();
+      expect(await screen.findByText("web-01/nginx/nginx")).toBeInTheDocument();
+      expect(screen.getByText("web-01/api/api")).toBeInTheDocument();
     });
   });
 

@@ -9,7 +9,7 @@ type RunnerRow = {
   tokenHash: string;
   platform: Platform;
   label: string | null;
-  serverName: string | null;
+  serverName: string;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -19,7 +19,7 @@ type RunnerMeta = {
   id: string;
   platform: Platform;
   label: string | null;
-  serverName: string | null;
+  serverName: string;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -28,12 +28,12 @@ export function hashToken(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-// The plaintext is returned once and only its hash stored. platform has no
-// default: a runner not knowing what it is at mint time is the bug.
+// The plaintext is returned once and only its hash stored. Neither platform nor
+// serverName defaults: a runner not knowing what or where it is at mint is the bug.
 export function generateRunnerToken(
   platform: Platform,
+  serverName: string,
   label?: string,
-  serverName?: string,
 ): { plaintext: string } & RunnerMeta {
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
@@ -43,11 +43,9 @@ export function generateRunnerToken(
   const mint = db.transaction(() => {
     // A row with this server_name that never connected is an orphan from an
     // aborted setup - free it. A connected row is real, left for the UNIQUE 409.
-    if (serverName !== undefined) {
-      db.prepare(
-        `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
-      ).run(serverName);
-    }
+    db.prepare(
+      `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
+    ).run(serverName);
     db.prepare(
       `INSERT INTO runner (id, token, platform, label, server_name, created_at)
        VALUES (@id, @tokenHash, @platform, @label, @serverName, @createdAt)`,
@@ -56,7 +54,7 @@ export function generateRunnerToken(
       tokenHash: hashToken(plaintext),
       platform,
       label: label ?? null,
-      serverName: serverName ?? null,
+      serverName,
       createdAt,
     });
   });
@@ -67,7 +65,7 @@ export function generateRunnerToken(
     id,
     platform,
     label: label ?? null,
-    serverName: serverName ?? null,
+    serverName,
     createdAt,
     lastUsedAt: null,
   };
@@ -111,7 +109,7 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
     tokenHash: text(raw, "tokenHash"),
     platform,
     label: nullableText(raw, "label"),
-    serverName: nullableText(raw, "serverName"),
+    serverName: text(raw, "serverName"),
     createdAt: text(raw, "createdAt"),
     lastUsedAt: nullableText(raw, "lastUsedAt"),
   };

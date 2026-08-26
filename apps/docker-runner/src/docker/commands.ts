@@ -21,6 +21,7 @@ import {
   type DockerStatsResult,
   type NotFoundResult,
 } from "@nightwarden/shared";
+import { serverName } from "../identity.js";
 import { getDocker, listVisibleContainers, parseDockerMux } from "./client.js";
 import { noContainerResult, resolveService } from "./resolve-service.js";
 import { sanitize, sanitizeLines } from "@nightwarden/runner-transport";
@@ -40,7 +41,7 @@ export async function getContainerList(): Promise<DockerServiceListResult> {
     return {
       name,
       id: c.Id.slice(0, 12),
-      target: dockerServiceKey(identity),
+      target: dockerServiceKey(serverName(), identity),
       image,
       imageTag: image.includes(":")
         ? (image.split(":")[1] ?? "latest")

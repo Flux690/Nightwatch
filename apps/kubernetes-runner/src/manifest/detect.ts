@@ -6,6 +6,7 @@ import {
   type KubernetesWorkloadEntry,
 } from "@nightwarden/shared";
 import { getAppsV1Api } from "../kubernetes/client.js";
+import { serverName } from "../identity.js";
 
 // The root package.json version, inlined at build time. "dev" under tsx, which
 // runs from source and so has no build step to inline anything.
@@ -25,6 +26,7 @@ export async function buildKubernetesManifest(): Promise<KubernetesManifest> {
 }
 
 async function listWorkloads(): Promise<KubernetesWorkloadEntry[]> {
+  const server = serverName();
   const appsApi = getAppsV1Api();
   const [deployments, statefulSets, daemonSets] = await Promise.all([
     appsApi.listDeploymentForAllNamespaces(),
@@ -58,7 +60,7 @@ async function listWorkloads(): Promise<KubernetesWorkloadEntry[]> {
       const identity = { namespace, workload };
       byKey.set(`${namespace}/${workload}`, {
         identity,
-        target: kubernetesWorkloadKey(identity),
+        target: kubernetesWorkloadKey(server, identity),
         status: ready ? "running" : "stopped",
         kind,
       });

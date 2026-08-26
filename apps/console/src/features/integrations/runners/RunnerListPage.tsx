@@ -12,10 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import {
-  ServerCard,
-  runnerDisplayName,
-} from "@/features/integrations/runners/ServerCard";
+import { ServerCard } from "@/features/integrations/runners/ServerCard";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 import { Page } from "@/shared/ui/Page";
@@ -71,7 +68,7 @@ function compareRunners(
   let cmp = 0;
   switch (field) {
     case "name":
-      cmp = runnerDisplayName(a).localeCompare(runnerDisplayName(b));
+      cmp = a.serverName.localeCompare(b.serverName);
       break;
     case "status": {
       cmp = (a.online ? 1 : 0) - (b.online ? 1 : 0);
@@ -274,7 +271,7 @@ export function RunnerListPage({
                   variant="outline"
                   size="sm"
                   disabled={removing === runner.token}
-                  aria-label={`Remove ${runnerDisplayName(runner)}`}
+                  aria-label={`Remove ${runner.serverName}`}
                   onClick={() => void handleRemove(runner.token)}
                 >
                   {removing === runner.token && <Spinner className="size-3" />}

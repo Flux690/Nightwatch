@@ -14,6 +14,13 @@ export interface RunnerCommandMessage extends WsEnvelope {
   };
 }
 
+// API → Runner: the name this runner is addressed by. It cannot derive one - its
+// hostname arrives inside the manifest, which is the very thing the name prefixes.
+export interface RunnerIdentityMessage extends WsEnvelope {
+  type: "identity";
+  payload: { serverName: string };
+}
+
 // API → Runner: the API's own container id, so the runner can keep the control
 // plane out of everything it enumerates. Absent when the API is not containerized.
 export interface HideContainerMessage extends WsEnvelope {

@@ -39,8 +39,21 @@ function options(port: number, over: Partial<TransportOptions> = {}) {
     dispatch: new Map(),
     buildManifest: () => Promise.resolve(MANIFEST),
     logger: silentLogger,
+    onIdentity: () => {},
     ...over,
   };
+}
+
+// What the API does on registration. Nothing else the client sends is expected
+// before this arrives, so every case that wants a live runner has to send it.
+function sendIdentity(socket: WebSocket, serverName = "web-01"): void {
+  socket.send(
+    JSON.stringify({
+      messageId: "id-1",
+      type: "identity",
+      payload: { serverName },
+    }),
+  );
 }
 
 describe("runner WS client", () => {
@@ -51,20 +64,95 @@ describe("runner WS client", () => {
   describe("the manifest it advertises", () => {
     // The transport is handed a builder rather than importing one, which is what
     // lets the same client carry a Docker runner and a Kubernetes runner.
-    it("sends whatever manifest its builder returns, on connect", async () => {
+    it("sends whatever manifest its builder returns, once identity arrives", async () => {
       const { wss, port } = await listen();
       const connected = nextConnection(wss);
       const stop = startWebSocketClient(options(port));
       try {
         const serverSocket = await connected;
-        const message = await new Promise<string>((resolve) => {
+        const message = new Promise<string>((resolve) => {
           serverSocket.on("message", (raw) => resolve(String(raw)));
         });
-        expect(JSON.parse(message)).toMatchObject({
+        sendIdentity(serverSocket);
+        expect(JSON.parse(await message)).toMatchObject({
           type: "manifest",
           payload: { platform: "docker", hostname: "test-host" },
         });
       } finally {
+        stop();
+        wss.close();
+      }
+    });
+
+    // Every target key in the manifest is prefixed with the name, so a manifest
+    // built before it arrives would advertise addresses nothing can route.
+    it("sends nothing at all before identity arrives", async () => {
+      const { wss, port } = await listen();
+      const connected = nextConnection(wss);
+      const stop = startWebSocketClient(options(port));
+      try {
+        const serverSocket = await connected;
+        const seen: string[] = [];
+        serverSocket.on("message", (raw) => seen.push(String(raw)));
+        await flushIo();
+        expect(seen).toEqual([]);
+
+        sendIdentity(serverSocket);
+        await vi.waitFor(() => expect(seen).toHaveLength(1));
+        expect(JSON.parse(seen[0]!)).toMatchObject({ type: "manifest" });
+      } finally {
+        stop();
+        wss.close();
+      }
+    });
+
+    it("hands the name to its runner before the manifest goes out", async () => {
+      const { wss, port } = await listen();
+      const connected = nextConnection(wss);
+      const order: string[] = [];
+      const stop = startWebSocketClient(
+        options(port, {
+          onIdentity: (name) => order.push(`identity:${name}`),
+          buildManifest: () => {
+            order.push("manifest");
+            return Promise.resolve(MANIFEST);
+          },
+        }),
+      );
+      try {
+        const serverSocket = await connected;
+        sendIdentity(serverSocket, "db-02");
+        await vi.waitFor(() => expect(order).toHaveLength(2));
+        expect(order).toEqual(["identity:db-02", "manifest"]);
+      } finally {
+        stop();
+        wss.close();
+      }
+    });
+
+    // An API too old to send one would otherwise leave the runner connected and
+    // silent forever, advertising nothing and answering nothing.
+    it("terminates and reconnects when identity never arrives", async () => {
+      const { wss, port } = await listen();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const connected = nextConnection(wss);
+      const stop = startWebSocketClient(options(port));
+      try {
+        const serverSocket = await connected;
+        await flushIo();
+        const closed = new Promise<void>((resolve) => {
+          serverSocket.on("close", () => resolve());
+        });
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        await closed;
+
+        const reconnected = nextConnection(wss);
+        await flushIo();
+        await vi.advanceTimersByTimeAsync(2_000);
+        await reconnected;
+      } finally {
+        vi.useRealTimers();
         stop();
         wss.close();
       }
@@ -203,6 +291,7 @@ describe("runner WS client", () => {
       const stop = startWebSocketClient(options(port));
       try {
         const serverSocket = await connected;
+        sendIdentity(serverSocket);
         await flushIo();
         let closedEarly = false;
         serverSocket.on("close", () => {

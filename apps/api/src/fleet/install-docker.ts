@@ -22,8 +22,8 @@ fi
 # Read-only host access for evidence collection: the Docker socket, host /proc
 # and /sys for metrics (iostat reads sysfs block stats), and the root filesystem
 # for allowlisted file reads. No inbound ports - the runner dials out over WSS.
-# The runner takes its advertised name from /host/proc/sys/kernel/hostname, which
-# is the host's own name however this line was copied.
+# /host/proc also carries the host's own hostname, which the runner reports; the
+# name it is addressed by is the one you gave it here and the API pushes on connect.
 # CAP_SYSLOG is what dmesg needs to read the kernel ring buffer; without it
 # GetHostDmesg fails on every call, which is exactly the OOM-kill evidence an
 # investigation wants. It grants reading kernel messages, nothing else.

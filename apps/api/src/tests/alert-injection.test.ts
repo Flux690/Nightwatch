@@ -25,6 +25,9 @@ import type {
 } from "@nightwarden/shared";
 import Fastify from "fastify";
 import { generateRunnerToken } from "../fleet/runners.js";
+
+// One server for the whole file, so every key here names the same machine.
+const SERVER = "inject-host";
 import { generateAlertSourceToken } from "../integrations/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
@@ -55,7 +58,7 @@ import { mountApi } from "./api-server.js";
 
 // Matches the container:"web-01" label alertmanagerBody() carries.
 function webOneManifest() {
-  return manifest("host-inject-resume", [dockerService("web-01")]);
+  return manifest("host-inject-resume", [dockerService(SERVER, "web-01")]);
 }
 
 // Shared FIFO gate: every chat() parks until released, so an alert can be
@@ -171,8 +174,10 @@ describe("mid-run alert injection (loop seam)", () => {
     const conn = registerRunner({
       runnerId: runnerId,
       platform: "docker",
+      serverName: SERVER,
       send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
+        if (msg.type !== "command") return;
         resolveCommand({
           correlationId: msg.payload.correlationId,
           success: true,
@@ -243,6 +248,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const susConn = registerRunner({
       runnerId: runnerId,
       platform: "docker",
+      serverName: SERVER,
       send: () => {},
       close: () => {},
     });
@@ -257,7 +263,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate",
               name: "RestartDockerService",
               input: {
-                target: "docker/web-01/web-01",
+                target: `${SERVER}/web-01/web-01`,
                 reason: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
@@ -288,7 +294,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const call = findToolCall(sessionId, pending.toolUseId)!;
     expect(call.name).toBe("RestartDockerService");
     expect(call.input).toMatchObject({
-      target: "docker/web-01/web-01",
+      target: `${SERVER}/web-01/web-01`,
       reason: "test",
     });
 
@@ -331,8 +337,10 @@ describe("mid-run alert injection (loop seam)", () => {
     const conn = registerRunner({
       runnerId: runnerId,
       platform: "docker",
+      serverName: SERVER,
       send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
+        if (msg.type !== "command") return;
         resolveCommand({
           correlationId: msg.payload.correlationId,
           success: true,
@@ -353,7 +361,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate-resume",
               name: "RestartDockerService",
               input: {
-                target: "docker/web-01/web-01",
+                target: `${SERVER}/web-01/web-01`,
                 reason: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,

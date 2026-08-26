@@ -30,7 +30,7 @@ const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
   platform: "docker" as const,
-  serverName: null,
+  serverName: "web-01",
   hostname: null,
   createdAt: "2024-01-01T00:00:00Z",
   online: false,
@@ -42,7 +42,7 @@ const CONNECTED_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
   platform: "docker" as const,
-  serverName: null,
+  serverName: "web-01",
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
   online: true,
@@ -261,7 +261,7 @@ describe("AddRunnerPage", () => {
               services: [
                 {
                   identity: { project: "encodr", service: "cache" },
-                  target: "docker/encodr/cache",
+                  target: "prod-1/encodr/cache",
                   status: "running",
                 },
               ],
@@ -271,7 +271,7 @@ describe("AddRunnerPage", () => {
       });
       await advanceToVerify(user);
 
-      expect(screen.getByText("docker/encodr/cache")).toBeInTheDocument();
+      expect(screen.getByText("prod-1/encodr/cache")).toBeInTheDocument();
 
       // Checking the wiring must not start an investigation or spend a token.
       expect(fetchMock).not.toHaveBeenCalledWith(

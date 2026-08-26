@@ -17,6 +17,7 @@ vi.mock("../kubernetes/client.js", () => ({
 }));
 
 import { buildKubernetesManifest } from "../manifest/detect.js";
+import { setServerName } from "../identity.js";
 
 function workload(
   namespace: string,
@@ -26,8 +27,13 @@ function workload(
   return { metadata: { namespace, name }, status: ready };
 }
 
+const SERVER = "prod-cluster";
+
 describe("buildKubernetesManifest", () => {
   beforeEach(() => {
+    // The API pushes this before the manifest is ever asked for, because every
+    // key below is prefixed with it.
+    setServerName(SERVER);
     mockListDeployments.mockResolvedValue({ items: [] });
     mockListStatefulSets.mockResolvedValue({ items: [] });
     mockListDaemonSets.mockResolvedValue({ items: [] });
@@ -52,7 +58,7 @@ describe("buildKubernetesManifest", () => {
     expect(manifest.services).toEqual([
       {
         identity: { namespace: "production", workload: "api-server" },
-        target: "kubernetes/production/api-server",
+        target: `${SERVER}/production/api-server`,
         status: "running",
         kind: "Deployment",
       },

@@ -205,7 +205,7 @@ describe("recovering runs a restart interrupted", () => {
             type: "tool_call",
             id: "tu-gate",
             name: "RestartDockerService",
-            input: { target: "docker/web/api" },
+            input: { target: "prod-1/web/api" },
           },
         ],
       }),

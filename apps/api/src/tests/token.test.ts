@@ -34,7 +34,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const res = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-01" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(201);
@@ -49,7 +49,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const res = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-02" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(res.body) as {
@@ -118,6 +118,21 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.body) as { serverName: string };
       expect(body.serverName).toBe("web-01");
+    });
+
+    // The name is the first segment of every key this runner will advertise, so
+    // a nameless runner has nothing to address its services by.
+    it("returns 400 when serverName is absent", async () => {
+      const res = await nw.server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { platform: "docker" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body)).toMatchObject({
+        error: expect.stringContaining("serverName"),
+      });
     });
 
     it("returns 400 when serverName is empty", async () => {
@@ -192,14 +207,18 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { platform: "docker", label: "list-test" },
+        payload: {
+          platform: "docker",
+          label: "list-test",
+          serverName: "srv-03",
+        },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
 
       const res = await nw.server.inject({
         method: "GET",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-04" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
@@ -213,7 +232,11 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { platform: "docker", label: "to-delete" },
+        payload: {
+          platform: "docker",
+          label: "to-delete",
+          serverName: "srv-05",
+        },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
 
@@ -227,7 +250,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const list = await nw.server.inject({
         method: "GET",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-06" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
@@ -249,7 +272,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-07" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -281,7 +304,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-08" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
@@ -371,7 +394,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-09" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -406,7 +429,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-10" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -447,7 +470,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const list = await nw.server.inject({
         method: "GET",
         url: "/api/tokens",
-        payload: { platform: "docker" },
+        payload: { platform: "docker", serverName: "srv-11" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {

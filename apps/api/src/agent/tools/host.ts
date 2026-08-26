@@ -2,7 +2,7 @@ import type { Tool } from "./types.js";
 
 // A Docker runner is 1:1 with its machine. A Kubernetes runner is one pod on
 // an arbitrary node, so GetK8sNodeStatus answers node health there.
-const RUNNER_PROPERTY = {
+const SERVER_PROPERTY = {
   type: "string",
   description:
     "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
@@ -23,7 +23,7 @@ export const HOST_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { runner: RUNNER_PROPERTY },
+        properties: { server: SERVER_PROPERTY },
         required: [],
       },
     },
@@ -31,7 +31,7 @@ export const HOST_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "metric",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -43,7 +43,7 @@ export const HOST_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { runner: RUNNER_PROPERTY },
+        properties: { server: SERVER_PROPERTY },
         required: [],
       },
     },
@@ -51,7 +51,7 @@ export const HOST_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "metric",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -63,7 +63,7 @@ export const HOST_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { runner: RUNNER_PROPERTY },
+        properties: { server: SERVER_PROPERTY },
         required: [],
       },
     },
@@ -71,7 +71,7 @@ export const HOST_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "metric",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -83,7 +83,7 @@ export const HOST_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: { runner: RUNNER_PROPERTY },
+        properties: { server: SERVER_PROPERTY },
         required: [],
       },
     },
@@ -91,7 +91,7 @@ export const HOST_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "metric",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -115,7 +115,7 @@ export const HOST_TOOLS: Tool[] = [
             description:
               "Which severity to include. Defaults to 'err'. Use 'all' only when the errors alone did not explain what happened.",
           },
-          runner: RUNNER_PROPERTY,
+          server: SERVER_PROPERTY,
         },
         required: [],
       },
@@ -124,7 +124,7 @@ export const HOST_TOOLS: Tool[] = [
     policy: "auto",
     evidenceKind: "logs",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
   {
@@ -145,20 +145,20 @@ export const HOST_TOOLS: Tool[] = [
             type: "number",
             description: "How many lines to return at most. Defaults to 500.",
           },
-          runner: {
+          server: {
             type: "string",
             description:
               "The name of one Docker host, written exactly as the <fleet-summary> block lists it. This is required, because reading a file only makes sense on one named machine.",
           },
         },
-        required: ["path", "runner"],
+        required: ["path", "server"],
       },
     },
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     on: "runner",
-    routeBy: "runner",
+    routeBy: "server",
     platform: "docker",
   },
 ];

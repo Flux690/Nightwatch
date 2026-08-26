@@ -32,6 +32,7 @@ import type {
   K8sWorkloadListResult,
   NotFoundResult,
 } from "@nightwarden/shared";
+import { serverName } from "../identity.js";
 import { getCoreV1Api, getAppsV1Api, getMetrics, getExec } from "./client.js";
 import {
   resolveWorkload,
@@ -774,7 +775,7 @@ function describeInstance(
     name,
     kind,
     namespace,
-    target: kubernetesWorkloadKey({ namespace, workload: name }),
+    target: kubernetesWorkloadKey(serverName(), { namespace, workload: name }),
     uid: obj.metadata?.uid ?? "",
     image,
     imageTag: parseImageTag(image),

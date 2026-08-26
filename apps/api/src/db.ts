@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS runner (
   token          TEXT     NOT NULL UNIQUE,
   platform       TEXT     NOT NULL CHECK (platform IN ('docker', 'kubernetes')),
   label          TEXT,
-  server_name    TEXT     UNIQUE,
+  server_name    TEXT     NOT NULL UNIQUE,
   created_at     TEXT     NOT NULL,
   last_used_at   TEXT
 );
