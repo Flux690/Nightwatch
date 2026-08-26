@@ -1,5 +1,5 @@
-// Two parts, two authors, two moments: the ledger the agent appends to as it
-// works, and the report written once at the end over a ledger already complete.
+// Two parts, two authors, two moments: the hypotheses the agent appends to as
+// it works, and the report written once at the end over a complete set of them.
 
 import type { HumanDecision, ToolOutcome } from "./messages.js";
 
@@ -8,7 +8,7 @@ import type { HumanDecision, ToolOutcome } from "./messages.js";
 export type Verdict =
   "root_cause" | "trigger" | "symptom" | "contributing_factor" | "disproven";
 
-// How well the system can back a claim, computed from the ledger at read time.
+// How well the system can back a claim, computed from the trail at read time.
 // A claim with no resolvable citation earns none of these.
 export type Conviction = "cited" | "corroborated" | "verified";
 
@@ -18,10 +18,13 @@ export interface Hypothesis {
   id: string;
   statement: string;
   verdict: Verdict;
+  // The id of the claim this one replaces, when it replaces one. A link rather
+  // than an edit: the replaced claim stays on the record beside it.
+  supersedes?: string;
   // Why it resolved that way. Deliberately not "reason": since the reason rides
   // the write call, that word means one thing across the whole contract.
   finding: string;
-  // Ledger entry ids, copied verbatim. Ids naming no real call are dropped; the
+  // Evidence ids, copied verbatim. Ids naming no real call are dropped; the
   // claim itself always survives.
   evidenceIds: string[];
   recordedAt: string;
@@ -52,10 +55,23 @@ export function rankHypotheses(hypotheses: Hypothesis[]): Hypothesis[] {
     .map(({ hypothesis }) => hypothesis);
 }
 
+// Every claim another one replaced. They stay on the record and stay rendered;
+// what they lose is the ability to lead.
+export function supersededIds(hypotheses: Hypothesis[]): Set<string> {
+  return new Set(
+    hypotheses.flatMap((h) =>
+      h.supersedes === undefined ? [] : [h.supersedes],
+    ),
+  );
+}
+
 // What the run currently stands behind, or null when it stands behind nothing.
 export function leadingHypothesis(hypotheses: Hypothesis[]): Hypothesis | null {
+  const replaced = supersededIds(hypotheses);
   return (
-    rankHypotheses(hypotheses).find((h) => h.verdict !== "disproven") ?? null
+    rankHypotheses(hypotheses).find(
+      (h) => h.verdict !== "disproven" && !replaced.has(h.id),
+    ) ?? null
   );
 }
 
@@ -85,8 +101,8 @@ export interface TimelineEntry {
   };
 }
 
-// Written in one call over a complete ledger, and it restates none of it: this
-// is the prose the ledger has nowhere to put.
+// Written in one call over complete claims, and it restates none of them: this
+// is the prose they have nowhere to put.
 export interface SubmittedReport {
   // One sentence, the whole answer. `summary` was doing headline and deck at
   // once and was good at neither. Empty on a report written before it existed.
@@ -104,11 +120,13 @@ export interface SubmittedReport {
   submittedAt: string;
 }
 
-export interface Report {
+// Everything one investigation holds, in the two parts above. Named apart from
+// the report inside it, because for a long time one word meant both.
+export interface InvestigationRecord {
   hypotheses: Hypothesis[];
   // Null until the run reaches its composition turn, which several endings
-  // never do: the ledger renders on its own.
-  submitted: SubmittedReport | null;
+  // never do: the hypotheses render without it.
+  report: SubmittedReport | null;
   updatedAt: string;
 }
 
@@ -133,7 +151,7 @@ export interface ResolvedEvidence {
   humanDecision?: HumanDecision;
 }
 
-// Computed from the ledger on every read and never stored, so no tool input can
+// Computed from the trail on every read and never stored, so no tool input can
 // set it. Keyed by hypothesis id; a row absent from it earned no conviction.
 export type ReportConviction = Record<string, Conviction>;
 
@@ -156,10 +174,10 @@ export interface GatedCall {
 }
 
 // The report route's response. Three authors, deliberately: the model writes
-// `report`, the transcript answers `decisions` and `evidence`, the system
+// `record`, the transcript answers `decisions` and `evidence`, the system
 // computes `conviction`.
 export interface SessionReportResponse {
-  report: Report;
+  record: InvestigationRecord;
   decisions: GatedCall[];
   evidence: ResolvedEvidence[];
   conviction: ReportConviction;

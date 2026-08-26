@@ -284,7 +284,7 @@ export function InvestigationRecordPage(): React.JSX.Element {
             )}
           >
             <ReportPanel
-              report={report?.report ?? null}
+              record={report?.record ?? null}
               decisions={report?.decisions ?? []}
               evidence={report?.evidence ?? []}
               conviction={report?.conviction ?? {}}

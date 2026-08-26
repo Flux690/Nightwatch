@@ -198,13 +198,13 @@ export type {
   TimelineEntry,
   TimelineLane,
   SubmittedReport,
-  Report,
+  InvestigationRecord,
   EvidenceKind,
   ResolvedEvidence,
   ReportConviction,
   SessionReportResponse,
 } from "./reports.js";
-export { rankHypotheses, leadingHypothesis } from "./reports.js";
+export { rankHypotheses, leadingHypothesis, supersededIds } from "./reports.js";
 export type {
   CatalogError,
   LLMProviderName,

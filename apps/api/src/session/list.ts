@@ -1,6 +1,6 @@
 import type {
   Hypothesis,
-  Report,
+  InvestigationRecord,
   SessionKind,
   SessionListPage,
   SessionRunStatus,
@@ -26,11 +26,11 @@ function isSettled(source: SessionListSource): boolean {
 // Derived, never declared by the model, and total by construction: a
 // fall-through of null put a record in no group but still in the queue total.
 function deriveStatus(source: SessionListSource): SessionRunStatus {
-  const report = source.report;
+  const record = source.record;
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
   if (isSettled(source)) return "resolved";
-  if (report !== null && isActionable(report)) return "action_required";
+  if (record !== null && isActionable(record)) return "action_required";
   // Below the actionable check, since a stopped run with something to act on
   // still has it. Above the fall-through: inconclusive names a conclusion.
   if (source.stoppedAt !== null) return "stopped";
@@ -49,17 +49,19 @@ const WAITING_ON: Record<
   continue: "Waiting to continue",
 };
 
-function leadingClaim(report: Report | null): Hypothesis | null {
-  return leadingHypothesis(report?.hypotheses ?? []);
+function leadingClaim(record: InvestigationRecord | null): Hypothesis | null {
+  return leadingHypothesis(record?.hypotheses ?? []);
 }
 
 // What it waits on when nobody is gating it: the recommendation it wrote, or the
 // claim that amounts to one. Mirrors isActionable, which put it here.
-function awaitedRecommendation(report: Report | null): string | null {
-  const recommendation = report?.submitted?.recommendation.trim();
+function awaitedRecommendation(
+  record: InvestigationRecord | null,
+): string | null {
+  const recommendation = record?.report?.recommendation.trim();
   return recommendation
     ? recommendation
-    : (leadingClaim(report)?.statement ?? null);
+    : (leadingClaim(record)?.statement ?? null);
 }
 
 // Every branch is the system's record or the model's prose, so the failure
@@ -72,16 +74,16 @@ function deriveFinding(
     case "action_required":
       return source.pendingKind !== null
         ? WAITING_ON[source.pendingKind]
-        : awaitedRecommendation(source.report);
+        : awaitedRecommendation(source.record);
     case "investigating":
     // What it had settled on when the person ended it, if it had settled on
     // anything. The run stopped; the claims it made before that still stand.
     case "stopped":
-      return leadingClaim(source.report)?.statement ?? null;
+      return leadingClaim(source.record)?.statement ?? null;
     case "resolved":
       return "Alert condition recovered";
     case "inconclusive": {
-      const ruledOut = source.report?.hypotheses
+      const ruledOut = source.record?.hypotheses
         .filter((h) => h.verdict === "disproven")
         .at(-1);
       return ruledOut === undefined ? null : `Ruled out: ${ruledOut.statement}`;

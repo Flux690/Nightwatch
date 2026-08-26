@@ -6,7 +6,7 @@ import type {
   GatedCall,
   HumanDecision,
   Hypothesis,
-  Report,
+  InvestigationRecord,
   ReportConviction,
   ResolvedEvidence,
   SubmittedReport,
@@ -14,7 +14,7 @@ import type {
   ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
-import { amendReport, appendToReport, getReport } from "../session/reports.js";
+import { amendRecord, appendHypothesis, getRecord } from "../session/record.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
@@ -28,7 +28,7 @@ export interface RecordOutcome {
   message: string;
 }
 
-interface LedgerEntry {
+interface ToolCall {
   toolUseId: string;
   // e1, e2, e3 in call order. Derived by this walk rather than stored, so the
   // side that shows it to the model and the side that resolves it agree.
@@ -45,18 +45,18 @@ interface LedgerEntry {
   timestamp: string;
 }
 
-// One walk of the durable transcript, which is the ledger. The provider's own
-// call id is the citation handle, so nothing here numbers or renames anything.
-function ledgerIn(sessionId: string): LedgerEntry[] {
+// One walk of the durable transcript, which is the evidence trail. The
+// provider's own call id is the handle, so nothing here numbers or renames.
+function toolCallsIn(sessionId: string): ToolCall[] {
   const rows = getTranscriptRows(sessionId);
   const evidenceIds = evidenceIdsByToolUseId(rows);
-  const entries: LedgerEntry[] = [];
-  const byToolUseId = new Map<string, LedgerEntry>();
+  const entries: ToolCall[] = [];
+  const byToolUseId = new Map<string, ToolCall>();
   for (const message of rows) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
         const evidenceId = evidenceIds.get(part.id);
-        const entry: LedgerEntry = {
+        const entry: ToolCall = {
           toolUseId: part.id,
           ...(evidenceId !== undefined && { evidenceId }),
           toolName: part.name,
@@ -88,7 +88,7 @@ function knownCitations(
   sessionId: string,
   ids: string[],
 ): { kept: string[]; invented: string[] } {
-  const entries = ledgerIn(sessionId);
+  const entries = toolCallsIn(sessionId);
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
       e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
@@ -109,7 +109,7 @@ function knownCitations(
 // What the model cited that names no call, said back in the vocabulary it was
 // given, with the range it could have picked from.
 function citationRefusal(sessionId: string, invented: string[]): string {
-  const total = ledgerIn(sessionId).length;
+  const total = toolCallsIn(sessionId).length;
   const available =
     total === 0
       ? "You have made no tool calls yet, so there is nothing to cite."
@@ -121,12 +121,12 @@ function citationRefusal(sessionId: string, invented: string[]): string {
   } no call you made. ${available} Each tool result begins with its own id in brackets; copy one of those and record this again.`;
 }
 
-// Everything the record points at, from either author: the ledger's claims and
-// the composed timeline's references.
-function citedIds(report: Report): Set<string> {
-  const timeline = report.submitted?.timeline ?? [];
+// Everything the record points at, from either author: the hypotheses' own
+// citations and the composed timeline's references.
+function citedIds(record: InvestigationRecord): Set<string> {
+  const timeline = record.report?.timeline ?? [];
   return new Set([
-    ...report.hypotheses.flatMap((h) => h.evidenceIds),
+    ...record.hypotheses.flatMap((h) => h.evidenceIds),
     ...timeline.flatMap((entry) =>
       entry.evidenceId === undefined ? [] : [entry.evidenceId],
     ),
@@ -137,12 +137,12 @@ function citedIds(report: Report): Set<string> {
 // along, because a cited miss and a cited crash differ.
 export function resolveEvidence(
   sessionId: string,
-  report: Report,
+  record: InvestigationRecord,
 ): ResolvedEvidence[] {
-  const cited = citedIds(report);
+  const cited = citedIds(record);
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
-  for (const entry of ledgerIn(sessionId)) {
+  for (const entry of toolCallsIn(sessionId)) {
     const { toolUseId, toolName, input, result, toolOutcome } = entry;
     if (!cited.has(toolUseId) || result === null) continue;
     resolved.push({
@@ -160,14 +160,14 @@ export function resolveEvidence(
   return resolved;
 }
 
-// Arithmetic over the ledger and the action log, so no tool input can set it.
+// Arithmetic over the trail and the action log, so no tool input can set it.
 function convictionOf(
   ids: string[],
-  ledger: Map<string, LedgerEntry>,
+  calls: Map<string, ToolCall>,
   executedAt: string | null,
 ): Conviction | null {
   const entries = [...new Set(ids)]
-    .flatMap((id) => ledger.get(id) ?? [])
+    .flatMap((id) => calls.get(id) ?? [])
     .filter((entry) => entry.result !== null);
   if (entries.length === 0) return null;
   if (executedAt !== null && entries.some((e) => e.timestamp > executedAt)) {
@@ -180,7 +180,7 @@ function convictionOf(
 // A name cannot answer this: a refused call carries the name of a gated tool
 // and reached no gate. An answered question is not a write.
 export function gatedCalls(sessionId: string): GatedCall[] {
-  return ledgerIn(sessionId).flatMap((entry) => {
+  return toolCallsIn(sessionId).flatMap((entry) => {
     const { humanDecision, toolOutcome } = entry;
     if (entry.result === null) return [];
     if (humanDecision !== "approved" && humanDecision !== "rejected") return [];
@@ -201,9 +201,9 @@ export function gatedCalls(sessionId: string): GatedCall[] {
 /* The instant the last released write answered, which makes a later read a
    confirmation. Only a call a person released starts that clock: a declined one
    changed nothing and a refused one never ran. */
-function lastExecutedAt(ledger: Map<string, LedgerEntry>): string | null {
+function lastExecutedAt(calls: Map<string, ToolCall>): string | null {
   let latest: string | null = null;
-  for (const entry of ledger.values()) {
+  for (const entry of calls.values()) {
     if (entry.result === null || entry.humanDecision !== "approved") continue;
     if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
   }
@@ -212,13 +212,13 @@ function lastExecutedAt(ledger: Map<string, LedgerEntry>): string | null {
 
 export function computeConviction(
   sessionId: string,
-  report: Report,
+  record: InvestigationRecord,
 ): ReportConviction {
-  const ledger = new Map(ledgerIn(sessionId).map((e) => [e.toolUseId, e]));
-  const executedAt = lastExecutedAt(ledger);
+  const calls = new Map(toolCallsIn(sessionId).map((e) => [e.toolUseId, e]));
+  const executedAt = lastExecutedAt(calls);
   const graded: ReportConviction = {};
-  for (const row of report.hypotheses) {
-    const conviction = convictionOf(row.evidenceIds, ledger, executedAt);
+  for (const row of record.hypotheses) {
+    const conviction = convictionOf(row.evidenceIds, calls, executedAt);
     if (conviction !== null) graded[row.id] = conviction;
   }
   return graded;
@@ -226,12 +226,12 @@ export function computeConviction(
 
 // Read by the status derivation and by the report gate, so what the list calls
 // actionable and what the gate accepts cannot disagree.
-export function isActionable(report: Report | null): boolean {
-  if (report === null) return false;
-  const recommended = (report.submitted?.recommendation ?? "").trim() !== "";
+export function isActionable(record: InvestigationRecord | null): boolean {
+  if (record === null) return false;
+  const recommended = (record.report?.recommendation ?? "").trim() !== "";
   return (
     recommended ||
-    report.hypotheses.some(
+    record.hypotheses.some(
       (h) => h.verdict === "root_cause" && h.evidenceIds.length > 0,
     )
   );
@@ -245,15 +245,15 @@ export type ReportGap =
 // Two kinds, not four: a hypothesis is recorded settled, and an uncited claim
 // never reaches the record at all.
 export function reportGaps(sessionId: string): ReportGap[] {
-  const report = getReport(sessionId);
-  const hypotheses = report?.hypotheses ?? [];
+  const record = getRecord(sessionId);
+  const hypotheses = record?.hypotheses ?? [];
   const gaps: ReportGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
 
-  if (report !== undefined) {
+  if (record !== undefined) {
     const resolved = new Set(
-      resolveEvidence(sessionId, report).map((e) => e.toolUseId),
+      resolveEvidence(sessionId, record).map((e) => e.toolUseId),
     );
     const unbacked = hypotheses
       .filter(
@@ -274,6 +274,17 @@ interface RecordHypothesisInput {
   verdict: Verdict;
   finding: string;
   evidenceIds: string[];
+  supersedes?: string;
+}
+
+// A link to a claim that exists, or nothing. Dropped rather than refused: the
+// new claim is worth recording even when what it replaces was named wrongly.
+function supersededBy(
+  record: InvestigationRecord,
+  named: string | undefined,
+): string | undefined {
+  if (named === undefined || named === "") return undefined;
+  return record.hypotheses.some((h) => h.id === named) ? named : undefined;
 }
 
 // One act, recorded once it has been tested. Append-only: a claim the model
@@ -290,27 +301,38 @@ export function recordHypothesis(
     return { recorded: false, message: citationRefusal(sessionId, invented) };
   }
   const evidenceIds = kept;
-  const id = appendToReport(sessionId, (report) => {
+  const { id, replaced } = appendHypothesis(sessionId, (record) => {
+    const supersedes = supersededBy(record, input.supersedes);
     const hypothesis: Hypothesis = {
-      id: `h${report.hypotheses.length + 1}`,
+      id: `h${record.hypotheses.length + 1}`,
       statement: input.statement,
       verdict: input.verdict,
       finding: input.finding,
       evidenceIds,
+      ...(supersedes !== undefined && { supersedes }),
       recordedAt: new Date().toISOString(),
     };
     return {
-      next: { ...report, hypotheses: [...report.hypotheses, hypothesis] },
-      value: hypothesis.id,
+      next: { ...record, hypotheses: [...record.hypotheses, hypothesis] },
+      value: { id: hypothesis.id, replaced: supersedes },
     };
   });
   publishReportUpdated(sessionId);
+  // Each clause is a separate correction, so a call that got two things wrong
+  // is told about both rather than only the first.
+  const dropped =
+    invented.length === 0
+      ? ""
+      : ` ${invented.join(", ")} named no call you made and ${invented.length === 1 ? "was" : "were"} dropped.`;
+  const replacement =
+    replaced !== undefined
+      ? ` It replaces ${replaced}, which stays on the record.`
+      : input.supersedes !== undefined && input.supersedes !== ""
+        ? ` ${input.supersedes} is not a claim on this record, so nothing was replaced.`
+        : "";
   return {
     recorded: true,
-    message:
-      invented.length === 0
-        ? `Recorded ${id} as "${input.verdict}".`
-        : `Recorded ${id} as "${input.verdict}", citing ${evidenceIds.length} of the ids you gave. ${invented.join(", ")} named no call you made and ${invented.length === 1 ? "was" : "were"} dropped.`,
+    message: `Recorded ${id} as "${input.verdict}".${replacement}${dropped}`,
   };
 }
 
@@ -329,7 +351,7 @@ export function submitReport(
   sessionId: string,
   input: SubmitReportInput,
 ): RecordOutcome {
-  const entries = ledgerIn(sessionId);
+  const entries = toolCallsIn(sessionId);
   const known = new Set(entries.map((e) => e.toolUseId));
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
@@ -362,7 +384,7 @@ export function submitReport(
     recommendation: input.recommendation,
     submittedAt: new Date().toISOString(),
   };
-  amendReport(sessionId, (report) => ({ ...report, submitted }));
+  amendRecord(sessionId, (record) => ({ ...record, report: submitted }));
   publishReportUpdated(sessionId);
   return { recorded: true, message: "Report recorded." };
 }

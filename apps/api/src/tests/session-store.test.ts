@@ -36,7 +36,7 @@ import {
 import { listSessionPage } from "../session/list.js";
 import { recordHypothesis } from "../agent/report.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
-import { getReport } from "../session/reports.js";
+import { getRecord } from "../session/record.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
@@ -353,11 +353,11 @@ describe("API-local session store", () => {
     const m = meta();
     seedAlertSession(m, [alert]);
     seedCompleteReport(m.sessionId);
-    expect(getReport(m.sessionId)).toBeDefined();
+    expect(getRecord(m.sessionId)).toBeDefined();
 
     deleteSession(m.sessionId);
 
-    expect(getReport(m.sessionId)).toBeUndefined();
+    expect(getRecord(m.sessionId)).toBeUndefined();
   });
 
   it("rejects a transcript message for a session that does not exist (foreign keys enforced)", () => {

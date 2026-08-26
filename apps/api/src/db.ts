@@ -104,7 +104,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- what says the write may already have happened, so it is never replayed
   -- silently. Intent recorded before the fact, which no append-only row can do.
   attempt_started_at   TEXT,
+  -- The record, in the two parts it has always had and one column each: claims
+  -- the agent appends as it works, and the write-up composed once at the end.
+  hypotheses           TEXT      NOT NULL DEFAULT '[]',
   report               TEXT,
+  -- Stamped whenever either part is written. A column rather than a field
+  -- inside them, so "has the record moved" is a comparison, not a parse.
+  record_updated_at    TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL
 );

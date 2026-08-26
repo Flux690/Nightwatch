@@ -11,7 +11,7 @@ import {
   resolveEvidence,
 } from "../agent/report.js";
 import { hasPendingHumanInput } from "./interrupts.js";
-import { getReport } from "./reports.js";
+import { getRecord } from "./record.js";
 import {
   createSession,
   deleteSession,
@@ -125,18 +125,18 @@ export async function registerSessionRoutes(
     "/sessions/:id/report",
     { preHandler: requireSession },
     async (request, reply) => {
-      const report = getReport(request.params.id);
-      if (report === undefined) {
+      const record = getRecord(request.params.id);
+      if (record === undefined) {
         return reply.code(404).send({ error: "no report for session" });
       }
-      // Everything beside `report` is joined here rather than stored, so what
+      // Everything beside `record` is joined here rather than stored, so what
       // the model wrote cannot disagree with what ran, what was quoted, or how
       // well a claim is backed.
       const response: SessionReportResponse = {
-        report,
+        record,
         decisions: gatedCalls(request.params.id),
-        evidence: resolveEvidence(request.params.id, report),
-        conviction: computeConviction(request.params.id, report),
+        evidence: resolveEvidence(request.params.id, record),
+        conviction: computeConviction(request.params.id, record),
       };
       return response;
     },

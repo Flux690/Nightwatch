@@ -11,7 +11,7 @@ import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
-import { getReport } from "../session/reports.js";
+import { getRecord, recordMovedSince } from "../session/record.js";
 import { recoveryState } from "../verification/recovery.js";
 import {
   effectiveToolset,
@@ -278,6 +278,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const allAlerts =
     input.alerts ?? (stored?.alerts ?? []).map((entry) => entry.alert);
   const alert = allAlerts[0] ?? null;
+
+  // Rewriting is lossy by design - the request says anything left out is lost -
+  // so a run that settled nothing new must not recompose a correct write-up.
+  const recordAtStart = getRecord(sessionId)?.updatedAt ?? null;
 
   // An alert opens an investigation; otherwise the session's own row answers,
   // never an artifact a previous run happened to leave behind. The row is the
@@ -558,7 +562,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
-  // Every other tool taken away, and the ledger rides the request: turn forty
+  // Every other tool taken away, and the claims ride the request: turn forty
   // is the worst place to copy a call id from.
   const writeReport = async (
     unrecovered: boolean,
@@ -580,16 +584,16 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         provider,
         problem === null
           ? reportRequest(
-              getReport(sessionId)?.hypotheses ?? [],
+              getRecord(sessionId)?.hypotheses ?? [],
               gatedCalls(sessionId),
               unrecovered,
-              // The ledger is repeated here for the timeline to cite from, so it
+              // The claims are repeated here for the timeline to cite from, so
               // has to name calls the way their results named themselves.
               evidenceIdsByToolUseId(getTranscriptRows(sessionId)),
               /* What a previous run already wrote, so a follow-up revises it
                  rather than rewriting it from a context that may since have been
                  compacted. Null on the first run, which has nothing to revise. */
-              getReport(sessionId)?.submitted ?? null,
+              getRecord(sessionId)?.report ?? null,
             )
           : reportRetry(problem),
       );
@@ -660,7 +664,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
       persist();
 
-      problem = problemWithReport(getReport(sessionId)?.submitted ?? null);
+      problem = problemWithReport(getRecord(sessionId)?.report ?? null);
       if (problem === null) {
         log.info({ turn, attempt }, "investigation report written");
         publishReportCard(sessionId, "ready");
@@ -789,6 +793,18 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       const released = gatedCalls(sessionId).some(
         (c) => c.decision === "approved",
       );
+      /* Only where there is a write-up to keep: a first run composes whatever
+         it settled, including nothing. Recovery is deliberately not a reason -
+         a cleared alert already reads as Resolved from the alert rows. */
+      const composed = getRecord(sessionId)?.report ?? null;
+      if (
+        composed !== null &&
+        !released &&
+        !recordMovedSince(sessionId, recordAtStart)
+      ) {
+        log.info({ turn }, "record unchanged this run; keeping the write-up");
+        return "completed";
+      }
       return writeReport(released && recovery === "unconfirmed", turn);
     }
 
@@ -925,7 +941,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       opensInvestigation &&
       !recordChecked &&
       answeredCalls >= CALLS_BEFORE_RECORD_CHECK &&
-      (getReport(sessionId)?.hypotheses ?? []).length === 0
+      (getRecord(sessionId)?.hypotheses ?? []).length === 0
     ) {
       recordChecked = true;
       log.info({ turn, answeredCalls }, "record still empty; asking about it");

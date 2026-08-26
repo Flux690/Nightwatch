@@ -39,6 +39,9 @@ const RECORD_HYPOTHESIS_INPUT = z.object({
   // is a thin record rather than an unreadable one.
   finding: z.string(),
   evidenceIds: z.array(z.string()).min(1),
+  // Required by the schema and empty when it replaces nothing, which is what an
+  // optional field has to look like under Anthropic's tool-schema rules.
+  supersedes: optionalProse,
 });
 
 /* All declared required on the schema the model is shown, so accepting a blank

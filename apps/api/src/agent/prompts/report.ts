@@ -3,6 +3,7 @@ import type {
   Hypothesis,
   SubmittedReport,
 } from "@nightwarden/shared";
+import { leadingHypothesis, supersededIds } from "@nightwarden/shared";
 import type { ReportGap } from "../report.js";
 import type { ToolSchema } from "../../llm/types.js";
 
@@ -17,13 +18,13 @@ const CITATION_DESCRIPTION =
 export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
   name: "RecordHypothesis",
   description:
-    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis rather than trying to correct this one.",
+    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis and name the one it replaces in 'supersedes', rather than trying to correct that one.",
   input_schema: {
     type: "object",
     additionalProperties: false,
     // Reasoning before conclusion: an answer field ahead of its reasoning field
     // makes the model commit before it explains (Tam et al., EMNLP 2024).
-    required: ["statement", "finding", "evidenceIds", "verdict"],
+    required: ["statement", "finding", "evidenceIds", "verdict", "supersedes"],
     properties: {
       statement: {
         type: "string",
@@ -51,6 +52,11 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
         ],
         description:
           "'root_cause' is the underlying condition that made the failure possible. 'trigger' is the event that set it off. 'symptom' is something the real cause produced downstream. 'contributing_factor' made the failure worse or more likely without causing it. 'disproven' means you tested it and it is not so. Most published analyses identify a trigger rather than a root cause, so do not reach for 'root_cause' when 'trigger' or 'symptom' is what the evidence shows.",
+      },
+      supersedes: {
+        type: "string",
+        description:
+          "The id of an earlier claim on this record that this one replaces, written h1, h2, h3 as it was given back to you when you recorded it. Use it only when you now believe that claim was wrong or incomplete, not merely to add to it. The claim you name is not deleted: it stays on the record beside this one, so the reader can see where you changed your mind. Pass an empty string when this replaces nothing, which is the ordinary case.",
       },
     },
   },
@@ -187,13 +193,26 @@ export function completionRequest(gaps: ReportGap[]): string {
   ].join(" ");
 }
 
-function findingLine(h: Hypothesis, evidenceIds: Map<string, string>): string {
+/* Told, not inferred. The claim that stands is decided by verdict, recency and
+   supersession together, and a model asked to work that out from a flat list
+   will sometimes lead with one the run has already replaced. */
+function findingLine(
+  h: Hypothesis,
+  evidenceIds: Map<string, string>,
+  leadingId: string | null,
+  replaced: Set<string>,
+): string {
   // Repeated back in the vocabulary it was given, not in the provider's ids.
   const cites =
     h.evidenceIds.length > 0
       ? h.evidenceIds.map((id) => evidenceIds.get(id) ?? id).join(", ")
       : "nothing that resolved";
-  return `${h.id} [${h.verdict}] ${h.statement}\n    ${h.finding}\n    cites: ${cites}`;
+  const standing = replaced.has(h.id)
+    ? " (replaced, and still on the record)"
+    : h.id === leadingId
+      ? " (this is what the investigation currently stands behind)"
+      : "";
+  return `${h.id} [${h.verdict}]${standing} ${h.statement}\n    ${h.finding}\n    cites: ${cites}`;
 }
 
 function writeLine(call: GatedCall): string {
@@ -237,7 +256,7 @@ ${lines.join("\n")}
 </nightwarden-previous-report>`;
 }
 
-// The ledger is repeated here rather than left to context: the timeline cites
+// The claims are repeated here rather than left to context: the timeline cites
 // call ids verbatim, and a forty-turn context is a bad place to copy one from.
 export function reportRequest(
   hypotheses: Hypothesis[],
@@ -248,11 +267,13 @@ export function reportRequest(
 ): string {
   // A run that reached here with nothing recorded exhausted the gate's requests.
   // Saying so beats printing an empty heading it might write around.
+  const leadingId = leadingHypothesis(hypotheses)?.id ?? null;
+  const replaced = supersededIds(hypotheses);
   const findings =
     hypotheses.length === 0
       ? "RECORDED FINDINGS\nnone. Say plainly that no cause was established."
       : `RECORDED FINDINGS\n${hypotheses
-          .map((h) => findingLine(h, evidenceIds))
+          .map((h) => findingLine(h, evidenceIds, leadingId, replaced))
           .join("\n")}`;
   const sections = [
     previous === null

@@ -1,11 +1,11 @@
-import { appendToReport } from "../session/reports.js";
+import { appendHypothesis } from "../session/record.js";
 import { submitReport } from "../agent/report.js";
 
-// Satisfies the ledger gate for tests that exercise run mechanics rather than
-// the record contract: one recorded hypothesis is a complete ledger, so the run
+// Satisfies the finish gate for tests that exercise run mechanics rather than
+// the record contract: one recorded hypothesis is a complete record, so the run
 // reaches its report turn instead of being nudged.
 export function seedCompleteReport(sessionId: string): void {
-  appendToReport(sessionId, (report) => ({
+  appendHypothesis(sessionId, (report) => ({
     next: {
       ...report,
       hypotheses: [

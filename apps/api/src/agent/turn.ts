@@ -99,9 +99,9 @@ export async function processToolUses(params: {
 }): Promise<TurnOutcome> {
   const { toolUses, offered, sessionId, execCtx, log } = params;
 
-  // The ledger's own numbering: this turn is already persisted when it runs, so
+  // The trail's own numbering: this turn is already persisted when it runs, so
   // a count of our own would name every result a turn ahead of itself.
-  const ledger = evidenceIdsByToolUseId(getTranscriptRows(sessionId));
+  const evidenceIds = evidenceIdsByToolUseId(getTranscriptRows(sessionId));
   const toolResults: ToolResult[] = [];
   const refused: string[] = [];
   let gated: { tool: ToolUse; kind: GateKind } | null = null;
@@ -179,7 +179,7 @@ export async function processToolUses(params: {
         state: { phase: "running" },
       }),
     });
-    const evidenceId = ledger.get(tool.id);
+    const evidenceId = evidenceIds.get(tool.id);
     const { content, toolOutcome } = await executeTool(entry, tool.input, {
       ...execCtx,
       toolUseId: tool.id,

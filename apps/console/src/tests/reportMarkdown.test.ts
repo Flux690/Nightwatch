@@ -30,7 +30,7 @@ const ON_SESSION: SessionAlert = {
 };
 
 const RESPONSE: SessionReportResponse = {
-  report: {
+  record: {
     hypotheses: [
       {
         id: "h1",
@@ -49,7 +49,7 @@ const RESPONSE: SessionReportResponse = {
         recordedAt: AT,
       },
     ],
-    submitted: {
+    report: {
       summary: "encodr-worker exhausted its limit buffering two large jobs",
       timeline: [{ at: "2026-08-03T20:11:00.000Z", what: "PR #812 merged" }],
       impact: "One transcode job dropped",
@@ -100,10 +100,10 @@ describe("reportToMarkdown", () => {
   it("carries the headline and who was affected into the export", () => {
     const md = reportToMarkdown("encodr-worker memory", [], {
       ...RESPONSE,
-      report: {
-        ...RESPONSE.report,
-        submitted: {
-          ...RESPONSE.report.submitted!,
+      record: {
+        ...RESPONSE.record,
+        report: {
+          ...RESPONSE.record.report!,
           headline: "PR #812 doubled the ffmpeg buffer and the worker died",
           affected: "the transcode queue",
         },

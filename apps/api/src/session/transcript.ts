@@ -12,7 +12,7 @@ import {
   getPendingHumanInputBySessionId,
   hasPendingHumanInput,
 } from "./interrupts.js";
-import { getReport } from "./reports.js";
+import { getRecord } from "./record.js";
 import { isRunning } from "./run-state.js";
 import { getSession } from "./store.js";
 import { getTranscriptRows } from "./transcript-store.js";
@@ -76,7 +76,7 @@ function priorRunsOf(
 function reportCard(sessionId: string): TranscriptItem | null {
   const session = getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
-  if (getReport(sessionId)?.submitted != null) {
+  if (getRecord(sessionId)?.report != null) {
     // A run in flight writes this again over the same column, so without the
     // building state a follow-up reads as finished the moment it starts.
     return isRunning(sessionId)
@@ -84,7 +84,7 @@ function reportCard(sessionId: string): TranscriptItem | null {
       : { kind: "report_card", id: "report", state: { phase: "ready" } };
   }
   if (isRunning(sessionId) || hasPendingHumanInput(sessionId)) return null;
-  const hypotheses = getReport(sessionId)?.hypotheses ?? [];
+  const hypotheses = getRecord(sessionId)?.hypotheses ?? [];
   return hypotheses.length === 0
     ? null
     : { kind: "report_card", id: "report", state: { phase: "failed" } };

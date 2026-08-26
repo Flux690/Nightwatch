@@ -218,10 +218,10 @@ describe("durable approval interrupts", () => {
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(reportRes.status).toBe(200);
-    const { report, decisions } =
+    const { record, decisions } =
       (await reportRes.json()) as SessionReportResponse;
-    expect(report.submitted).toBeNull();
-    // Read back from the session's own ledger: the registry says the call was
+    expect(record.report).toBeNull();
+    // Read back from the session's own record: the registry says the call was
     // gated, and no outcome on it says the user released it.
     expect(decisions).toHaveLength(1);
     expect(decisions[0]).toMatchObject({

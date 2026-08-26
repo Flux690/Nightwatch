@@ -6,13 +6,17 @@ import type {
   GatedCall,
   Hypothesis,
   SessionAlert,
-  Report,
+  InvestigationRecord,
   ReportConviction,
   ResolvedEvidence,
   TimelineEntry,
   Verdict,
 } from "@nightwarden/shared";
-import { leadingHypothesis, rankHypotheses } from "@nightwarden/shared";
+import {
+  leadingHypothesis,
+  rankHypotheses,
+  supersededIds,
+} from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
 import { SECTION_HEADING } from "@/shared/ui/Page";
 import { StatusText, type StatusTone } from "@/shared/ui/status";
@@ -232,20 +236,20 @@ function TimelineRow({
 // A sentence rather than a row of tiles, and a clause with no answer is left
 // out rather than printed empty.
 function Facts({
-  report,
+  record,
   conviction,
   evidence,
   decisions,
   span,
 }: {
-  report: Report;
+  record: InvestigationRecord;
   conviction: ReportConviction;
   evidence: ResolvedEvidence[];
   decisions: GatedCall[];
   span: string | null;
 }): React.JSX.Element | null {
-  const leading = leadingHypothesis(report.hypotheses);
-  const ruledOut = report.hypotheses.filter((h) => h.verdict === "disproven");
+  const leading = leadingHypothesis(record.hypotheses);
+  const ruledOut = record.hypotheses.filter((h) => h.verdict === "disproven");
   const approved = decisions.filter((call) => call.decision === "approved");
 
   const clauses: React.ReactNode[] = [];
@@ -265,11 +269,11 @@ function Facts({
       </>,
     );
   }
-  if (report.hypotheses.length > 0) {
+  if (record.hypotheses.length > 0) {
     clauses.push(
       <>
         <b className="font-medium text-foreground">
-          {report.hypotheses.length}
+          {record.hypotheses.length}
         </b>{" "}
         tested, <b className="font-medium text-foreground">{ruledOut.length}</b>{" "}
         ruled out
@@ -314,7 +318,7 @@ function Facts({
 }
 
 export function ReportPanel({
-  report,
+  record,
   decisions,
   evidence,
   conviction,
@@ -324,7 +328,7 @@ export function ReportPanel({
 }: {
   // Null until the agent records its first finding. The investigation view is
   // drawn from the session, not from this, so the panel outlives its absence.
-  report: Report | null;
+  record: InvestigationRecord | null;
   // Every call the user had to release, and which way they went.
   decisions: GatedCall[];
   // The cited calls, resolved by the API against the transcript.
@@ -343,7 +347,7 @@ export function ReportPanel({
       ? elapsed(createdAt, lastActivityAt)
       : null;
 
-  if (report === null) {
+  if (record === null) {
     return (
       <div className="mx-auto w-full max-w-report px-8 py-6">
         <div className="max-w-measure">
@@ -362,9 +366,14 @@ export function ReportPanel({
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
   // A record stored before the write-up existed carries no key at all, and an
   // absent one must read as "not written up yet".
-  const submitted = report.submitted ?? null;
-  const ranked = rankHypotheses(report.hypotheses);
-  const findings = ranked.filter((h) => h.verdict !== "disproven");
+  const submitted = record.report ?? null;
+  const ranked = rankHypotheses(record.hypotheses);
+  const replaced = supersededIds(record.hypotheses);
+  // Sorted below the claims that still stand, so the leading one reads first
+  // however many times the run revised its way to it.
+  const findings = ranked
+    .filter((h) => h.verdict !== "disproven")
+    .sort((a, b) => Number(replaced.has(a.id)) - Number(replaced.has(b.id)));
   const ruledOut = ranked.filter((h) => h.verdict === "disproven");
   const rows = timelineRows(
     submitted?.timeline ?? [],
@@ -423,12 +432,17 @@ export function ReportPanel({
         <span className={cn("text-sm", VERDICT_VIEW[h.verdict].className)}>
           {VERDICT_VIEW[h.verdict].label}
         </span>
-        {/* Absence is the signal: a claim the ledger cannot back carries no
+        {/* Absence is the signal: a claim nothing can back carries no
             marker, and no warning badge either. */}
         {conviction[h.id] !== undefined && (
           <span className="text-sm text-ink-subtle">
             {conviction[h.id] as Conviction}
           </span>
+        )}
+        {/* Demoted, never removed: where the run changed its mind is part of
+            what happened, and a claim that vanished cannot be audited. */}
+        {replaced.has(h.id) && (
+          <span className="text-sm text-ink-subtle">replaced</span>
         )}
       </div>
       <p className="m-0 mt-2 text-base leading-snug font-medium">
@@ -483,7 +497,7 @@ export function ReportPanel({
       </header>
 
       <Facts
-        report={report}
+        record={record}
         conviction={conviction}
         evidence={evidence}
         decisions={decisions}

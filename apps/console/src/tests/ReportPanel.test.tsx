@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type {
   NormalizedAlert,
   SessionAlert,
-  Report,
+  InvestigationRecord,
   ReportConviction,
   ResolvedEvidence,
 } from "@nightwarden/shared";
@@ -48,7 +48,7 @@ function onSession(
   };
 }
 
-const REPORT: Report = {
+const RECORD: InvestigationRecord = {
   hypotheses: [
     {
       id: "h1",
@@ -67,7 +67,7 @@ const REPORT: Report = {
       recordedAt: RESOLVED,
     },
   ],
-  submitted: {
+  report: {
     summary: "payments-worker was OOM-killed after PR #482 raised its floor",
     timeline: [
       { at: "2026-07-21T12:05:00.000Z", what: "PR #482 merged" },
@@ -124,7 +124,7 @@ const EVIDENCE: ResolvedEvidence[] = [
 function panel(overrides: Partial<Parameters<typeof ReportPanel>[0]> = {}) {
   return (
     <ReportPanel
-      report={REPORT}
+      record={RECORD}
       decisions={[]}
       evidence={EVIDENCE}
       conviction={CONVICTION}
@@ -143,7 +143,7 @@ describe("ReportPanel", () => {
     render(panel());
 
     // The lede is the answer, in the model's own prose, not a row lifted out of
-    // the ledger and dressed up as one.
+    // the record and dressed up as one.
     expect(
       screen.getByRole("heading", {
         name: "payments-worker was OOM-killed after PR #482 raised its floor",
@@ -161,10 +161,10 @@ describe("ReportPanel", () => {
   it("leads with the headline and demotes the summary to the deck", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: {
-            ...REPORT.submitted!,
+        record: {
+          ...RECORD,
+          report: {
+            ...RECORD.report!,
             headline: "PR #482's cache bump exhausted payments-worker's memory",
             affected: "the payments write path",
           },
@@ -196,10 +196,10 @@ describe("ReportPanel", () => {
 
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: {
-            ...REPORT.submitted!,
+        record: {
+          ...RECORD,
+          report: {
+            ...RECORD.report!,
             timeline: [
               {
                 at: "2026-07-21T12:05:00.000Z",
@@ -218,12 +218,12 @@ describe("ReportPanel", () => {
   });
 
   it("falls back to the leading claim until the run has been written up", () => {
-    render(panel({ report: { ...REPORT, submitted: null } }));
+    render(panel({ record: { ...RECORD, report: null } }));
 
     expect(
       screen.getByRole("heading", { name: "Investigation", level: 1 }),
     ).toBeInTheDocument();
-    // The ledger still renders: a run that ended before its write-up is not a
+    // The claims still render: a run that ended before its write-up is not a
     // run with nothing to show.
     expect(screen.getAllByText("PR #482's cache bump leaks")).toHaveLength(2);
     expect(screen.getByText("Root cause")).toBeInTheDocument();
@@ -239,6 +239,37 @@ describe("ReportPanel", () => {
     expect(screen.queryByText("Disproven")).not.toBeInTheDocument();
   });
 
+  // Where the run changed its mind is part of what happened, so a replaced
+  // claim is marked and moved down rather than taken off the page.
+  it("keeps a replaced claim on the page, marked and below the one that stands", () => {
+    render(
+      panel({
+        record: {
+          ...RECORD,
+          hypotheses: [
+            { ...RECORD.hypotheses[0]!, id: "h1", statement: "The pool leaks" },
+            {
+              ...RECORD.hypotheses[0]!,
+              id: "h2",
+              statement: "The query is unindexed",
+              supersedes: "h1",
+            },
+          ],
+        },
+      }),
+    );
+
+    const standing = screen.getByText("The query is unindexed");
+    const replaced = screen.getByText("The pool leaks");
+    expect(replaced).toBeInTheDocument();
+    expect(screen.getByText("replaced")).toBeInTheDocument();
+    expect(
+      (standing.compareDocumentPosition(replaced) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !==
+        0,
+    ).toBe(true);
+  });
+
   it("renders each of the four standing verdicts distinctly", () => {
     const verdicts = [
       "root_cause",
@@ -248,8 +279,8 @@ describe("ReportPanel", () => {
     ] as const;
     render(
       panel({
-        report: {
-          ...REPORT,
+        record: {
+          ...RECORD,
           hypotheses: verdicts.map((verdict, i) => ({
             id: `h${i + 1}`,
             statement: `claim ${verdict}`,
@@ -314,14 +345,14 @@ describe("ReportPanel", () => {
     // evidence, so a change cited there would never be reached.
     render(
       panel({
-        report: {
-          ...REPORT,
+        record: {
+          ...RECORD,
           hypotheses: [
             {
-              ...REPORT.hypotheses[0]!,
+              ...RECORD.hypotheses[0]!,
               evidenceIds: ["tu-stats", "tu-changes"],
             },
-            REPORT.hypotheses[1]!,
+            RECORD.hypotheses[1]!,
           ],
         },
       }),
@@ -353,12 +384,12 @@ describe("ReportPanel", () => {
   it("draws a call cited by several claims once and names it under the rest", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
+        record: {
+          ...RECORD,
           hypotheses: [
-            { ...REPORT.hypotheses[0]!, evidenceIds: ["tu-stats"] },
+            { ...RECORD.hypotheses[0]!, evidenceIds: ["tu-stats"] },
             {
-              ...REPORT.hypotheses[1]!,
+              ...RECORD.hypotheses[1]!,
               verdict: "symptom" as const,
               evidenceIds: ["tu-stats"],
             },
@@ -378,9 +409,9 @@ describe("ReportPanel", () => {
   it("quotes the log lines a claim rests on, and says what they came out of", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-log"] }],
+        record: {
+          ...RECORD,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-log"] }],
         },
         evidence: [
           {
@@ -418,8 +449,8 @@ describe("ReportPanel", () => {
   it("keeps a claim whose citation resolves to nothing", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
+        record: {
+          ...RECORD,
           hypotheses: [
             {
               id: "h3",
@@ -445,10 +476,10 @@ describe("ReportPanel", () => {
     // so it is stated - never dropped for want of a chart.
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: null,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-now"] }],
+        record: {
+          ...RECORD,
+          report: null,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-now"] }],
         },
         evidence: [
           {
@@ -479,10 +510,10 @@ describe("ReportPanel", () => {
   it("compares labels as bars when several series each hold one reading", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: null,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-top"] }],
+        record: {
+          ...RECORD,
+          report: null,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-top"] }],
         },
         evidence: [
           {
@@ -518,10 +549,10 @@ describe("ReportPanel", () => {
   it("says a cited call missed rather than passing its failure off as a reading", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: null,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-miss"] }],
+        record: {
+          ...RECORD,
+          report: null,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-miss"] }],
         },
         evidence: [
           {
@@ -547,10 +578,10 @@ describe("ReportPanel", () => {
   it("draws the readings of a measurement that carries no series, per runner", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: null,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-host"] }],
+        record: {
+          ...RECORD,
+          report: null,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-host"] }],
         },
         evidence: [
           {
@@ -586,10 +617,10 @@ describe("ReportPanel", () => {
   it("draws a chart from the cited metrics result, not from a stored copy", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          submitted: null,
-          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-range"] }],
+        record: {
+          ...RECORD,
+          report: null,
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-range"] }],
         },
         evidence: [
           {
@@ -626,7 +657,7 @@ describe("ReportPanel", () => {
   });
 
   it("states an investigation that has recorded nothing", () => {
-    render(panel({ evidence: [], report: null }));
+    render(panel({ evidence: [], record: null }));
     expect(screen.getByText("Investigation")).toBeInTheDocument();
     expect(
       screen.getByText(/has not recorded a finding yet/),
@@ -634,7 +665,7 @@ describe("ReportPanel", () => {
   });
 
   it("shows the alert before the agent has recorded anything", () => {
-    render(panel({ evidence: [], report: null, alerts: [onSession(ALERT)] }));
+    render(panel({ evidence: [], record: null, alerts: [onSession(ALERT)] }));
     // The sender's own word, not a rank: P1 used to render as nothing.
     expect(screen.getByText("P1")).toBeInTheDocument();
     expect(screen.getByText("ContainerRestarting")).toBeInTheDocument();
@@ -673,8 +704,8 @@ describe("ReportPanel", () => {
       panel({
         evidence: [],
         conviction: {},
-        report: {
-          ...REPORT,
+        record: {
+          ...RECORD,
           hypotheses: [
             {
               id: "h1",
@@ -685,7 +716,7 @@ describe("ReportPanel", () => {
               recordedAt: RESOLVED,
             },
           ],
-          submitted: null,
+          report: null,
         },
       }),
     );
@@ -739,7 +770,7 @@ describe("ReportPanel", () => {
   });
 
   it("draws no timeline on a record with neither entries nor released writes", () => {
-    render(panel({ report: { ...REPORT, submitted: null }, decisions: [] }));
+    render(panel({ record: { ...RECORD, report: null }, decisions: [] }));
     expect(screen.queryByText("Timeline")).not.toBeInTheDocument();
   });
 

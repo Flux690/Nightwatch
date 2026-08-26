@@ -55,7 +55,7 @@ export function reportToMarkdown(
 
   const byId = new Map((report?.evidence ?? []).map((e) => [e.toolUseId, e]));
 
-  const submitted = report?.report.submitted ?? null;
+  const submitted = report?.record.report ?? null;
   if (submitted !== null) {
     // Headline as its own line above the deck, since a postmortem is skimmed by
     // its first line the same way the console is.
@@ -85,7 +85,7 @@ export function reportToMarkdown(
     }
   }
 
-  const claims = report?.report.hypotheses ?? [];
+  const claims = report?.record.hypotheses ?? [];
   const settled = claims.filter((h) => h.verdict !== "disproven");
   const ruledOut = claims.filter((h) => h.verdict === "disproven");
 
@@ -117,7 +117,7 @@ export function reportToMarkdown(
   if (settled.length > 0) sections.push(claimBlock("What held up", settled));
   if (ruledOut.length > 0) sections.push(claimBlock("Ruled out", ruledOut));
 
-  // What the user released, read from the ledger rather than from anything
+  // What the user released, read from the record rather than from anything
   // the model said about itself.
   const decisions = report?.decisions ?? [];
   if (decisions.length > 0) {

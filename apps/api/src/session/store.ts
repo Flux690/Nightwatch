@@ -1,10 +1,11 @@
 import type {
-  Report,
+  InvestigationRecord,
   SessionAlert,
   SessionKind,
   SessionMeta,
 } from "@nightwarden/shared";
 import { getDb } from "../db.js";
+import { assembleRecord } from "./record.js";
 import { alertsFor, alertsForMany, QUEUED } from "./alerts-store.js";
 import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 
@@ -63,7 +64,7 @@ export function updateSessionTitle(sessionId: string, title: string): void {
     .run(title, sessionId);
 }
 
-// Takes the report column and the gate with it, and cascades to the transcript.
+// Takes the record columns and the gate with them, and cascades to the transcript.
 // Nothing about a session outlives it.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
@@ -79,7 +80,7 @@ export interface SessionListSource {
   lastActivityAt: string;
   alerts: SessionAlert[];
   investigation: boolean;
-  report: Report | null;
+  record: InvestigationRecord | null;
   lastKind: string | null;
   // The tail's text, which is why a failed run failed when lastKind is "error".
   lastContent: string | null;
@@ -103,7 +104,9 @@ interface SessionListRawRow {
   createdAt: string;
   lastActivityAt: string;
   investigation: number;
+  hypotheses: string;
   report: string | null;
+  recordUpdatedAt: string | null;
   lastKind: string | null;
   lastContent: string | null;
   awaitingHumanInput: number;
@@ -112,7 +115,8 @@ interface SessionListRawRow {
 }
 
 const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-        s.investigation, s.report,
+        s.investigation, s.hypotheses, s.report,
+        s.record_updated_at AS recordUpdatedAt,
         (SELECT m.kind FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastKind,
@@ -135,7 +139,12 @@ function toSource(
     lastActivityAt: r.lastActivityAt,
     alerts,
     investigation: r.investigation === 1,
-    report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
+    record:
+      assembleRecord({
+        hypotheses: r.hypotheses,
+        report: r.report,
+        updatedAt: r.recordUpdatedAt,
+      }) ?? null,
     lastKind: r.lastKind,
     lastContent: r.lastContent,
     awaitingHumanInput: r.awaitingHumanInput === 1,
