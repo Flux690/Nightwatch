@@ -342,8 +342,8 @@ describe("durable approval interrupts", () => {
           e.payload["sessionId"] === sessionId,
       ),
     );
-    // Bare text used to resume the run as "context added", handing the agent a
-    // successful-looking result for a call that never ran.
+    // Bare text must not resume the run as "context added", which hands the
+    // agent a successful-looking result for a call that never ran.
     const ctxRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {

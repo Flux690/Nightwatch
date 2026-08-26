@@ -1030,8 +1030,8 @@ describe("SessionView", () => {
         });
       });
 
-      // The card was the raised state of this same call, so it goes when the
-      // decision does: it used to stay and grow a duplicate beneath it.
+      // The card is the raised state of this same call, so it goes when the
+      // decision does rather than staying and growing a duplicate beneath it.
       await waitFor(() => {
         expect(screen.queryByTestId("approval-card")).not.toBeInTheDocument();
       });

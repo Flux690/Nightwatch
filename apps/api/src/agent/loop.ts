@@ -830,8 +830,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       refusedNames.set(name, (refusedNames.get(name) ?? 0) + 1);
     }
 
-    // A turn of nothing but unavailable tools got nothing done, and the model
-    // cannot see it is looping. Only the time budget used to stop it.
+    // A turn of nothing but unavailable tools gets nothing done, and the model
+    // cannot see it is looping, so only the time budget would stop it.
     barrenTurns =
       refused.length === response.toolUses.length ? barrenTurns + 1 : 0;
     if (barrenTurns >= MAX_BARREN_TURNS) {

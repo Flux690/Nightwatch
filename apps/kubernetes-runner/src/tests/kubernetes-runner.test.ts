@@ -302,8 +302,8 @@ describe("Kubernetes runner command handlers", () => {
     });
 
     it("reads the dead container of a crash loop and says so, rather than returning empty", async () => {
-      // The fallback used to be silent: an empty current-container read looked
-      // identical to a healthy quiet service.
+      // A silent fallback would be unreadable: an empty current-container read
+      // looks identical to a healthy quiet service.
       mockCoreApi.listNamespacedPod.mockResolvedValue({
         items: [TERMINATED_POD],
       });
@@ -528,7 +528,7 @@ describe("Kubernetes runner command handlers", () => {
 
     it("answers with requests, limits and restart counts when metrics-server is absent", async () => {
       // A cluster without metrics-server is a common configuration, not a
-      // failure: the whole read used to error out.
+      // failure, so the read answers with what it does have.
       MockMetrics.mockImplementation(function () {
         return {
           getPodMetrics: vi

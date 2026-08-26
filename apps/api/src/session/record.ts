@@ -12,9 +12,8 @@ export interface RecordRow {
 
 const RECORD_COLUMNS = `hypotheses, report, record_updated_at AS updatedAt`;
 
-/* The one place the two columns become a record, so the session list's own
-   query assembles it the same way this does. A session that recorded nothing
-   reads as absent rather than as an empty record nobody can tell apart. */
+// The one place the two columns become a record, so the session list's own
+// query assembles it the same way. Nothing recorded reads as absent, not empty.
 export function assembleRecord(
   row: RecordRow | undefined,
 ): InvestigationRecord | undefined {

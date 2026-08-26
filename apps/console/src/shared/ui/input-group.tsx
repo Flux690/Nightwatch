@@ -64,7 +64,7 @@ function InputGroupAddon({
   );
 }
 
-// The one place a 24px control is right, which is why Button no longer carries
+// The one place a 24px control is right, which is why Button does not carry
 // that rung: a control inside a 32px field cannot be 32px itself.
 const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm", {
   variants: {

@@ -32,8 +32,8 @@ function isMissingTarget(err: unknown): boolean {
   return /^No running \w+ found for /.test(message);
 }
 
-/* What the agent should do about it, which the old one sentence never said. It
-   named the tool and the raw message for all 25 runner tools and stopped. */
+// What the agent should do about it: a tool name and a raw message say what
+// broke and leave the next move unstated, across all 25 runner tools.
 function runnerFailureMessage(
   name: string,
   msg: string,

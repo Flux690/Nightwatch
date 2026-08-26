@@ -22,8 +22,8 @@ export async function registerTokenRoutes(
   fastify.post<{
     Body: { platform?: unknown; label?: string; serverName?: string };
   }>("/tokens", { preHandler: requireSession }, async (request, reply) => {
-    // Refused rather than defaulted: guessing here is exactly how the platform
-    // used to get thrown away between the console and the row.
+    // Refused rather than defaulted: a guess here throws away the platform the
+    // console was told, and the row is what everything else reads.
     const platform = request.body?.platform;
     if (!isPlatform(platform)) {
       return reply.code(400).send({

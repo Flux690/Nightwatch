@@ -63,7 +63,7 @@ export interface ToolResultPart {
   // run knew, which is what lets it live with the call instead of beside it.
   toolOutcome?: ToolOutcome;
   // Absent for every call that never reached a gate, including one the harness
-  // refused because the tool was not offered, which used to read as approval.
+  // refused because the tool was not offered, which is not approval.
   humanDecision?: HumanDecision;
 }
 

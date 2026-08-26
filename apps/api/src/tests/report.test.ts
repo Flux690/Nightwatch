@@ -913,7 +913,7 @@ describe("the investigation record", () => {
       expect(far).toContain("There is no tool called");
       expect(far).not.toContain("Did you mean");
 
-      // All three name what the turn held, which the old sentence never did.
+      // All three name what the turn held: a refusal that does not is a dead end.
       for (const message of [withheld, near, far]) {
         expect(message).toContain("What you do have is:");
         expect(message).toContain("RecordHypothesis");
@@ -1259,7 +1259,7 @@ describe("the investigation record", () => {
     });
 
     // The largest single output of the run, so the ceiling is where it most
-    // often dies. It used to die into a server log, saying nothing on screen.
+    // often dies - and dying into a server log says nothing on screen.
     it("says the report was cut off rather than ending with nothing", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([

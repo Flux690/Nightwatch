@@ -68,6 +68,8 @@ const RECORD: InvestigationRecord = {
     },
   ],
   report: {
+    headline: "PR #482's cache bump exhausted payments-worker's memory",
+    affected: "the payments write path",
     summary: "payments-worker was OOM-killed after PR #482 raised its floor",
     timeline: [
       { at: "2026-07-21T12:05:00.000Z", what: "PR #482 merged" },
@@ -139,38 +141,10 @@ afterEach(() => {
 });
 
 describe("ReportPanel", () => {
-  it("leads with the summary the run was written up with", () => {
+  // Two jobs, two fields: the one sentence that is the answer, and the
+  // paragraph under it. Both are the model's own prose, never a lifted claim.
+  it("leads with the headline and puts the summary under it", () => {
     render(panel());
-
-    // The lede is the answer, in the model's own prose, not a row lifted out of
-    // the record and dressed up as one.
-    expect(
-      screen.getByRole("heading", {
-        name: "payments-worker was OOM-killed after PR #482 raised its floor",
-        level: 1,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Nine minutes of failed payment writes"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
-  });
-
-  // Before `headline` existed the summary did both jobs and was good at
-  // neither, so a report stored then still leads with it.
-  it("leads with the headline and demotes the summary to the deck", () => {
-    render(
-      panel({
-        record: {
-          ...RECORD,
-          report: {
-            ...RECORD.report!,
-            headline: "PR #482's cache bump exhausted payments-worker's memory",
-            affected: "the payments write path",
-          },
-        },
-      }),
-    );
 
     expect(
       screen.getByRole("heading", {
@@ -184,6 +158,10 @@ describe("ReportPanel", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/the payments write path/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Nine minutes of failed payment writes"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
   });
 
   // Nothing drew the timeline citation, so the row claimed a fact and hid what
@@ -666,7 +644,7 @@ describe("ReportPanel", () => {
 
   it("shows the alert before the agent has recorded anything", () => {
     render(panel({ evidence: [], record: null, alerts: [onSession(ALERT)] }));
-    // The sender's own word, not a rank: P1 used to render as nothing.
+    // The sender's own word, not a rank we impose: P1 is not rankable.
     expect(screen.getByText("P1")).toBeInTheDocument();
     expect(screen.getByText("ContainerRestarting")).toBeInTheDocument();
     expect(screen.getByText(/service=payments-worker/)).toBeInTheDocument();

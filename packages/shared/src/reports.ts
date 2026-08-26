@@ -86,8 +86,7 @@ export type TimelineLane = "change" | "signal" | "agent";
 export interface TimelineEntry {
   at: string;
   what: string;
-  // Which lane draws it. Absent on a system row, and on any report written
-  // before the field existed.
+  // Which lane draws it. Absent on a system row, which the model does not write.
   lane?: TimelineLane;
   // The call that shows this happened, when one does.
   evidenceId?: string;
@@ -104,13 +103,13 @@ export interface TimelineEntry {
 // Written in one call over complete claims, and it restates none of them: this
 // is the prose they have nowhere to put.
 export interface SubmittedReport {
-  // One sentence, the whole answer. `summary` was doing headline and deck at
-  // once and was good at neither. Empty on a report written before it existed.
-  headline?: string;
+  // One sentence, the whole answer: headline and deck are two jobs, and one
+  // field doing both is good at neither.
+  headline: string;
   // A short noun phrase naming who was hit. Written by the model today; a blast
   // radius derived from downstream edges once the topology graph can compute one.
-  affected?: string;
-  // What broke, why, and where it stands now. The lede.
+  affected: string;
+  // What broke, why, and where it stands now. The deck under the headline.
   summary: string;
   timeline: TimelineEntry[];
   impact: string;
@@ -121,7 +120,7 @@ export interface SubmittedReport {
 }
 
 // Everything one investigation holds, in the two parts above. Named apart from
-// the report inside it, because for a long time one word meant both.
+// the report it contains, which is one of them rather than the whole.
 export interface InvestigationRecord {
   hypotheses: Hypothesis[];
   // Null until the run reaches its composition turn, which several endings

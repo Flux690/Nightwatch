@@ -193,9 +193,8 @@ export function completionRequest(gaps: ReportGap[]): string {
   ].join(" ");
 }
 
-/* Told, not inferred. The claim that stands is decided by verdict, recency and
-   supersession together, and a model asked to work that out from a flat list
-   will sometimes lead with one the run has already replaced. */
+// Told, not inferred: verdict, recency and supersession decide it together, and
+// a model reading a flat list will sometimes lead with one already replaced.
 function findingLine(
   h: Hypothesis,
   evidenceIds: Map<string, string>,

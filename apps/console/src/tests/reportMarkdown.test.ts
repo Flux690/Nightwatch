@@ -50,6 +50,8 @@ const RESPONSE: SessionReportResponse = {
       },
     ],
     report: {
+      headline: "PR #812 doubled the ffmpeg buffer and the worker died",
+      affected: "the transcode queue",
       summary: "encodr-worker exhausted its limit buffering two large jobs",
       timeline: [{ at: "2026-08-03T20:11:00.000Z", what: "PR #812 merged" }],
       impact: "One transcode job dropped",

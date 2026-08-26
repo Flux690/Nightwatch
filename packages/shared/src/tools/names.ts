@@ -1,5 +1,5 @@
 // One list both ends compile against: the console draws by comparing a name,
-// so a rename used to change its behaviour with nothing failing.
+// so a rename changes what it draws unless both sides fail to compile.
 export const DOCKER_TOOL_NAMES = [
   "ListDockerServices",
   "GetDockerLogs",

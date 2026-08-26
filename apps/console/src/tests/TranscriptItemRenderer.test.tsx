@@ -224,8 +224,8 @@ describe("TranscriptItemRenderer", () => {
       expect(onAnswer).not.toHaveBeenCalled();
     });
 
-    /* The tool requires a description on every option and the card used to
-       drop all of them, leaving the reader the label alone to choose by. */
+    // The tool requires a description on every option, and dropping them leaves
+    // the reader the label alone to choose by.
     it("shows what choosing each answer would mean", () => {
       wrap(clarItem);
 

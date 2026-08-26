@@ -69,8 +69,8 @@ function sendHumanInputError(
 export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // Paginated rather than truncated: a hundredth session used to be the last one
-  // the user could reach, with nothing on screen saying so.
+  // Paginated rather than capped: a cap makes the hundredth session the last
+  // one reachable, with nothing on screen saying so.
   fastify.get<{
     Querystring: { limit?: string; offset?: string; kind?: string };
   }>("/sessions", { preHandler: requireSession }, async (request, reply) => {

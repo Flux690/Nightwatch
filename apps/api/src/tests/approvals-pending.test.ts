@@ -171,8 +171,8 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const cards = items.filter(
       (i) => i.kind === "tool_call" && i.toolName === "RestartDockerService",
     );
-    // One call is one item for its whole life. A settled approval used to keep
-    // its own card and grow a second one beneath it for the same call.
+    // One call is one item for its whole life, rather than a settled approval
+    // keeping its card and growing a second one beneath it.
     expect(cards).toHaveLength(1);
     /* No outcome: a declined call never ran, so there is nothing to say about
        how the tool behaved. That a person declined it is the decision. */

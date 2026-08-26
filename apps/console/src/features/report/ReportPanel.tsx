@@ -364,8 +364,8 @@ export function ReportPanel({
   }
 
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
-  // A record stored before the write-up existed carries no key at all, and an
-  // absent one must read as "not written up yet".
+  // Null until the run reaches its report turn, which reads as "not written
+  // up yet" rather than as an empty write-up.
   const submitted = record.report ?? null;
   const ranked = rankHypotheses(record.hypotheses);
   const replaced = supersededIds(record.hypotheses);
@@ -462,13 +462,10 @@ export function ReportPanel({
 
       <header className="mt-8">
         {/* Headline then deck, which is what the two fields are for: the one
-            sentence that is the answer, and the paragraph that expands it. A
-            report written before `headline` existed has only the summary, so
-            that leads instead; before any write-up, the leading claim does. */}
+            sentence that is the answer, and the paragraph that expands it.
+            Before any write-up, the leading claim stands in for the headline. */}
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-title">
-          {submitted === null
-            ? "Investigation"
-            : (submitted.headline ?? submitted.summary)}
+          {submitted === null ? "Investigation" : submitted.headline}
         </h1>
         {submitted === null && findings[0] !== undefined && (
           <p className="m-0 mt-3 text-lg font-medium">
@@ -478,12 +475,12 @@ export function ReportPanel({
         {/* The one block held to a reading measure: it is the longest passage
             on the page, and the only one with enough lines for a return sweep
             to lose your place in. */}
-        {submitted?.headline !== undefined && (
+        {submitted !== null && (
           <p className="m-0 mt-3 max-w-measure text-base leading-relaxed">
             {submitted.summary}
           </p>
         )}
-        {submitted?.affected !== undefined && (
+        {submitted !== null && (
           <p className="m-0 mt-3 text-sm text-ink-subtle">
             Affected: {submitted.affected}
           </p>

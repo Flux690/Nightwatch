@@ -30,6 +30,8 @@ export function seedRecommendation(
   recommendation: string,
 ): void {
   submitReport(sessionId, {
+    headline: "seeded by test",
+    affected: "seeded by test",
     summary: "seeded by test",
     timeline: [],
     impact: "",

@@ -337,8 +337,8 @@ export function recordHypothesis(
 }
 
 interface SubmitReportInput {
-  headline?: string;
-  affected?: string;
+  headline: string;
+  affected: string;
   summary: string;
   timeline: TimelineEntry[];
   impact: string;
@@ -376,8 +376,8 @@ export function submitReport(
         };
   });
   const submitted: SubmittedReport = {
-    ...(input.headline !== undefined && { headline: input.headline }),
-    ...(input.affected !== undefined && { affected: input.affected }),
+    headline: input.headline,
+    affected: input.affected,
     summary: input.summary,
     timeline,
     impact: input.impact,

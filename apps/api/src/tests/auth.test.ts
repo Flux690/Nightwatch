@@ -322,8 +322,8 @@ describe("session cookie unlocks protected routes", () => {
   });
 
   it("cookie from /login unlocks a protected route", async () => {
-    // Its own owner: this used to lean on a setup case running before it, so
-    // deleting that one broke a test about something else entirely.
+    // Its own owner: leaning on a setup case running first makes deleting that
+    // one break a test about something else entirely.
     await server.inject({
       method: "POST",
       url: "/api/setup",

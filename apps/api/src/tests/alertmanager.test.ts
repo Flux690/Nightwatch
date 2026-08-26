@@ -73,7 +73,7 @@ describe("parseAlertmanager", () => {
       const { firing } = parseAlertmanager({
         alerts: [
           alert({ fingerprint: "good-1" }),
-          // labels:null used to throw on labels["alertname"] and lose the batch
+          // labels:null throws on labels["alertname"] and would lose the batch
           { status: "firing", labels: null, fingerprint: "bad-1" },
           "not-an-object",
           alert({ fingerprint: "good-2" }),
