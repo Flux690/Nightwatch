@@ -916,7 +916,7 @@ describe("the investigation record", () => {
 
       // All three name what the turn held: a refusal that does not is a dead end.
       for (const message of [withheld, near, far]) {
-        expect(message).toContain("What you do have is:");
+        expect(message).toContain("<available-tools>");
         expect(message).toContain("RecordHypothesis");
       }
     });
@@ -1255,7 +1255,7 @@ describe("the investigation record", () => {
         evidenceIds: ["tu-silent"],
       });
 
-      const gaps = reportGaps(sessionId);
+      const gaps = reportGaps(sessionId, 0);
       expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
@@ -1470,8 +1470,8 @@ describe("the investigation record", () => {
       expect(reportIsBehind(getRecord(sessionId)!, 0)).toBe(false);
     });
 
-    /* A run that has read a great deal and settled nothing is asked once, over
-       calls that answered: a refused call taught the run nothing. */
+    /* Asked over calls that answered and questioned the system: a refused call
+       taught the run nothing, and recording is not reading. */
     describe("the record check", () => {
       function connectRunner() {
         const runnerId = generateRunnerToken("docker", "rc-host").id;
@@ -1508,11 +1508,11 @@ describe("the investigation record", () => {
 
       function checks(index = 0): string[] {
         return harnessMessages(index).filter((m) =>
-          m.includes("your investigation record is still empty"),
+          m.includes("since your last recorded claim"),
         );
       }
 
-      it("asks once when the record is still empty, and not before", async () => {
+      it("asks when reads pile up with nothing recorded over them", async () => {
         const conn = connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
@@ -1533,11 +1533,46 @@ describe("the investigation record", () => {
         await runSession({ sessionId, alerts: [alert("record-check")] });
 
         expect(checks()).toHaveLength(1);
-        expect(checks()[0]).toContain("8 tool calls");
+        expect(checks()[0]).toContain("answered 8 tool calls");
         unregisterRunner(conn);
       });
 
-      it("says nothing to a run that has already recorded something", async () => {
+      /* Below the nudge's threshold, so nothing asks mid-run - but the reads
+         still stand unaccounted for when the model says it is done. */
+      it("asks at the finish gate for reads the nudge never reached", async () => {
+        const conn = connectRunner();
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("root_cause", "the worker leaks"),
+            readTurn(),
+            { toolUses: [], text: "Done." },
+            recordTurn("disproven", "the disk was fine"),
+            { toolUses: [], text: "Done." },
+            submitTurn(),
+          ]),
+        );
+        const sessionId = randomUUID();
+        seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+          alert("gate-tail"),
+        ]);
+
+        await runSession({ sessionId, alerts: [alert("gate-tail")] });
+
+        // Two reads, under the eight the nudge waits for, so only the gate spoke.
+        expect(checks()).toHaveLength(0);
+        const asked = completionRequests().filter((m) =>
+          m.includes("Nothing on the record accounts for"),
+        );
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toContain("the 2 tool calls you answered");
+        // Answering it with a claim is what lets the run finish.
+        expect(getRecord(sessionId)!.hypotheses).toHaveLength(2);
+        unregisterRunner(conn);
+      });
+
+      // Recording once buys no exemption: the debt is what has been read since
+      // the last claim, so a run that settles early and reads on is asked again.
+      it("asks a run that recorded early and then kept reading", async () => {
         const conn = connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
@@ -1557,7 +1592,7 @@ describe("the investigation record", () => {
 
         await runSession({ sessionId, alerts: [alert("record-check-quiet")] });
 
-        expect(checks()).toHaveLength(0);
+        expect(checks()).toHaveLength(1);
         unregisterRunner(conn);
       });
     });

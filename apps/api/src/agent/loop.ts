@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import {
-  completionRequest,
+  recordGapsMessage,
   recordCheck,
   reportRequest,
   reportRetry,
@@ -15,6 +15,7 @@ import {
   type ReportGap,
 } from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
+import { observesSystem } from "./evidence-source.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getRecord } from "../session/record.js";
@@ -235,7 +236,7 @@ const MAX_BARREN_TURNS = 3;
 const MAX_REPORT_ATTEMPTS = 5;
 
 // Past orientation and long before the budget matters. A check, not a repair:
-// nothing has failed, the record is simply still empty.
+// nothing has failed, the run has simply read a lot and settled none of it.
 const CALLS_BEFORE_RECORD_CHECK = 8;
 
 /* Whether this turn wrote the report, read from the tool's own answer. The
@@ -551,10 +552,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
   let barrenTurns = 0;
-  // Tool calls that answered, and whether the run has been asked about its
-  // still-empty record. Asked once: the finish gate covers a model that ignores it.
-  let answeredCalls = 0;
-  let recordChecked = false;
+  /* Evidence calls answered since the last claim was recorded, and the record's
+     size when that reset happened. Recording is what clears the debt, so a run
+     that settles something early and then reads on is asked again. */
+  let callsSinceClaim = 0;
+  let claimsSeen = 0;
   // How many completion requests each gap has survived, so a repeat is loud.
   const gapsSeen = new Map<ReportGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
@@ -766,7 +768,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Push back up to MAX_NUDGES times, then write up regardless: the status
       // an unfinished record derives to is already the honest one.
-      const gaps = reportGaps(sessionId);
+      const gaps = reportGaps(sessionId, callsSinceClaim);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
       // record, so the gate never makes a network call as a run happens to end.
       const recovery = recoveryState(sessionId);
@@ -789,7 +791,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             { turn, nudges, gaps: gaps.map((g) => g.kind), recovery },
             "finish gate: record incomplete, requesting completion",
           );
-          sendHarnessMessage(provider, completionRequest(gaps));
+          sendHarnessMessage(provider, recordGapsMessage(gaps));
           persist();
           continue;
         }
@@ -938,21 +940,31 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
     }
 
-    /* Calls that answered only: a refused one taught the run nothing. Counted
-       after the results are on the provider, because a harness turn wedged
-       between a tool_use and its result orphans the pair. */
-    answeredCalls += toolResults.filter(
-      (result) => result.toolOutcome === undefined,
+    // A claim recorded this turn settles what came before it, so the debt clears
+    // before this turn's own reads are counted against it.
+    const claims = (getRecord(sessionId)?.hypotheses ?? []).length;
+    if (claims > claimsSeen) {
+      claimsSeen = claims;
+      callsSinceClaim = 0;
+    }
+    /* Calls that answered and questioned the system: a refused one taught the run
+       nothing, and recording is not reading. Counted after the results are on the
+       provider, because a harness turn between a tool_use and its result orphans
+       the pair. */
+    const evidenceCalls = new Set(
+      response.toolUses.filter((t) => observesSystem(t.name)).map((t) => t.id),
+    );
+    callsSinceClaim += toolResults.filter(
+      (result) =>
+        result.toolOutcome === undefined &&
+        evidenceCalls.has(result.tool_use_id),
     ).length;
-    if (
-      opensInvestigation &&
-      !recordChecked &&
-      answeredCalls >= CALLS_BEFORE_RECORD_CHECK &&
-      (getRecord(sessionId)?.hypotheses ?? []).length === 0
-    ) {
-      recordChecked = true;
-      log.info({ turn, answeredCalls }, "record still empty; asking about it");
-      sendHarnessMessage(provider, recordCheck(answeredCalls));
+    if (opensInvestigation && callsSinceClaim >= CALLS_BEFORE_RECORD_CHECK) {
+      log.info({ turn, callsSinceClaim }, "reads unaccounted for; asking");
+      sendHarnessMessage(provider, recordCheck(callsSinceClaim));
+      // Cleared by the asking, so an unanswered question is put again after
+      // another eight rather than every turn from here on.
+      callsSinceClaim = 0;
     }
     persist();
   }

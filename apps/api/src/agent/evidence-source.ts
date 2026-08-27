@@ -26,6 +26,12 @@ const BY_TOOL = new Map(
   ),
 );
 
+// Whether a call reads the system under investigation. A recording tool and an
+// elicitation are neither: they add to the record rather than question anything.
+export function observesSystem(toolName: string): boolean {
+  return BY_TOOL.has(toolName);
+}
+
 // A name in no library stands alone rather than joining a catch-all group, so
 // it can never corroborate a second call to itself.
 export function evidenceSource(toolName: string): string {

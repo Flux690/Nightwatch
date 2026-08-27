@@ -165,10 +165,14 @@ function subject(ids: string[]): { names: string; is: string; them: string } {
 function sentenceFor(gap: ReportGap): string {
   switch (gap.kind) {
     case "empty_record":
-      return "You have recorded nothing. Call RecordHypothesis for each explanation you considered, with the verdict it earned, so the record says what you ruled out. If you could not work out the cause, record what you tested and settle it as disproven; that is an honest ending, and inventing a cause to avoid it is not.";
+      return "You have recorded nothing. Call RecordHypothesis for each explanation you considered, with the verdict it earned, so the record says what you settled, including what you ruled out. If you could not work out the cause, record what you tested and settle it as disproven; that is an honest ending, and inventing a cause to avoid it is not.";
     case "unresolvable_citation": {
       const s = subject(gap.ids);
       return `${s.names} ${s.is} backed only by calls that returned nothing, so the claim stands unsupported. Record ${s.them} again against a call that answered.`;
+    }
+    case "unaccounted_calls": {
+      const one = gap.calls === 1;
+      return `Nothing on the record accounts for the ${gap.calls} tool ${one ? "call" : "calls"} you answered after your last claim. Call RecordHypothesis for whatever ${one ? "it" : "they"} settled, including anything you ruled out, which is recorded as disproven. If ${one ? "it" : "they"} settled nothing, say that plainly and finish.`;
     }
   }
 }
@@ -180,13 +184,13 @@ const RECOVERY_SENTENCE =
 
 // Asks rather than insists: a run pushed into recording something it has not
 // tested records a guess, which the record must never hold.
-export function recordCheck(answeredCalls: number): string {
-  return `You have made ${answeredCalls} tool calls that returned something, and your investigation record is still empty. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
+export function recordCheck(callsSinceClaim: number): string {
+  return `You have answered ${callsSinceClaim} tool calls since your last recorded claim. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
 }
 
 // Names the gaps and nothing else: a model one finding short is not told
 // about the four things it did do.
-export function completionRequest(gaps: ReportGap[]): string {
+export function recordGapsMessage(gaps: ReportGap[]): string {
   return [
     "Your investigation record is not finished.",
     ...gaps.map(sentenceFor),

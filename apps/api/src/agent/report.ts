@@ -258,19 +258,29 @@ export function isActionable(record: InvestigationRecord | null): boolean {
   );
 }
 
-// A list rather than a boolean, so the completion request can name only what
+// A list rather than a boolean, so the record-gaps message can name only what
 // is absent and a surviving gap can be logged as itself.
 export type ReportGap =
-  { kind: "empty_record" } | { kind: "unresolvable_citation"; ids: string[] };
+  | { kind: "empty_record" }
+  | { kind: "unresolvable_citation"; ids: string[] }
+  | { kind: "unaccounted_calls"; calls: number };
 
-// Two kinds, not four: a hypothesis is recorded settled, and an uncited claim
-// never reaches the record at all.
-export function reportGaps(sessionId: string): ReportGap[] {
+/* `unaccounted` is the run's own count of evidence calls answered since its last
+   claim: the record cannot say, because a claim carries no mark of what it was
+   recorded over. */
+export function reportGaps(
+  sessionId: string,
+  unaccounted: number,
+): ReportGap[] {
   const record = getRecord(sessionId);
   const hypotheses = record?.hypotheses ?? [];
   const gaps: ReportGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
+  // Only alongside a record that holds something: an empty one is already named
+  // above, and saying both would ask twice for one thing.
+  else if (unaccounted > 0)
+    gaps.push({ kind: "unaccounted_calls", calls: unaccounted });
 
   if (record !== undefined) {
     const resolved = new Set(
