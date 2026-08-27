@@ -9,16 +9,10 @@ import type { ToolSchema } from "../../llm/types.js";
 
 // The one thing a citation can be. The id of the call is the only handle that
 // exists, so the user's view and the model's context name the same string.
-const CITATION_DESCRIPTION =
-  "The evidence ids of the tool calls whose results support this claim. Every tool result carries its own id, written e1, e2, e3 and so on in the order you called them, so copy one from the result you mean. Cite only calls you actually made. The user sees each cited result shown underneath the claim it backs, so cite the call whose output actually shows what you are asserting.";
-
-// Draft-07-safe under Anthropic tool-schema constraints: additionalProperties
-// false everywhere, every field required, primitive enums, no length/pattern.
-// An optional value is therefore a required field whose empty string means none.
 export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
   name: "RecordHypothesis",
   description:
-    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis and name the one it replaces in 'supersedes', rather than trying to correct that one.",
+    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis and name the one it replaces in 'supersedes', rather than trying to correct that one. RecordHypothesis records a claim by citing the tool calls whose results show that claim. RecordHypothesis reads nothing about your system, so a call to RecordHypothesis carries no evidence id, and no claim can cite a call to RecordHypothesis.",
   input_schema: {
     type: "object",
     additionalProperties: false,
@@ -39,7 +33,8 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
       evidenceIds: {
         type: "array",
         items: { type: "string" },
-        description: `${CITATION_DESCRIPTION} At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal.`,
+        description:
+          'The evidence ids of the tool calls whose results show this claim is true. A result that can back a claim opens with an "evidenceId" field, written e1, e2, e3 and so on. A tool that reads nothing about your system carries no evidence id and cannot be cited. The user sees each cited result rendered underneath the claim, so cite the call whose output shows what you are asserting. At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal.',
       },
       verdict: {
         type: "string",

@@ -90,8 +90,6 @@ export const REPORT_TOOLS: Tool[] = [
     schema: RECORD_HYPOTHESIS_SCHEMA,
     effect: "read",
     policy: "auto",
-    // Citable: a claim may rest on the call that recorded it, and what that
-    // shows is its own sentence rather than a measurement to draw.
     evidenceKind: "text",
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
@@ -108,9 +106,7 @@ export const REPORT_TOOLS: Tool[] = [
           `That hypothesis could not be recorded - ${fieldErrors(parsed.error)}.${citations}`,
         );
       }
-      return toResult(
-        recordHypothesis(ctx.sessionId, parsed.data, ctx.toolUseId),
-      );
+      return toResult(recordHypothesis(ctx.sessionId, parsed.data));
     },
   },
 ];

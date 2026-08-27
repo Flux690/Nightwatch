@@ -8,9 +8,9 @@ import { REPO_TOOLS } from "./tools/repo.js";
 import type { Tool } from "./tools/types.js";
 import type { EvidenceKind } from "@nightwarden/shared";
 
-// Two Docker reads question one daemon, while a metric query and a log read
-// question two. Corroboration means citing two sources.
-const LIBRARIES: ReadonlyArray<readonly [string, Tool[]]> = [
+// The tools that question the system under investigation, grouped by what each
+// one questions: two Docker reads ask one daemon, a metric and a log ask two.
+const EVIDENCE_SOURCES: ReadonlyArray<readonly [string, Tool[]]> = [
   ["docker", DOCKER_TOOLS],
   ["host", HOST_TOOLS],
   ["kubernetes", K8S_TOOLS],
@@ -21,25 +21,26 @@ const LIBRARIES: ReadonlyArray<readonly [string, Tool[]]> = [
 ];
 
 const BY_TOOL = new Map(
-  LIBRARIES.flatMap(([source, tools]) =>
+  EVIDENCE_SOURCES.flatMap(([source, tools]) =>
     tools.map((tool): [string, string] => [tool.schema.name, source]),
   ),
 );
 
-// Whether a call reads the system under investigation. A recording tool and an
-// elicitation are neither: they add to the record rather than question anything.
-export function observesSystem(toolName: string): boolean {
+/* Whether a claim may rest on this call, and so whether it is issued an evidence
+   id at all. Recording a claim, writing the report and asking a person are none
+   of them observations of the system, so none of them can back one. */
+export function isCitable(toolName: string): boolean {
   return BY_TOOL.has(toolName);
 }
 
-// A name in no library stands alone rather than joining a catch-all group, so
-// it can never corroborate a second call to itself.
+// A name in no group stands alone rather than joining a catch-all one, so it
+// can never corroborate a second call to itself.
 export function evidenceSource(toolName: string): string {
   return BY_TOOL.get(toolName) ?? toolName;
 }
 
 const KIND_BY_TOOL = new Map(
-  LIBRARIES.flatMap(([, tools]) =>
+  EVIDENCE_SOURCES.flatMap(([, tools]) =>
     tools.map((tool): [string, EvidenceKind] => [
       tool.schema.name,
       tool.evidenceKind,
@@ -47,8 +48,8 @@ const KIND_BY_TOOL = new Map(
   ),
 );
 
-// From the tool's own declaration. A name the libraries no longer know reads
-// as plain text: the result is still quotable, just not typed.
+// From the tool's own declaration. A name no group knows reads as plain text:
+// the result is still quotable, just not typed.
 export function evidenceKind(toolName: string): EvidenceKind {
   return KIND_BY_TOOL.get(toolName) ?? "text";
 }

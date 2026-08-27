@@ -15,7 +15,7 @@ import {
   type ReportGap,
 } from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
-import { observesSystem } from "./evidence-source.js";
+import { isCitable } from "./evidence-source.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getRecord } from "../session/record.js";
@@ -947,12 +947,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       claimsSeen = claims;
       callsSinceClaim = 0;
     }
-    /* Calls that answered and questioned the system: a refused one taught the run
-       nothing, and recording is not reading. Counted after the results are on the
-       provider, because a harness turn between a tool_use and its result orphans
-       the pair. */
+    /* Calls that answered and could back a claim: a refused one taught the run
+       nothing, and recording is not reading. Counted here rather than earlier: a
+       harness turn between a tool_use and its result orphans the pair. */
     const evidenceCalls = new Set(
-      response.toolUses.filter((t) => observesSystem(t.name)).map((t) => t.id),
+      response.toolUses.filter((t) => isCitable(t.name)).map((t) => t.id),
     );
     callsSinceClaim += toolResults.filter(
       (result) =>

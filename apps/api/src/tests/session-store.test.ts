@@ -369,6 +369,22 @@ describe("API-local session store", () => {
   // The five words and nothing else. Every one of them is derived from the
   // action log, the alert or the hypothesis rows; none is ever declared.
   describe("derived status", () => {
+    /* One answered call the claims below can cite. A citation is an evidence id
+     the model was issued, so a test that hands a raw tool_use id is describing
+     something production refuses. */
+    function seedCitedCall(sessionId: string): string {
+      appendTranscriptRows([
+        {
+          ...msg(sessionId, 0, { kind: "assistant" }),
+          parts: [
+            { type: "tool_call", id: "tu-seed", name: "Read", input: {} },
+            { type: "tool_result", toolCallId: "tu-seed", output: "ok" },
+          ],
+        },
+      ]);
+      return "e1";
+    }
+
     function statusOf(sessionId: string): string | null {
       const row = listSessionPage(200, 0).rows.find(
         (r) => r.sessionId === sessionId,
@@ -488,16 +504,12 @@ describe("API-local session store", () => {
     // the total, so the stepper read "3 / 12" over eleven rows.
     it("reads Inconclusive when a cause was found but nothing was recommended", () => {
       const sessionId = investigation();
-      recordHypothesis(
-        sessionId,
-        {
-          statement: "the deploy set the cache size",
-          verdict: "trigger",
-          finding: "the climb starts at the merge",
-          evidenceIds: ["tu-never-ran"],
-        },
-        "tu-never-ran",
-      );
+      recordHypothesis(sessionId, {
+        statement: "the deploy set the cache size",
+        verdict: "trigger",
+        finding: "the climb starts at the merge",
+        evidenceIds: [seedCitedCall(sessionId)],
+      });
       expect(statusOf(sessionId)).toBe("inconclusive");
     });
 
@@ -670,16 +682,12 @@ describe("API-local session store", () => {
 
     it("gives every investigation a group, whatever its record holds", () => {
       const sessionId = investigation();
-      recordHypothesis(
-        sessionId,
-        {
-          statement: "something downstream broke",
-          verdict: "symptom",
-          finding: "it followed the upstream failure",
-          evidenceIds: ["tu-never-ran"],
-        },
-        "tu-never-ran",
-      );
+      recordHypothesis(sessionId, {
+        statement: "something downstream broke",
+        verdict: "symptom",
+        finding: "it followed the upstream failure",
+        evidenceIds: [seedCitedCall(sessionId)],
+      });
       const rows = listSessionPage(500, 0).rows.filter((r) => r.investigation);
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((r) => r.status !== null)).toBe(true);
@@ -707,6 +715,8 @@ describe("API-local session store", () => {
     }
 
     // A citation survives only if the call it names is in the transcript.
+    // Returns the handle the model would be given, not the provider's own id:
+    // the seq-th call it appends is the seq-th citable call on the session.
     function cite(sessionId: string, toolUseId: string, seq: number): string {
       appendTranscriptRows([
         {
@@ -717,7 +727,7 @@ describe("API-local session store", () => {
           ],
         },
       ]);
-      return toolUseId;
+      return `e${seq + 1}`;
     }
 
     it("says what a gated session waits on, by the kind of answer it needs", () => {
@@ -743,39 +753,27 @@ describe("API-local session store", () => {
     // is the most confident the run reached, not the last thing it typed.
     it("leads with the most confident claim, the newer of two equals winning", () => {
       const sessionId = investigation();
-      recordHypothesis(
-        sessionId,
-        {
-          statement: "the cache size grew at the merge",
-          verdict: "symptom",
-          finding: "it climbs with the cache",
-          evidenceIds: [cite(sessionId, "tu-1", 0)],
-        },
-        "tu-record",
-      );
-      recordHypothesis(
-        sessionId,
-        {
-          statement: "the sidecar leaks between deploys",
-          verdict: "root_cause",
-          finding: "the leak survives the restart",
-          evidenceIds: [cite(sessionId, "tu-2", 1)],
-        },
-        "tu-record",
-      );
+      recordHypothesis(sessionId, {
+        statement: "the cache size grew at the merge",
+        verdict: "symptom",
+        finding: "it climbs with the cache",
+        evidenceIds: [cite(sessionId, "tu-1", 0)],
+      });
+      recordHypothesis(sessionId, {
+        statement: "the sidecar leaks between deploys",
+        verdict: "root_cause",
+        finding: "the leak survives the restart",
+        evidenceIds: [cite(sessionId, "tu-2", 1)],
+      });
       // The cause outranks the symptom even though the symptom settled first.
       expect(findingOf(sessionId)).toBe("the sidecar leaks between deploys");
 
-      recordHypothesis(
-        sessionId,
-        {
-          statement: "the pool never returns its connections",
-          verdict: "root_cause",
-          finding: "the pool is full at the crash",
-          evidenceIds: [cite(sessionId, "tu-3", 2)],
-        },
-        "tu-record",
-      );
+      recordHypothesis(sessionId, {
+        statement: "the pool never returns its connections",
+        verdict: "root_cause",
+        finding: "the pool is full at the crash",
+        evidenceIds: [cite(sessionId, "tu-3", 2)],
+      });
       expect(findingOf(sessionId)).toBe(
         "the pool never returns its connections",
       );

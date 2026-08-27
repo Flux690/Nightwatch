@@ -241,7 +241,7 @@ describe("the investigation record", () => {
         sessionId,
         "the cache bump leaks",
         "root_cause",
-        ["tu-1"],
+        ["e1"],
         "the climb starts at the merge",
       );
       const stored = getRecord(sessionId)!.hypotheses[0]!;
@@ -266,7 +266,7 @@ describe("the investigation record", () => {
         "disproven",
       ];
       for (const verdict of verdicts) {
-        await record(sessionId, `about ${verdict}`, verdict, ["tu-1"]);
+        await record(sessionId, `about ${verdict}`, verdict, ["e1"]);
       }
       expect(getRecord(sessionId)!.hypotheses.map((h) => h.verdict)).toEqual(
         verdicts,
@@ -309,8 +309,8 @@ describe("the investigation record", () => {
     it("keeps a claim the run later disagreed with beside the one that replaced it", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
-      await record(sessionId, "the cache bump leaks", "disproven", ["tu-2"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
+      await record(sessionId, "the cache bump leaks", "disproven", ["e2"]);
 
       expect(
         getRecord(sessionId)!.hypotheses.map((h) => [h.id, h.verdict]),
@@ -326,13 +326,13 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
       const first = await record(sessionId, "the disk filled", "root_cause", [
-        "tu-1",
+        "e1",
       ]);
       await record(
         sessionId,
         "the volume is undersized",
         "root_cause",
-        ["tu-2"],
+        ["e2"],
         "",
         first,
       );
@@ -352,7 +352,7 @@ describe("the investigation record", () => {
         statement: "the volume is undersized",
         verdict: "root_cause",
         finding: "",
-        evidenceIds: ["tu-1"],
+        evidenceIds: ["e1"],
         supersedes: "h9",
       });
 
@@ -368,7 +368,7 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
       await record(sessionId, "the cache bump leaks", "root_cause", [
-        "tu-1",
+        "e1",
         "tu-invented",
       ]);
 
@@ -383,7 +383,7 @@ describe("the investigation record", () => {
     it("writes the prose the record has no field for, over a record it leaves alone", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
 
       await submit(sessionId, {
         summary:
@@ -392,7 +392,7 @@ describe("the investigation record", () => {
           {
             at: "2026-07-03T02:00:00.000Z",
             what: "memory crossed the limit",
-            evidenceId: "tu-1",
+            evidenceId: "e1",
           },
         ],
         impact: "nine minutes of failed reads",
@@ -414,7 +414,7 @@ describe("the investigation record", () => {
     it("drops a timeline citation naming no call, and keeps the entry", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
 
       await submit(sessionId, {
         summary: "the limit was lowered",
@@ -445,7 +445,7 @@ describe("the investigation record", () => {
     it("keeps a row's lane when its citation is dropped", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
 
       await submit(sessionId, {
         headline: "PR #482 raised the memory floor and web-01 was OOM-killed",
@@ -476,7 +476,7 @@ describe("the investigation record", () => {
     it("refuses a blank in a field the schema declares required", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
 
       const refused = await submit(sessionId, {
         headline: "   ",
@@ -492,7 +492,7 @@ describe("the investigation record", () => {
     it("stores every field once they are all filled in", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
 
       await submit(sessionId, {
         summary: "the limit was lowered",
@@ -526,7 +526,7 @@ describe("the investigation record", () => {
     it("resolves a citation to the call that produced it, quoting the result verbatim", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["e1"]);
       // The timeline cites too, so a call named only there still resolves.
       await submit(sessionId, {
         summary: "the cache bump raised the floor",
@@ -534,7 +534,7 @@ describe("the investigation record", () => {
           {
             at: "2026-07-03T02:01:00.000Z",
             what: "PR #482 merged",
-            evidenceId: "tu-2",
+            evidenceId: "e2",
           },
         ],
         recommendation: "revert PR #482",
@@ -560,10 +560,10 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
 
-      const one = await record(sessionId, "one source", "trigger", ["tu-1"]);
+      const one = await record(sessionId, "one source", "trigger", ["e1"]);
       const two = await record(sessionId, "two sources", "root_cause", [
-        "tu-1",
-        "tu-2",
+        "e1",
+        "e2",
       ]);
       const conviction = computeConviction(sessionId, getRecord(sessionId)!);
       expect(conviction[one]).toBe("cited");
@@ -594,75 +594,35 @@ describe("the investigation record", () => {
       expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
     });
 
-    // The other half of the same contract: a claim cites the call it read only
-    // if the id in a result is the id the record resolves that call by.
-    it("stamps a result with the id the record resolves that call by", async () => {
-      mockCreateProvider.mockImplementationOnce(() =>
-        createContractFakeProvider([
-          // Two calls in one turn, because the drift is the size of the turn.
-          {
-            toolUses: [
-              {
-                id: "tu-a",
-                name: "RecordHypothesis",
-                input: {
-                  statement: "the disk filled",
-                  verdict: "root_cause",
-                  finding: "the read showed 98 percent",
-                  evidenceIds: ["tu-a"],
-                },
-              },
-              {
-                id: "tu-b",
-                name: "RecordHypothesis",
-                input: {
-                  statement: "the cache was cold",
-                  verdict: "disproven",
-                  finding: "the hit rate held",
-                  evidenceIds: ["tu-a"],
-                },
-              },
-            ],
-            text: "",
-          },
-          { toolUses: [], text: "done" },
-          {
-            toolUses: [
-              {
-                id: "tu-submit",
-                name: "SubmitInvestigationReport",
-                input: {
-                  headline: "the worker filled its volume",
-                  affected: "the worker",
-                  summary: "the worker ran out of disk",
-                  timeline: [],
-                  impact: "one job dropped",
-                  recommendation: "raise the volume",
-                },
-              },
-            ],
-            text: "",
-          },
-        ]),
-      );
+    /* The other half of the same contract: the id a result carries is the id the
+       record resolves that call by, and a tool no claim may rest on carries no
+       id at all - so three calls made leave only two that can be cited. */
+    it("numbers a citable result, and leaves a recording call unnumbered", async () => {
       const sessionId = randomUUID();
-      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
-        alert("stamped-ids"),
+      seedTranscript(sessionId);
+
+      const stored = await record(
+        sessionId,
+        "the disk filled",
+        "root_cause",
+        ["e1"],
+        "the read showed 98 percent",
+      );
+      expect(getRecord(sessionId)!.hypotheses[0]!.evidenceIds).toEqual([
+        "tu-1",
       ]);
 
-      await runSession({ sessionId, alerts: [alert("stamped-ids")] });
-
-      const answers = new Map(
-        getTranscriptRows(sessionId)
-          .flatMap((row) => row.parts)
-          .flatMap((part) =>
-            part.type === "tool_result"
-              ? [[part.toolCallId, part.output] as const]
-              : [],
-          ),
-      );
-      expect(answers.get("tu-a")).toContain("[e1]");
-      expect(answers.get("tu-b")).toContain("[e2]");
+      // A third call has been made by now - the recording itself - and it took
+      // no number, so the range the refusal offers still ends at e2.
+      const refused = await call("RecordHypothesis", sessionId, {
+        statement: "the volume is undersized",
+        verdict: "root_cause",
+        finding: "guessed",
+        evidenceIds: ["e3"],
+      });
+      expect(String(refused.content)).toContain("e1 through e2");
+      expect(getRecord(sessionId)!.hypotheses).toHaveLength(1);
+      expect(stored).toBe("h1");
     });
 
     // Counted from the transcript, the only thing that can answer it, so a
@@ -762,8 +722,8 @@ describe("the investigation record", () => {
         "2026-07-03T02:02:00.000Z",
       );
       const id = await record(sessionId, "two metric queries", "root_cause", [
-        "tu-1",
-        "tu-3",
+        "e1",
+        "e3",
       ]);
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
         "cited",
@@ -810,7 +770,7 @@ describe("the investigation record", () => {
         sessionId,
         "the container needed a restart",
         "trigger",
-        ["tu-after"],
+        ["e4"],
       );
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
         "verified",
@@ -826,7 +786,7 @@ describe("the investigation record", () => {
         sessionId,
         "the container needed a restart",
         "trigger",
-        ["tu-1", "tu-2"],
+        ["e1", "e2"],
       );
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
         "corroborated",
@@ -966,7 +926,7 @@ describe("the investigation record", () => {
         sessionId,
         "the container needed a restart",
         "trigger",
-        ["tu-after"],
+        ["e4"],
       );
       // The user said no, so nothing changed and the read confirms nothing.
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
@@ -1002,7 +962,7 @@ describe("the investigation record", () => {
         sessionId,
         "the deploy regressed memory",
         "trigger",
-        ["tu-after"],
+        ["e3"],
       );
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
         "cited",
@@ -1045,7 +1005,7 @@ describe("the investigation record", () => {
         sessionId,
         "the container is out of disk",
         "root_cause",
-        ["tu-after"],
+        ["e3"],
       );
       expect(computeConviction(sessionId, getRecord(sessionId)!)[id]).toBe(
         "cited",
@@ -1064,7 +1024,7 @@ describe("the investigation record", () => {
     }
     // Matched on content, not the first character: the <nightwarden> tag is
     // asserted on its own below rather than by each of these.
-    function completionRequests(index = 0): string[] {
+    function recordGapsMessages(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
         m.includes("Your investigation record"),
       );
@@ -1078,22 +1038,40 @@ describe("the investigation record", () => {
     // A scripted turn recording one hypothesis, citing the recording call's own
     // id - which is in the record by then, because the assistant turn is
     // persisted before its tools run.
+    /* Two turns, because a claim cites a call whose result it has read, and a
+       call is only read on the turn after the one that made it. The read fails
+       with no runner connected, which still answers and so is still citable. */
     function recordTurn(verdict: string, statement: string) {
-      return {
-        toolUses: [
-          {
-            id: "tu-record",
-            name: "RecordHypothesis",
-            input: {
-              statement,
-              verdict,
-              finding: "what the read showed",
-              evidenceIds: ["tu-record"],
+      const n = randomUUID();
+      return [
+        {
+          toolUses: [
+            {
+              id: `tu-read-${n}`,
+              name: "GetDockerLogs",
+              input: { target: "host/app/web" },
             },
-          },
-        ],
-        text: "",
-      };
+          ],
+          text: "",
+        },
+        {
+          toolUses: [
+            {
+              id: `tu-record-${n}`,
+              name: "RecordHypothesis",
+              input: {
+                statement,
+                verdict,
+                finding: "what the read showed",
+                // e1 either way: the read above is the first citable call when
+                // nothing precedes it, and one of them when something does.
+                evidenceIds: ["e1"],
+              },
+            },
+          ],
+          text: "",
+        },
+      ];
     }
 
     function submitTurn(recommendation = "cap concurrency at one job") {
@@ -1121,7 +1099,7 @@ describe("the investigation record", () => {
     it("marks every message it writes as its own, never as the user's", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          recordTurn("root_cause", "the disk filled up"),
+          ...recordTurn("root_cause", "the disk filled up"),
           { toolUses: [], text: "Done." },
           submitTurn(),
         ]),
@@ -1157,7 +1135,7 @@ describe("the investigation record", () => {
       });
       expect(toolOutcome).toBe("completed");
 
-      const requests = completionRequests();
+      const requests = recordGapsMessages();
       expect(requests).toHaveLength(5);
       expect(requests[0]).toContain("recorded nothing");
       // The opening turn plus one per nudge, then every report attempt - the
@@ -1207,7 +1185,7 @@ describe("the investigation record", () => {
         statement: "leak",
         verdict: "root_cause",
         finding: "rss climbed",
-        evidenceIds: ["tu-silent"],
+        evidenceIds: ["e1"],
       });
 
       // Named as not-yet rather than as invented: the fix is to wait for it,
@@ -1237,7 +1215,7 @@ describe("the investigation record", () => {
         statement: "leak",
         verdict: "root_cause",
         finding: "rss climbed",
-        evidenceIds: ["tu-silent"],
+        evidenceIds: ["e1"],
       });
       expect(getRecord(sessionId)!.hypotheses).toHaveLength(1);
       expect(reportGaps(sessionId, 0)).toEqual([]);
@@ -1248,7 +1226,7 @@ describe("the investigation record", () => {
     it("says the report was cut off rather than ending with nothing", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          recordTurn("root_cause", "the disk filled up"),
+          ...recordTurn("root_cause", "the disk filled up"),
           { toolUses: [], text: "I am done." },
           { toolUses: [], text: "", stopReason: "max_tokens" },
         ]),
@@ -1277,7 +1255,7 @@ describe("the investigation record", () => {
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(3);
+      expect(provider.chat).toHaveBeenCalledTimes(4);
       expect(reportRequests()).toHaveLength(1);
     });
 
@@ -1287,14 +1265,14 @@ describe("the investigation record", () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the disk filled up"),
+            ...recordTurn("root_cause", "the disk filled up"),
             { toolUses: [], text: "I am done." },
             submitTurn("free up the disk"),
           ]),
         )
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the volume is undersized"),
+            ...recordTurn("root_cause", "the volume is undersized"),
             { toolUses: [], text: "Still full." },
             submitTurn("add a volume"),
           ]),
@@ -1332,7 +1310,7 @@ describe("the investigation record", () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the disk filled up"),
+            ...recordTurn("root_cause", "the disk filled up"),
             { toolUses: [], text: "I am done." },
             submitTurn("free up the disk"),
           ]),
@@ -1369,7 +1347,7 @@ describe("the investigation record", () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the disk filled up"),
+            ...recordTurn("root_cause", "the disk filled up"),
             { toolUses: [], text: "I am done." },
             submitTurn("free up the disk"),
           ]),
@@ -1377,7 +1355,7 @@ describe("the investigation record", () => {
         // Records a second claim, then malforms every submission it is asked for.
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the volume is undersized"),
+            ...recordTurn("root_cause", "the volume is undersized"),
             { toolUses: [], text: "Still full." },
             ...Array.from({ length: 5 }, () => ({
               toolUses: [
@@ -1439,7 +1417,7 @@ describe("the investigation record", () => {
       ]);
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          recordTurn("root_cause", "the pool was exhausted"),
+          ...recordTurn("root_cause", "the pool was exhausted"),
           { toolUses: [], text: "Done." },
           submitTurn("raise the pool"),
         ]),
@@ -1504,7 +1482,7 @@ describe("the investigation record", () => {
             readTurn(),
             readTurn(),
             readTurn(),
-            recordTurn("root_cause", "the worker leaks"),
+            ...recordTurn("root_cause", "the worker leaks"),
             { toolUses: [], text: "Done." },
             submitTurn(),
           ]),
@@ -1527,10 +1505,10 @@ describe("the investigation record", () => {
         const conn = connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the worker leaks"),
+            ...recordTurn("root_cause", "the worker leaks"),
             readTurn(),
             { toolUses: [], text: "Done." },
-            recordTurn("disproven", "the disk was fine"),
+            ...recordTurn("disproven", "the disk was fine"),
             { toolUses: [], text: "Done." },
             submitTurn(),
           ]),
@@ -1544,7 +1522,7 @@ describe("the investigation record", () => {
 
         // Two reads, under the eight the nudge waits for, so only the gate spoke.
         expect(checks()).toHaveLength(0);
-        const asked = completionRequests().filter((m) =>
+        const asked = recordGapsMessages().filter((m) =>
           m.includes("Nothing on the record accounts for"),
         );
         expect(asked).toHaveLength(1);
@@ -1560,7 +1538,7 @@ describe("the investigation record", () => {
         const conn = connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("disproven", "the disk filled"),
+            ...recordTurn("disproven", "the disk filled"),
             readTurn(),
             readTurn(),
             readTurn(),
@@ -1585,7 +1563,7 @@ describe("the investigation record", () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("root_cause", "the disk filled up"),
+            ...recordTurn("root_cause", "the disk filled up"),
             { toolUses: [], text: "I am done." },
             { toolUses: [], text: "", stopReason: "max_tokens" },
           ]),
@@ -1620,7 +1598,7 @@ describe("the investigation record", () => {
     it("passes silently once the record holds a settled claim, then writes up", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          recordTurn("disproven", "the disk filled up"),
+          ...recordTurn("disproven", "the disk filled up"),
           { toolUses: [], text: "I could not determine a cause." },
           submitTurn("watch the disk for another day"),
         ]),
@@ -1635,7 +1613,7 @@ describe("the investigation record", () => {
       });
       expect(toolOutcome).toBe("completed");
 
-      expect(completionRequests()).toHaveLength(0);
+      expect(recordGapsMessages()).toHaveLength(0);
       expect(reportRequests()).toHaveLength(1);
       // The record rides the request, so the timeline can copy ids from nearby.
       expect(reportRequests()[0]).toContain("RECORDED FINDINGS");
@@ -1690,7 +1668,7 @@ describe("the investigation record", () => {
       function settledRun(...extra: ReturnType<typeof submitTurn>[]) {
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
-            recordTurn("disproven", "the worker leaks"),
+            ...recordTurn("disproven", "the worker leaks"),
             { toolUses: [], text: "Restarted it." },
             ...extra,
           ]),
@@ -1762,7 +1740,7 @@ describe("the investigation record", () => {
 
         // No write was released, so an honest inconclusive ending stands even
         // though the alert never cleared.
-        expect(completionRequests()).toHaveLength(0);
+        expect(recordGapsMessages()).toHaveLength(0);
         const request = reportRequests()[0]!;
         expect(request).not.toContain("is still firing");
         expect(request).not.toContain("Nothing can confirm");

@@ -81,36 +81,27 @@ function toolCallsIn(sessionId: string): ToolCall[] {
   return entries;
 }
 
-/* Completion, not existence: a call the model has not read the result of cannot
-   back a claim about it. Every tool_use block in a message is emitted before any
-   of them returns, so citing a sibling names a result nobody has seen. */
+/* An id the model was issued, over a call that has answered. Both halves matter:
+   the provider's own id is never accepted, so a tool no claim may rest on cannot
+   be cited at all, and a call still running shows nothing anyone can have read. */
 function knownCitations(
   sessionId: string,
   ids: string[],
-  // The call doing the recording, which cannot have answered because it is still
-  // running. A claim may rest on it: what that shows is its own sentence.
-  self?: string,
 ): { kept: string[]; pending: string[]; invented: string[] } {
   const entries = toolCallsIn(sessionId);
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
-      e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
+      e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
     ),
   );
-  const answered = new Set(
-    entries.flatMap((e) => (e.result === null ? [] : [e.toolUseId])),
-  );
-  if (self !== undefined) answered.add(self);
-  const known = new Set(entries.map((e) => e.toolUseId));
   const kept: string[] = [];
   const pending: string[] = [];
   const invented: string[] = [];
   for (const id of new Set(ids)) {
-    // Cited as e3, or as the provider's own id by a model that found it.
-    const resolved = byEvidenceId.get(id.trim()) ?? id;
-    if (answered.has(resolved)) kept.push(resolved);
-    else if (known.has(resolved)) pending.push(id);
-    else invented.push(id);
+    const entry = byEvidenceId.get(id.trim());
+    if (entry === undefined) invented.push(id);
+    else if (entry.result === null) pending.push(id);
+    else kept.push(entry.toolUseId);
   }
   return { kept, pending, invented };
 }
@@ -134,7 +125,7 @@ function citationRefusal(sessionId: string, invented: string[]): string {
         : `This investigation has e1 through e${total}.`;
   return `Not recorded: ${invented.join(", ")} ${
     invented.length === 1 ? "names" : "name"
-  } no call you made. ${available} Each tool result begins with its own id in brackets; copy one of those and record this again.`;
+  } no call you can cite. ${available} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none. Copy one of those and record this again.`;
 }
 
 // Everything the record points at, from either author: the hypotheses' own
@@ -322,12 +313,10 @@ function supersededBy(
 export function recordHypothesis(
   sessionId: string,
   input: RecordHypothesisInput,
-  self: string,
 ): RecordOutcome {
   const { kept, pending, invented } = knownCitations(
     sessionId,
     input.evidenceIds,
-    self,
   );
   /* Refused rather than recorded with what survives. The schema check ran before
      this filter and nothing looked again, so a claim citing two invented ids was

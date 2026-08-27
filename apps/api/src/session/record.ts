@@ -4,7 +4,7 @@ import { getDb } from "../db.js";
 // The record's persistence seam. Three columns on the session: born with it,
 // deleted with it, and only ever read alongside it.
 
-export interface RecordRow {
+interface RecordRow {
   hypotheses: string;
   report: string | null;
   updatedAt: string | null;
