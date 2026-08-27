@@ -154,22 +154,10 @@ The record is append-only. Nothing you record can be removed or rewritten, so a 
 
 If you could not work out the cause, record what you tested and say so; that is an honest and useful ending, and inventing a cause to avoid it is not.`;
 
-// Grammar for a list of row ids, so a request naming one gap and a request
-// naming several both read as English.
-function subject(ids: string[]): { names: string; is: string; them: string } {
-  if (ids.length === 1) return { names: ids[0]!, is: "is", them: "it" };
-  const names = `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]!}`;
-  return { names, is: "are", them: "each of them" };
-}
-
 function sentenceFor(gap: ReportGap): string {
   switch (gap.kind) {
     case "empty_record":
       return "You have recorded nothing. Call RecordHypothesis for each explanation you considered, with the verdict it earned, so the record says what you settled, including what you ruled out. If you could not work out the cause, record what you tested and settle it as disproven; that is an honest ending, and inventing a cause to avoid it is not.";
-    case "unresolvable_citation": {
-      const s = subject(gap.ids);
-      return `${s.names} ${s.is} backed only by calls that returned nothing, so the claim stands unsupported. Record ${s.them} again against a call that answered.`;
-    }
     case "unaccounted_calls": {
       const one = gap.calls === 1;
       return `Nothing on the record accounts for the ${gap.calls} tool ${one ? "call" : "calls"} you answered after your last claim. Call RecordHypothesis for whatever ${one ? "it" : "they"} settled, including anything you ruled out, which is recorded as disproven. If ${one ? "it" : "they"} settled nothing, say that plainly and finish.`;

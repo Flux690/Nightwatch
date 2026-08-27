@@ -81,28 +81,45 @@ function toolCallsIn(sessionId: string): ToolCall[] {
   return entries;
 }
 
-// Existence, not completion: the model may cite a call from the same turn,
-// whose result is persisted only once that turn ends.
+/* Completion, not existence: a call the model has not read the result of cannot
+   back a claim about it. Every tool_use block in a message is emitted before any
+   of them returns, so citing a sibling names a result nobody has seen. */
 function knownCitations(
   sessionId: string,
   ids: string[],
-): { kept: string[]; invented: string[] } {
+  // The call doing the recording, which cannot have answered because it is still
+  // running. A claim may rest on it: what that shows is its own sentence.
+  self?: string,
+): { kept: string[]; pending: string[]; invented: string[] } {
   const entries = toolCallsIn(sessionId);
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
       e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
     ),
   );
+  const answered = new Set(
+    entries.flatMap((e) => (e.result === null ? [] : [e.toolUseId])),
+  );
+  if (self !== undefined) answered.add(self);
   const known = new Set(entries.map((e) => e.toolUseId));
   const kept: string[] = [];
+  const pending: string[] = [];
   const invented: string[] = [];
   for (const id of new Set(ids)) {
     // Cited as e3, or as the provider's own id by a model that found it.
     const resolved = byEvidenceId.get(id.trim()) ?? id;
-    if (known.has(resolved)) kept.push(resolved);
+    if (answered.has(resolved)) kept.push(resolved);
+    else if (known.has(resolved)) pending.push(id);
     else invented.push(id);
   }
-  return { kept, invented };
+  return { kept, pending, invented };
+}
+
+// A call that has not answered is a different correction from one that does not
+// exist: the fix is to wait for it, not to pick a different id.
+function pendingRefusal(pending: string[]): string {
+  const one = pending.length === 1;
+  return `Not recorded: ${pending.join(", ")} ${one ? "has" : "have"} not answered yet, so ${one ? "it shows" : "they show"} nothing you can have read. Every tool call in one message is made before any of them returns. Record this again in a later turn, once the result is in front of you.`;
 }
 
 // What the model cited that names no call, said back in the vocabulary it was
@@ -132,8 +149,8 @@ function citedIds(record: InvestigationRecord): Set<string> {
   ]);
 }
 
-// A citation whose call never answered resolves to nothing. The outcome rides
-// along, because a cited miss and a cited crash differ.
+// Every cited call answered - a citation naming one that had not is refused when
+// the claim is made. The outcome rides along: a cited miss and a cited crash differ.
 export function resolveEvidence(
   sessionId: string,
   record: InvestigationRecord,
@@ -261,9 +278,7 @@ export function isActionable(record: InvestigationRecord | null): boolean {
 // A list rather than a boolean, so the record-gaps message can name only what
 // is absent and a surviving gap can be logged as itself.
 export type ReportGap =
-  | { kind: "empty_record" }
-  | { kind: "unresolvable_citation"; ids: string[] }
-  | { kind: "unaccounted_calls"; calls: number };
+  { kind: "empty_record" } | { kind: "unaccounted_calls"; calls: number };
 
 /* `unaccounted` is the run's own count of evidence calls answered since its last
    claim: the record cannot say, because a claim carries no mark of what it was
@@ -272,8 +287,7 @@ export function reportGaps(
   sessionId: string,
   unaccounted: number,
 ): ReportGap[] {
-  const record = getRecord(sessionId);
-  const hypotheses = record?.hypotheses ?? [];
+  const hypotheses = getRecord(sessionId)?.hypotheses ?? [];
   const gaps: ReportGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
@@ -281,21 +295,6 @@ export function reportGaps(
   // above, and saying both would ask twice for one thing.
   else if (unaccounted > 0)
     gaps.push({ kind: "unaccounted_calls", calls: unaccounted });
-
-  if (record !== undefined) {
-    const resolved = new Set(
-      resolveEvidence(sessionId, record).map((e) => e.toolUseId),
-    );
-    const unbacked = hypotheses
-      .filter(
-        (row) =>
-          row.evidenceIds.length > 0 &&
-          !row.evidenceIds.some((id) => resolved.has(id)),
-      )
-      .map((row) => row.id);
-    if (unbacked.length > 0)
-      gaps.push({ kind: "unresolvable_citation", ids: unbacked });
-  }
 
   return gaps;
 }
@@ -323,13 +322,20 @@ function supersededBy(
 export function recordHypothesis(
   sessionId: string,
   input: RecordHypothesisInput,
+  self: string,
 ): RecordOutcome {
-  const { kept, invented } = knownCitations(sessionId, input.evidenceIds);
+  const { kept, pending, invented } = knownCitations(
+    sessionId,
+    input.evidenceIds,
+    self,
+  );
   /* Refused rather than recorded with what survives. The schema check ran before
      this filter and nothing looked again, so a claim citing two invented ids was
      stored citing nothing. */
   if (kept.length === 0) {
-    return { recorded: false, message: citationRefusal(sessionId, invented) };
+    return pending.length > 0
+      ? { recorded: false, message: pendingRefusal(pending) }
+      : { recorded: false, message: citationRefusal(sessionId, invented) };
   }
   const evidenceIds = kept;
   const { id, replaced } = appendHypothesis(sessionId, (record) => {
@@ -382,17 +388,10 @@ export function submitReport(
   sessionId: string,
   input: SubmitReportInput,
 ): RecordOutcome {
-  const entries = toolCallsIn(sessionId);
-  const known = new Set(entries.map((e) => e.toolUseId));
-  const byEvidenceId = new Map(
-    entries.flatMap((e) =>
-      e.evidenceId === undefined ? [] : [[e.evidenceId, e.toolUseId] as const],
-    ),
-  );
-  const resolve = (id: string): string | undefined => {
-    const toolUseId = byEvidenceId.get(id.trim()) ?? id;
-    return known.has(toolUseId) ? toolUseId : undefined;
-  };
+  // Answered, not merely known: a timeline entry pointing at a call that never
+  // returned shows the reader nothing when they open it.
+  const resolve = (id: string): string | undefined =>
+    knownCitations(sessionId, [id]).kept[0];
   // The entry is kept when its citation is dropped: the lane describes the
   // moment rather than the call, so an unresolvable id must not cost it.
   const timeline = input.timeline.map((entry) => {
@@ -407,8 +406,8 @@ export function submitReport(
         };
   });
   const approvedWrites = approvedWriteCount(sessionId);
-  // Stamped inside the transaction, from the record being written against: a
-  // watermark taken anywhere else could name claims this report never saw.
+  // Stamped inside the transaction, from the record being written against:
+  // counted anywhere else it could name claims this report never saw.
   amendRecord(sessionId, (record) => ({
     ...record,
     report: {

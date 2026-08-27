@@ -488,12 +488,16 @@ describe("API-local session store", () => {
     // the total, so the stepper read "3 / 12" over eleven rows.
     it("reads Inconclusive when a cause was found but nothing was recommended", () => {
       const sessionId = investigation();
-      recordHypothesis(sessionId, {
-        statement: "the deploy set the cache size",
-        verdict: "trigger",
-        finding: "the climb starts at the merge",
-        evidenceIds: ["tu-never-ran"],
-      });
+      recordHypothesis(
+        sessionId,
+        {
+          statement: "the deploy set the cache size",
+          verdict: "trigger",
+          finding: "the climb starts at the merge",
+          evidenceIds: ["tu-never-ran"],
+        },
+        "tu-never-ran",
+      );
       expect(statusOf(sessionId)).toBe("inconclusive");
     });
 
@@ -666,12 +670,16 @@ describe("API-local session store", () => {
 
     it("gives every investigation a group, whatever its record holds", () => {
       const sessionId = investigation();
-      recordHypothesis(sessionId, {
-        statement: "something downstream broke",
-        verdict: "symptom",
-        finding: "it followed the upstream failure",
-        evidenceIds: ["tu-never-ran"],
-      });
+      recordHypothesis(
+        sessionId,
+        {
+          statement: "something downstream broke",
+          verdict: "symptom",
+          finding: "it followed the upstream failure",
+          evidenceIds: ["tu-never-ran"],
+        },
+        "tu-never-ran",
+      );
       const rows = listSessionPage(500, 0).rows.filter((r) => r.investigation);
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((r) => r.status !== null)).toBe(true);
@@ -735,27 +743,39 @@ describe("API-local session store", () => {
     // is the most confident the run reached, not the last thing it typed.
     it("leads with the most confident claim, the newer of two equals winning", () => {
       const sessionId = investigation();
-      recordHypothesis(sessionId, {
-        statement: "the cache size grew at the merge",
-        verdict: "symptom",
-        finding: "it climbs with the cache",
-        evidenceIds: [cite(sessionId, "tu-1", 0)],
-      });
-      recordHypothesis(sessionId, {
-        statement: "the sidecar leaks between deploys",
-        verdict: "root_cause",
-        finding: "the leak survives the restart",
-        evidenceIds: [cite(sessionId, "tu-2", 1)],
-      });
+      recordHypothesis(
+        sessionId,
+        {
+          statement: "the cache size grew at the merge",
+          verdict: "symptom",
+          finding: "it climbs with the cache",
+          evidenceIds: [cite(sessionId, "tu-1", 0)],
+        },
+        "tu-record",
+      );
+      recordHypothesis(
+        sessionId,
+        {
+          statement: "the sidecar leaks between deploys",
+          verdict: "root_cause",
+          finding: "the leak survives the restart",
+          evidenceIds: [cite(sessionId, "tu-2", 1)],
+        },
+        "tu-record",
+      );
       // The cause outranks the symptom even though the symptom settled first.
       expect(findingOf(sessionId)).toBe("the sidecar leaks between deploys");
 
-      recordHypothesis(sessionId, {
-        statement: "the pool never returns its connections",
-        verdict: "root_cause",
-        finding: "the pool is full at the crash",
-        evidenceIds: [cite(sessionId, "tu-3", 2)],
-      });
+      recordHypothesis(
+        sessionId,
+        {
+          statement: "the pool never returns its connections",
+          verdict: "root_cause",
+          finding: "the pool is full at the crash",
+          evidenceIds: [cite(sessionId, "tu-3", 2)],
+        },
+        "tu-record",
+      );
       expect(findingOf(sessionId)).toBe(
         "the pool never returns its connections",
       );

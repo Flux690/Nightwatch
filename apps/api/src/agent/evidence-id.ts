@@ -20,17 +20,3 @@ export function evidenceIdsByToolUseId(
   }
   return byToolUseId;
 }
-
-// The line put in front of a tool result so the model can read its own handle.
-// Restated from the call rather than described, so it cannot drift from it.
-export function evidenceHeader(
-  evidenceId: string,
-  toolName: string,
-  input: Record<string, unknown>,
-): string {
-  const aim = ["target", "server", "query", "path", "metric", "contains"]
-    .map((key) => input[key])
-    .find((value) => typeof value === "string" && value.trim() !== "");
-  const label = typeof aim === "string" ? ` \u00b7 ${aim}` : "";
-  return `[${evidenceId} \u00b7 ${toolName}${label}]`;
-}

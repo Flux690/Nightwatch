@@ -108,7 +108,9 @@ export const REPORT_TOOLS: Tool[] = [
           `That hypothesis could not be recorded - ${fieldErrors(parsed.error)}.${citations}`,
         );
       }
-      return toResult(recordHypothesis(ctx.sessionId, parsed.data));
+      return toResult(
+        recordHypothesis(ctx.sessionId, parsed.data, ctx.toolUseId),
+      );
     },
   },
 ];

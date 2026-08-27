@@ -1176,56 +1176,10 @@ describe("the investigation record", () => {
       expect(drawn).not.toContain("<alert>");
     });
 
-    it("names only the gap that remains, not the whole contract", async () => {
-      const sessionId = randomUUID();
-      seedAlertSession(
-        { sessionId, title: "t", createdAt: new Date().toISOString() },
-        [alert("one-gap")],
-      );
-      // In the transcript, so the citation is not fabricated - but it never
-      // answered, so there is nothing to quote under the claim.
-      appendTranscriptRows([
-        {
-          sessionId,
-          seq: 0,
-          kind: "assistant",
-          content: "[tool: QueryMetricsRange]",
-          parts: [
-            {
-              type: "tool_call",
-              id: "tu-silent",
-              name: "QueryMetricsRange",
-              input: { query: "rss" },
-            },
-          ],
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-      await call("RecordHypothesis", sessionId, {
-        statement: "leak",
-        verdict: "root_cause",
-        finding: "rss climbed",
-        evidenceIds: ["tu-silent"],
-      });
-
-      mockCreateProvider.mockImplementationOnce(() =>
-        createContractFakeProvider([
-          { toolUses: [], text: "That is my answer." },
-        ]),
-      );
-      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
-        alert("one-gap"),
-      ]);
-      await runSession({ sessionId, alerts: [alert("one-gap")] });
-
-      const request = completionRequests()[0]!;
-      expect(request).toContain(
-        "h1 is backed only by calls that returned nothing",
-      );
-      expect(request).not.toContain("recorded nothing");
-    });
-
-    it("counts a claim backed only by a call that never answered as a gap", async () => {
+    /* Refused where the claim is made rather than caught at the finish line: a
+       call that has not answered shows nothing the model can have read, and by
+       the time the gate ran the turn that could fix it was over. */
+    it("refuses a claim citing a call that has not answered", async () => {
       const sessionId = randomUUID();
       seedAlertSession(
         { sessionId, title: "t", createdAt: new Date().toISOString() },
@@ -1248,15 +1202,45 @@ describe("the investigation record", () => {
           timestamp: new Date().toISOString(),
         },
       ]);
-      await call("RecordHypothesis", sessionId, {
+
+      const refused = await call("RecordHypothesis", sessionId, {
         statement: "leak",
         verdict: "root_cause",
         finding: "rss climbed",
         evidenceIds: ["tu-silent"],
       });
 
-      const gaps = reportGaps(sessionId, 0);
-      expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
+      // Named as not-yet rather than as invented: the fix is to wait for it,
+      // not to go and find a different id.
+      expect(String(refused.content)).toContain("has not answered yet");
+      expect(String(refused.content)).not.toContain("no call you made");
+      expect(getRecord(sessionId)).toBeUndefined();
+
+      // Once the call answers, the same claim records against it.
+      appendTranscriptRows([
+        {
+          sessionId,
+          seq: 1,
+          kind: "user",
+          content: "result",
+          parts: [
+            {
+              type: "tool_result",
+              toolCallId: "tu-silent",
+              output: "rss 700MB",
+            },
+          ],
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      await call("RecordHypothesis", sessionId, {
+        statement: "leak",
+        verdict: "root_cause",
+        finding: "rss climbed",
+        evidenceIds: ["tu-silent"],
+      });
+      expect(getRecord(sessionId)!.hypotheses).toHaveLength(1);
+      expect(reportGaps(sessionId, 0)).toEqual([]);
     });
 
     // The largest single output of the run, so the ceiling is where it most
@@ -1378,9 +1362,9 @@ describe("the investigation record", () => {
       });
     });
 
-    /* The watermark is stamped by the same write that stores the report, so a
-       turn that failed to write leaves it naming the claims the last good one
-       covered - and the next run sees it is behind. */
+    /* What a report covers is stamped by the same write that stores it, so a
+       turn that failed to write leaves the last good one's coverage standing -
+       and the next run sees the record has moved past it. */
     it("rewrites for a follow-up run whose own write-up was refused", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
