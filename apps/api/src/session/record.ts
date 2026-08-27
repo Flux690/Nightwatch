@@ -38,21 +38,6 @@ export function getRecord(sessionId: string): InvestigationRecord | undefined {
   return assembleRecord(row);
 }
 
-// Whether anything has been written to the record since the given instant. Read
-// by the report gate and by the memory extractor, so neither invents its own.
-export function recordMovedSince(
-  sessionId: string,
-  since: string | null,
-): boolean {
-  const row = getDb()
-    .prepare(
-      `SELECT record_updated_at AS updatedAt FROM sessions WHERE session_id = ?`,
-    )
-    .get(sessionId) as { updatedAt: string | null } | undefined;
-  if (row?.updatedAt == null) return false;
-  return since === null || row.updatedAt > since;
-}
-
 function emptyRecord(): InvestigationRecord {
   return { hypotheses: [], report: null, updatedAt: new Date(0).toISOString() };
 }

@@ -147,7 +147,7 @@ export type {
   TranscriptRow,
   SessionAlert,
   SessionDetail,
-  SessionRunStatus,
+  InvestigationStatus,
   SessionListRow,
   SessionListPage,
   SessionKind,

@@ -9,7 +9,6 @@ import type {
   InvestigationRecord,
   ReportConviction,
   ResolvedEvidence,
-  SubmittedReport,
   TimelineEntry,
   ToolOutcome,
   Verdict,
@@ -198,6 +197,28 @@ export function gatedCalls(sessionId: string): GatedCall[] {
   });
 }
 
+// Only the released ones: a declined write changed nothing, so it cannot put the
+// write-up behind. Monotonic, since a call already answered never un-answers.
+export function approvedWriteCount(sessionId: string): number {
+  return gatedCalls(sessionId).filter((c) => c.decision === "approved").length;
+}
+
+/* Whether the write-up no longer covers the record. Compared against the record
+   itself rather than a clock: the stamp is written by the same transaction as the
+   report, so it cannot disagree with what the report was composed from. */
+export function reportIsBehind(
+  record: InvestigationRecord,
+  approvedWrites: number,
+): boolean {
+  const report = record.report;
+  if (report === null) return true;
+  // Hypotheses are append-only, so the last id changing is the whole test.
+  return (
+    (record.hypotheses.at(-1)?.id ?? "") !== report.hypothesesCoveredUpTo ||
+    approvedWrites !== report.writesCoveredUpTo
+  );
+}
+
 /* The instant the last released write answered, which makes a later read a
    confirmation. Only a call a person released starts that clock: a declined one
    changed nothing and a refused one never ran. */
@@ -375,16 +396,23 @@ export function submitReport(
           ...(entry.lane !== undefined && { lane: entry.lane }),
         };
   });
-  const submitted: SubmittedReport = {
-    headline: input.headline,
-    affected: input.affected,
-    summary: input.summary,
-    timeline,
-    impact: input.impact,
-    recommendation: input.recommendation,
-    submittedAt: new Date().toISOString(),
-  };
-  amendRecord(sessionId, (record) => ({ ...record, report: submitted }));
+  const approvedWrites = approvedWriteCount(sessionId);
+  // Stamped inside the transaction, from the record being written against: a
+  // watermark taken anywhere else could name claims this report never saw.
+  amendRecord(sessionId, (record) => ({
+    ...record,
+    report: {
+      headline: input.headline,
+      affected: input.affected,
+      summary: input.summary,
+      timeline,
+      impact: input.impact,
+      recommendation: input.recommendation,
+      submittedAt: new Date().toISOString(),
+      hypothesesCoveredUpTo: record.hypotheses.at(-1)?.id ?? "",
+      writesCoveredUpTo: approvedWrites,
+    },
+  }));
   publishReportUpdated(sessionId);
   return { recorded: true, message: "Report recorded." };
 }

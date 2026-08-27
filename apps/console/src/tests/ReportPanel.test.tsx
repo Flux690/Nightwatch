@@ -78,6 +78,8 @@ const RECORD: InvestigationRecord = {
     impact: "Nine minutes of failed payment writes",
     recommendation: "Revert PR #482",
     submittedAt: RESOLVED,
+    hypothesesCoveredUpTo: "h1",
+    writesCoveredUpTo: 0,
   },
   updatedAt: RESOLVED,
 };

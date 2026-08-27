@@ -3,7 +3,7 @@ import type {
   InvestigationRecord,
   SessionKind,
   SessionListPage,
-  SessionRunStatus,
+  InvestigationStatus,
 } from "@nightwarden/shared";
 import { leadingHypothesis } from "@nightwarden/shared";
 import {
@@ -25,7 +25,7 @@ function isSettled(source: SessionListSource): boolean {
 
 // Derived, never declared by the model, and total by construction: a
 // fall-through of null put a record in no group but still in the queue total.
-function deriveStatus(source: SessionListSource): SessionRunStatus {
+function deriveStatus(source: SessionListSource): InvestigationStatus {
   const record = source.record;
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
@@ -68,7 +68,7 @@ function awaitedRecommendation(
 // mode is an empty line rather than a wrong one.
 function deriveFinding(
   source: SessionListSource,
-  status: SessionRunStatus | null,
+  status: InvestigationStatus | null,
 ): string | null {
   switch (status) {
     case "action_required":

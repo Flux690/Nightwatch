@@ -57,6 +57,8 @@ const RESPONSE: SessionReportResponse = {
       impact: "One transcode job dropped",
       recommendation: "Cap concurrency at one job per worker",
       submittedAt: AT,
+      hypothesesCoveredUpTo: "h1",
+      writesCoveredUpTo: 0,
     },
     updatedAt: AT,
   },

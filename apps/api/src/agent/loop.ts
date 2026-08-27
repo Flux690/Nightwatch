@@ -7,11 +7,17 @@ import {
   reportRequest,
   reportRetry,
 } from "./prompts/report.js";
-import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
+import {
+  approvedWriteCount,
+  gatedCalls,
+  reportGaps,
+  reportIsBehind,
+  type ReportGap,
+} from "./report.js";
 import { evidenceIdsByToolUseId } from "./evidence-id.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
-import { getRecord, recordMovedSince } from "../session/record.js";
+import { getRecord } from "../session/record.js";
 import { recoveryState } from "../verification/recovery.js";
 import {
   effectiveToolset,
@@ -61,7 +67,6 @@ import type {
   AlertGroupContext,
   MessagePart,
   NormalizedAlert,
-  SubmittedReport,
   ToolName,
   TranscriptRow,
   SessionMeta,
@@ -219,28 +224,31 @@ export type RunOutcome = "completed" | "suspended" | "stopped";
 
 // Finish-gate pushback cap: after this many nudges the run writes up anyway
 // rather than looping; the time budget bounds it as well.
-const MAX_NUDGES = 3;
+const MAX_NUDGES = 5;
 
 // Consecutive turns that asked for nothing but unavailable tools. Three is
 // enough to tell a wrong guess from a model with nothing left to try.
 const MAX_BARREN_TURNS = 3;
 
-// Three, matching the finish gate: repair loops stop paying off past that.
-const MAX_REPORT_ATTEMPTS = 3;
+// Matching the finish gate. The write-up is the deliverable, so an attempt
+// costs far less than ending a run without one.
+const MAX_REPORT_ATTEMPTS = 5;
 
 // Past orientation and long before the budget matters. A check, not a repair:
 // nothing has failed, the record is simply still empty.
 const CALLS_BEFORE_RECORD_CHECK = 8;
 
-/* Only what the tool could not already refuse. Every field is required and
-   non-blank there, so what is left is the turn that never called it. */
-function problemWithReport(submitted: SubmittedReport | null): string | null {
-  if (submitted === null) {
-    // True of both ways here: the turn never called the tool, or it did and
-    // the call was refused. A refusal already names the field above.
-    return "The report has not been written.";
+/* Whether this turn wrote the report, read from the tool's own answer. The
+   record cannot say: a follow-up run already holds one, so its presence proves
+   nothing about the turn that just ran. */
+function reportRefusal(results: readonly ToolResult[]): string | null {
+  // The turn offers one tool, so the first result is the submission or there is
+  // none. The tool already told the model which field was wrong.
+  const [submitted] = results;
+  if (submitted === undefined) {
+    return "The report turn ended without calling SubmitInvestigationReport.";
   }
-  return null;
+  return submitted.toolOutcome === undefined ? null : "The report was refused.";
 }
 
 export interface RunSessionInput {
@@ -278,10 +286,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const allAlerts =
     input.alerts ?? (stored?.alerts ?? []).map((entry) => entry.alert);
   const alert = allAlerts[0] ?? null;
-
-  // Rewriting is lossy by design - the request says anything left out is lost -
-  // so a run that settled nothing new must not recompose a correct write-up.
-  const recordAtStart = getRecord(sessionId)?.updatedAt ?? null;
 
   // An alert opens an investigation; otherwise the session's own row answers,
   // never an artifact a previous run happened to leave behind. The row is the
@@ -664,7 +668,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
       persist();
 
-      problem = problemWithReport(getRecord(sessionId)?.report ?? null);
+      problem = reportRefusal(toolResults);
       if (problem === null) {
         log.info({ turn, attempt }, "investigation report written");
         publishReportCard(sessionId, "ready");
@@ -734,6 +738,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
     if (response.stopReason === "refusal") {
       log.warn({ turn }, "model refused to continue");
+      // Said in the transcript, not only the log: without an error row the
+      // session derives to inconclusive and the refusal is invisible.
+      appendErrorMessage(
+        sessionId,
+        "The model declined to continue this investigation. Nothing further was read, and anything already recorded stands.",
+      );
       return "completed";
     }
 
@@ -790,22 +800,19 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
-      const released = gatedCalls(sessionId).some(
-        (c) => c.decision === "approved",
-      );
-      /* Only where there is a write-up to keep: a first run composes whatever
-         it settled, including nothing. Recovery is deliberately not a reason -
-         a cleared alert already reads as Resolved from the alert rows. */
-      const composed = getRecord(sessionId)?.report ?? null;
-      if (
-        composed !== null &&
-        !released &&
-        !recordMovedSince(sessionId, recordAtStart)
-      ) {
-        log.info({ turn }, "record unchanged this run; keeping the write-up");
+      const approvedWrites = approvedWriteCount(sessionId);
+      /* Rewriting is lossy by design - the request says anything left out is
+         lost - so a write-up that still covers the record is kept. Recovery is
+         deliberately not a reason: a cleared alert already reads as Resolved. */
+      const record = getRecord(sessionId);
+      if (record !== undefined && !reportIsBehind(record, approvedWrites)) {
+        log.info({ turn }, "write-up still covers the record; keeping it");
         return "completed";
       }
-      return writeReport(released && recovery === "unconfirmed", turn);
+      return writeReport(
+        approvedWrites > 0 && recovery === "unconfirmed",
+        turn,
+      );
     }
 
     const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {

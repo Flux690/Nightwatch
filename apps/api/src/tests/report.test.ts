@@ -24,6 +24,7 @@ import {
   computeConviction,
   gatedCalls,
   reportGaps,
+  reportIsBehind,
   resolveEvidence,
 } from "../agent/report.js";
 import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
@@ -1157,14 +1158,14 @@ describe("the investigation record", () => {
       expect(toolOutcome).toBe("completed");
 
       const requests = completionRequests();
-      expect(requests).toHaveLength(3);
+      expect(requests).toHaveLength(5);
       expect(requests[0]).toContain("recorded nothing");
-      // Four investigating turns, then every report attempt - the scripted
-      // model never calls the tool, so the run ends with no report at all.
+      // The opening turn plus one per nudge, then every report attempt - the
+      // scripted model never calls the tool, so the run ends with no report.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(7);
+      expect(provider.chat).toHaveBeenCalledTimes(11);
       expect(getRecord(sessionId)).toBeUndefined();
 
       // Neither the requests nor the alert briefing NightWarden opened with is
@@ -1375,6 +1376,98 @@ describe("the investigation record", () => {
       expect(getRecord(sessionId)!.report).toMatchObject({
         recommendation: "free up the disk",
       });
+    });
+
+    /* The watermark is stamped by the same write that stores the report, so a
+       turn that failed to write leaves it naming the claims the last good one
+       covered - and the next run sees it is behind. */
+    it("rewrites for a follow-up run whose own write-up was refused", async () => {
+      mockCreateProvider
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("root_cause", "the disk filled up"),
+            { toolUses: [], text: "I am done." },
+            submitTurn("free up the disk"),
+          ]),
+        )
+        // Records a second claim, then malforms every submission it is asked for.
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("root_cause", "the volume is undersized"),
+            { toolUses: [], text: "Still full." },
+            ...Array.from({ length: 5 }, () => ({
+              toolUses: [
+                {
+                  id: `bad-${randomUUID()}`,
+                  name: "SubmitInvestigationReport" as const,
+                  input: { headline: "" },
+                },
+              ],
+              text: "",
+            })),
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            { toolUses: [], text: "Writing it up." },
+            submitTurn("add a volume"),
+          ]),
+        );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("refused-writeup"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("refused-writeup")] });
+      await runSession({
+        sessionId,
+        seed: buildSeed(sessionId),
+        userMessage: "is it fixed?",
+      });
+
+      // The second run's claim is on the record and its write-up never landed,
+      // so the stamp still names the first run's.
+      expect(getRecord(sessionId)!.report).toMatchObject({
+        recommendation: "free up the disk",
+        hypothesesCoveredUpTo: "h1",
+      });
+
+      await runSession({
+        sessionId,
+        seed: buildSeed(sessionId),
+        userMessage: "and now?",
+      });
+
+      // A third run is told it is behind rather than keeping a write-up that
+      // never accounted for h2.
+      expect(getRecord(sessionId)!.report).toMatchObject({
+        recommendation: "add a volume",
+        hypothesesCoveredUpTo: "h2",
+      });
+    });
+
+    // A released write puts the write-up behind even when no claim moved: the
+    // report renders what ran, so it would otherwise omit it.
+    it("rewrites for a run that released a write and settled nothing new", async () => {
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("write-only"),
+      ]);
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          recordTurn("root_cause", "the pool was exhausted"),
+          { toolUses: [], text: "Done." },
+          submitTurn("raise the pool"),
+        ]),
+      );
+      await runSession({ sessionId, alerts: [alert("write-only")] });
+
+      const before = getRecord(sessionId)!.report!;
+      expect(before.writesCoveredUpTo).toBe(0);
+      expect(
+        reportIsBehind(getRecord(sessionId)!, before.writesCoveredUpTo + 1),
+      ).toBe(true);
+      expect(reportIsBehind(getRecord(sessionId)!, 0)).toBe(false);
     });
 
     /* A run that has read a great deal and settled nothing is asked once, over
@@ -1632,7 +1725,7 @@ describe("the investigation record", () => {
         });
 
         const retries = harnessMessages().filter((m) =>
-          m.includes("The report has not been written"),
+          m.includes("The report was refused"),
         );
         expect(retries).toHaveLength(1);
         expect(getRecord(sessionId)!.report!.recommendation).toBe(

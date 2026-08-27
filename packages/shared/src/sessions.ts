@@ -9,9 +9,9 @@ import type { TranscriptItem } from "./transcript.js";
 // replayed, "nightwarden" replayed but never rendered. buildSeed maps them.
 export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 
-// Derived server-side, never declared by the model. Nullable rather than
-// carrying a sixth value: a row no word applies to says nothing.
-export type SessionRunStatus =
+// What an investigation currently is, derived server-side and never declared by
+// the model. Null on a chat session, which is not under investigation at all.
+export type InvestigationStatus =
   | "action_required"
   | "investigating"
   | "resolved"
@@ -26,7 +26,7 @@ export interface SessionListRow extends SessionMeta {
   investigation: boolean;
   // Whatever the sender called it, verbatim. Null when it carried no label.
   severityLabel: string | null;
-  status: SessionRunStatus | null;
+  status: InvestigationStatus | null;
   // One line answering the question the status raises, drawn from the system's
   // record or the model's prose. Null when there is nothing to say.
   finding: string | null;

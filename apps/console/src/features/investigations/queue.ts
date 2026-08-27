@@ -1,8 +1,8 @@
-import type { SessionListRow, SessionRunStatus } from "@nightwarden/shared";
+import type { SessionListRow, InvestigationStatus } from "@nightwarden/shared";
 
 // The group headers and the record's stepper share this order, so stepping
 // through the queue walks the list exactly as it was read.
-const STATUS_ORDER: SessionRunStatus[] = [
+const STATUS_ORDER: InvestigationStatus[] = [
   "action_required",
   "investigating",
   "resolved",
@@ -11,7 +11,7 @@ const STATUS_ORDER: SessionRunStatus[] = [
   "failed",
 ];
 
-export const STATUS_LABEL: Record<SessionRunStatus, string> = {
+export const STATUS_LABEL: Record<InvestigationStatus, string> = {
   action_required: "Action required",
   investigating: "Investigating",
   resolved: "Resolved",
@@ -21,7 +21,7 @@ export const STATUS_LABEL: Record<SessionRunStatus, string> = {
 };
 
 interface StatusGroup {
-  status: SessionRunStatus;
+  status: InvestigationStatus;
   rows: SessionListRow[];
 }
 
