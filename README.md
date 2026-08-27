@@ -62,7 +62,7 @@ As it works it builds an **investigation record**, one claim at a time. Each tim
 
 When the run is over the agent is handed that record back with every investigation tool taken away and one left, and writes the report from it: a summary, a timeline, who was affected, and what you should do. Writing it last means it is written knowing how the investigation ended, and it can add only the prose the record has no room for, so what it says cannot outrun what the record holds.
 
-The run cannot end on an empty record, or on a claim whose only citations are calls that answered nothing: the agent is pushed back until both hold, and if it genuinely cannot work out the cause it says so instead of inventing one.
+The run cannot end on an empty record, or with reads nothing on the record speaks for: the agent is pushed back until both hold, and if it genuinely cannot work out the cause it says so instead of inventing one. A claim can only cite a call that has already answered, so nothing rests on a result the agent has not read.
 
 **A fix is not believed until the alert says so.** NightWarden never asks the model whether its fix worked - it re-checks the condition that fired, and there are two independent ways it learns the answer:
 
