@@ -6,13 +6,10 @@ function hasToolCall(message: TranscriptRow): boolean {
   return message.parts.some((p) => p.type === "tool_call");
 }
 
-// Every provider rejects a conversation ending on an unanswered tool_use.
-// `resuming` names the calls this dispatch answers, so their turn survives.
-function throughLastAnsweredExchange(
-  rows: TranscriptRow[],
-  resuming: readonly string[],
-): TranscriptRow[] {
-  const answered = new Set<string>(resuming);
+// Every provider rejects a conversation ending on an unanswered tool_use. A
+// resolved gate writes its answer before it clears, so nothing is passed in.
+function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
+  const answered = new Set<string>();
   for (const row of rows) {
     for (const part of row.parts) {
       if (part.type === "tool_result") answered.add(part.toolCallId);
@@ -30,10 +27,7 @@ function throughLastAnsweredExchange(
 
 // Maps our four kinds onto the provider's two roles. An error row and the dead
 // exchange it terminates drop back to the last clean assistant turn.
-export function buildSeed(
-  sessionId: string,
-  resuming: readonly string[] = [],
-): ProviderMessage[] {
+export function buildSeed(sessionId: string): ProviderMessage[] {
   const rows: TranscriptRow[] = [];
   for (const message of getTranscriptRows(sessionId)) {
     if (message.kind !== "error") {
@@ -48,7 +42,7 @@ export function buildSeed(
       rows.pop();
     }
   }
-  return throughLastAnsweredExchange(rows, resuming).map((m) => ({
+  return throughLastAnsweredExchange(rows).map((m) => ({
     role: m.kind === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
     parts: m.parts,

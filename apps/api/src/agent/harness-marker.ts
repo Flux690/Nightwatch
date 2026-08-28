@@ -2,8 +2,9 @@
 // marker means something only because it is stripped from every other source.
 const TAG = "nightwarden";
 
-// Attributes and spacing included: the model reads the tag name, not the syntax.
-const ANY_MARKER = new RegExp(`<\\s*/?\\s*${TAG}\\b[^>]*>`, "gi");
+// Attributes and spacing included, but only this tag: what follows the name has
+// to be a space or the close, or `<nightwarden-previous-report>` matches too.
+const ANY_MARKER = new RegExp(`<\\s*/?\\s*${TAG}(?=[\\s>])[^>]*>`, "gi");
 
 export function harnessTurn(text: string): string {
   return `<${TAG}>\n${text}\n</${TAG}>`;

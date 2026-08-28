@@ -34,6 +34,7 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
+import { getTranscriptRows } from "../session/transcript-store.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -209,6 +210,19 @@ describe("durable approval interrupts", () => {
 
     // Interrupt row is gone from DB after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
+
+    /* Written by the resolve, in the transaction that cleared the gate, and not
+       again by the run that resumed: a command already run must survive a crash
+       between the two, and must not be recorded twice when it does not. */
+    const answers = getTranscriptRows(sessionId).flatMap((row) =>
+      row.parts.flatMap((part) =>
+        part.type === "tool_result" && part.toolCallId === "tu-apr-1"
+          ? [part]
+          : [],
+      ),
+    );
+    expect(answers).toHaveLength(1);
+    expect(answers[0]?.humanDecision).toBe("approved");
 
     // A report must exist for the route to answer, but the actions beside it
     // are independent of what it says.

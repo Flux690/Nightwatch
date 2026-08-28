@@ -182,9 +182,9 @@ describe("recovering runs a restart interrupted", () => {
     await waitFor(() => !isRunning(sessionId));
   });
 
-  // A gated call is unanswered on purpose, so unwinding past it hands the model
-  // results for a call it can no longer see it made.
-  it("keeps the turn a resume is about to answer", () => {
+  // A gated call is unanswered until a human decides, so unwinding past it hands
+  // the model results for a call it can no longer see it made.
+  it("keeps a gated turn once its answer is on the record", () => {
     const sessionId = killedRun();
     appendTranscriptRows([
       turn(sessionId, 0, {
@@ -214,10 +214,21 @@ describe("recovering runs a restart interrupted", () => {
     // Nobody has answered, so the turn is dropped: this is the crash case.
     expect(buildSeed(sessionId)).toHaveLength(1);
 
-    /* Told what this dispatch answers, the same transcript keeps the turn - and
-       the siblings count too, since their results ride along with the gate's. */
-    const resumed = buildSeed(sessionId, ["tu-read", "tu-gate"]);
-    expect(resumed).toHaveLength(2);
+    /* Resolving a gate writes the whole turn's results before it clears, so the
+       seed reads the exchange as answered rather than being told it will be. */
+    appendTranscriptRows([
+      turn(sessionId, 2, {
+        kind: "user",
+        content: "results",
+        parts: [
+          { type: "tool_result", toolCallId: "tu-read", output: "ok" },
+          { type: "tool_result", toolCallId: "tu-gate", output: "restarted" },
+        ],
+      }),
+    ]);
+
+    const resumed = buildSeed(sessionId);
+    expect(resumed).toHaveLength(3);
     expect(resumed[1]?.parts.map((p) => p.type)).toEqual([
       "tool_call",
       "tool_call",

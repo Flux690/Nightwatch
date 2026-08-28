@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { harness, type Harness } from "./harness.js";
 import { dispatchAlertSession } from "./session-helper.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { NormalizedAlert } from "@nightwarden/shared";
+import type { MessagePart, NormalizedAlert } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -36,6 +36,7 @@ const markerCount = (text: string): number => text.match(MARKER)?.length ?? 0;
 
 interface FakeProvider {
   start: ReturnType<typeof vi.fn>;
+  seed: ReturnType<typeof vi.fn>;
   appendUserMessage: ReturnType<typeof vi.fn>;
   appendToolResults: ReturnType<typeof vi.fn>;
 }
@@ -55,6 +56,20 @@ function toolResultsSent(): string[] {
   return providers().flatMap((p) =>
     p.appendToolResults.mock.calls.flatMap((call) =>
       (call[0] as Array<{ content: string }>).map((r) => r.content),
+    ),
+  );
+}
+
+// A resolved gate writes its answer to the transcript before it clears, so a
+// resumed run reads it from the seed rather than being handed it.
+function seededResults(): string[] {
+  return providers().flatMap((p) =>
+    p.seed.mock.calls.flatMap((call) =>
+      (call[0] as Array<{ parts: MessagePart[] }>).flatMap((m) =>
+        m.parts.flatMap((part) =>
+          part.type === "tool_result" ? [part.output] : [],
+        ),
+      ),
     ),
   );
 }
@@ -207,7 +222,7 @@ describe("the marker the harness speaks by", () => {
     await waitFor(() => !hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
-    const answered = toolResultsSent().filter((r) => r.includes("web-01"));
+    const answered = seededResults().filter((r) => r.includes("web-01"));
     expect(answered.length).toBeGreaterThan(0);
     for (const result of answered) expect(markerCount(result)).toBe(0);
   });
@@ -228,6 +243,14 @@ describe("the marker the harness speaks by", () => {
     it("leaves nothing a second pass would find", () => {
       expect(stripHarnessMarker("<night<nightwarden>warden>")).toBe("");
       expect(stripHarnessMarker("<<nightwarden>nightwarden>")).toBe("");
+    });
+
+    // The report turn writes this one, and it is now stripped like anything
+    // else the harness sends, so a name that merely starts with ours must live.
+    it("leaves a tag whose name only begins with the marker", () => {
+      const previous =
+        '<nightwarden-previous-report written="x">a</nightwarden-previous-report>';
+      expect(stripHarnessMarker(previous)).toBe(previous);
     });
 
     it("leaves every other angle bracket alone", () => {

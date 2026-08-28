@@ -263,9 +263,6 @@ export interface RunSessionInput {
   // The user picked Investigate before they typed. An alert says the same
   // thing by existing; absent on a resume, which reads the session's own row.
   investigation?: boolean;
-  // Present on resume: the full tool_results for the suspended turn
-  // (completedResults from interrupt row + the newly resolved gated result).
-  resumeToolResults?: ToolResult[];
   // Stored as ours and never drawn: words the reader did not write must never
   // appear in their own voice.
   harnessMessage?: string;
@@ -379,10 +376,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     }
   };
 
-  // The one emitter of the marker. The row's `kind` is still what the console
-  // reads for origin.
+  // The one emitter of the marker, so also the door untrusted text arrives at:
+  // an injected alert's labels are the sender's and must not close our tag.
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
-    provider.appendUserMessage(harnessTurn(text));
+    provider.appendUserMessage(harnessTurn(stripHarnessMarker(text)));
     harnessTurns.add(provider.snapshot().length - 1);
   };
 
@@ -466,24 +463,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let persistedCount = 0;
   const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
 
-  if (input.resumeToolResults && input.resumeToolResults.length > 0) {
-    // Resume from a durable interrupt: seed the prior transcript, then append
-    // the resolved tool_results turn so the next chat() sees a complete context.
-    noteOutcomes(input.resumeToolResults);
-    if (input.seed) {
-      provider.seed(input.seed);
-      persistedCount = input.seed.length;
-    }
-    provider.appendToolResults(input.resumeToolResults);
-    persistedCount = persistNewTurns(
-      provider,
-      sessionId,
-      persistedCount,
-      seqOffset,
-      harnessTurns,
-      seenOutcomes,
-    );
-  } else if (input.seed && input.seed.length > 0) {
+  if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     persistedCount = input.seed.length;
     // Persist the new user turn immediately so the console shows it the moment

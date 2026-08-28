@@ -3,7 +3,11 @@ import {
   deletePendingHumanInput,
   getPendingHumanInputBySessionId,
 } from "./interrupts.js";
-import { findToolCall } from "./transcript-store.js";
+import {
+  appendRowsAndResolve,
+  findToolCall,
+  getNextSeq,
+} from "./transcript-store.js";
 import { stripHarnessMarker } from "../agent/harness-marker.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";
@@ -13,10 +17,13 @@ import { publishInterruptResolved, publishTranscriptItem } from "./stream.js";
 import { toolCallCard } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
+import { messagePartsToText } from "@nightwarden/shared";
 import type {
   ApprovalResponse,
   HumanDecision,
+  MessagePart,
   RespondRequest,
+  TranscriptRow,
 } from "@nightwarden/shared";
 
 export class HumanInputError extends Error {
@@ -83,6 +90,28 @@ function ensureDeleted(sessionId: string): void {
   }
 }
 
+// The whole turn's results as one row, since the wire needs one message for it.
+// Written rather than left to the resumed run: the result of a command that has
+// already run is the one thing a crash must not lose.
+function answeredTurn(sessionId: string, results: ToolResult[]): TranscriptRow {
+  const parts: MessagePart[] = results.map((r) => ({
+    type: "tool_result",
+    toolCallId: r.tool_use_id,
+    output: r.content,
+    ...(r.is_error === true && { isError: true }),
+    ...(r.toolOutcome !== undefined && { toolOutcome: r.toolOutcome }),
+    ...(r.humanDecision !== undefined && { humanDecision: r.humanDecision }),
+  }));
+  return {
+    sessionId,
+    seq: getNextSeq(sessionId),
+    kind: "user",
+    content: messagePartsToText(parts),
+    parts,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 function unpause(
   sessionId: string,
   toolUseId: string,
@@ -91,8 +120,6 @@ function unpause(
   answer: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
 ): HumanInputActionResult {
-  ensureDeleted(sessionId);
-
   const resolvedAt = new Date().toISOString();
   // Stamped here rather than at each call site: every path through this
   // function had a human at the end of it, and no other path did.
@@ -100,6 +127,16 @@ function unpause(
   // Read off the result rather than passed beside it: how a call went belongs
   // to the call, and two ways to say it is one way to say two things.
   const { toolOutcome } = gatedResult;
+
+  // One transaction with the gate clear, so the seed the resumed run builds
+  // already holds this answer and nothing has to hand it over.
+  const answered = answeredTurn(sessionId, [...completedResults, gatedResult]);
+  if (!appendRowsAndResolve(sessionId, [answered])) {
+    throw new HumanInputError(
+      409,
+      "Human input already resolved by another request",
+    );
+  }
 
   publishTranscriptItem({
     sessionId,
@@ -125,17 +162,7 @@ function unpause(
     resolvedAt,
   });
 
-  const resumed = [...completedResults, gatedResult];
-  dispatcher.dispatch({
-    sessionId,
-    // The results are in this dispatch rather than the record, so the seed
-    // keeps the turn that made them instead of unwinding past it.
-    seed: buildSeed(
-      sessionId,
-      resumed.map((r) => r.tool_use_id),
-    ),
-    resumeToolResults: resumed,
-  });
+  dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
 
   return { sessionId, toolUseId, status, resolvedAt };
 }

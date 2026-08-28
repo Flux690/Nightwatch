@@ -159,6 +159,43 @@ export function appendRowsAndInterrupt(
   txn();
 }
 
+/* The other half of appendRowsAndInterrupt: the answered turn and the cleared
+   gate in one transaction, so a crash between them cannot lose the result of a
+   command that has already run. False when another request cleared it first. */
+export function appendRowsAndResolve(
+  sessionId: string,
+  messages: TranscriptRow[],
+): boolean {
+  const insert = getDb().prepare(
+    `INSERT INTO session_transcript
+       (session_id, seq, kind, content, canonical, timestamp)
+     VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
+  );
+  const clear = getDb().prepare(
+    `UPDATE sessions
+        SET awaiting_tool_use_id = NULL, awaiting_kind = NULL,
+            awaiting_results = '[]', attempt_started_at = NULL
+      WHERE session_id = ? AND awaiting_tool_use_id IS NOT NULL`,
+  );
+  return getDb().transaction((): boolean => {
+    // Cleared first, so a loser writes nothing rather than a duplicate turn.
+    if (clear.run(sessionId).changes === 0) return false;
+    for (const m of messages) {
+      insert.run({
+        sessionId: m.sessionId,
+        seq: m.seq,
+        kind: m.kind,
+        content: m.content,
+        canonical: serializeCanonical(m),
+        timestamp: m.timestamp,
+      });
+    }
+    const last = messages[messages.length - 1];
+    if (last) touchSession(last.sessionId, last.timestamp);
+    return true;
+  })();
+}
+
 export function getTranscriptRows(sessionId: string): TranscriptRow[] {
   const rows = getDb()
     .prepare(
