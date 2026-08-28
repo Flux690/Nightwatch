@@ -34,6 +34,10 @@ import {
   getTranscriptRows,
 } from "../session/transcript-store.js";
 import { listSessionPage } from "../session/list.js";
+import {
+  highestEvidenceNumber,
+  withEvidenceIds,
+} from "../agent/evidence-id.js";
 import { recordHypothesis } from "../agent/report.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
 import { getRecord } from "../session/record.js";
@@ -714,20 +718,25 @@ describe("API-local session store", () => {
       return m.sessionId;
     }
 
-    // A citation survives only if the call it names is in the transcript.
-    // Returns the handle the model would be given, not the provider's own id:
-    // the seq-th call it appends is the seq-th citable call on the session.
+    // A citation survives only if the call it names is in the transcript, and
+    // is stamped as the loop stamps it, so the handle returned is the stored one.
     function cite(sessionId: string, toolUseId: string, seq: number): string {
-      appendTranscriptRows([
-        {
-          ...msg(sessionId, seq, { kind: "assistant" }),
-          parts: [
-            { type: "tool_call", id: toolUseId, name: "Read", input: {} },
-            { type: "tool_result", toolCallId: toolUseId, output: "ok" },
+      const from = highestEvidenceNumber(getTranscriptRows(sessionId)) + 1;
+      appendTranscriptRows(
+        withEvidenceIds(
+          [
+            {
+              ...msg(sessionId, seq, { kind: "assistant" }),
+              parts: [
+                { type: "tool_call", id: toolUseId, name: "Read", input: {} },
+                { type: "tool_result", toolCallId: toolUseId, output: "ok" },
+              ],
+            },
           ],
-        },
-      ]);
-      return `e${seq + 1}`;
+          from,
+        ),
+      );
+      return `e${from}`;
     }
 
     it("says what a gated session waits on, by the kind of answer it needs", () => {

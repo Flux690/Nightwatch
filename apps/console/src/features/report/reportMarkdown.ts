@@ -53,7 +53,7 @@ export function reportToMarkdown(
     sections.push(["## Alerts", "", ...alerts.map(alertLine)].join("\n"));
   }
 
-  const byId = new Map((report?.evidence ?? []).map((e) => [e.toolUseId, e]));
+  const byId = new Map((report?.evidence ?? []).map((e) => [e.evidenceId, e]));
 
   const submitted = report?.record.report ?? null;
   if (submitted !== null) {

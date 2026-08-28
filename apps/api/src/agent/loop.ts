@@ -14,7 +14,7 @@ import {
   reportIsBehind,
   type ReportGap,
 } from "./report.js";
-import { evidenceIdsByToolUseId } from "./evidence-id.js";
+import { highestEvidenceNumber, withEvidenceIds } from "./evidence-id.js";
 import { isCitable } from "./evidence-source.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
@@ -123,11 +123,11 @@ function persistNewTurns(
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
-  const newMessages: TranscriptRow[] = [];
+  const built: TranscriptRow[] = [];
   for (let i = fromCount; i < snap.length; i++) {
     const m = snap[i];
     if (!m) continue;
-    newMessages.push({
+    built.push({
       sessionId,
       seq: seqOffset + i,
       kind: harnessTurns.has(i) ? "nightwarden" : m.role,
@@ -137,6 +137,12 @@ function persistNewTurns(
       timestamp: new Date().toISOString(),
     });
   }
+  // The one place a call is written down, so the one place it is numbered. A
+  // snapshot carries no handle, so the count continues from what is stored.
+  const newMessages = withEvidenceIds(
+    built,
+    highestEvidenceNumber(getTranscriptRows(sessionId)) + 1,
+  );
   if (interrupt) {
     appendRowsAndInterrupt(newMessages, interrupt);
   } else {
@@ -573,9 +579,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
               getRecord(sessionId)?.hypotheses ?? [],
               gatedCalls(sessionId),
               unrecovered,
-              // The claims are repeated here for the timeline to cite from, so
-              // has to name calls the way their results named themselves.
-              evidenceIdsByToolUseId(getTranscriptRows(sessionId)),
               /* What a previous run already wrote, so a follow-up revises it
                  rather than rewriting it from a context that may since have been
                  compacted. Null on the first run, which has nothing to revise. */

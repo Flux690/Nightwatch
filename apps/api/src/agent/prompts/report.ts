@@ -34,7 +34,7 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
         type: "array",
         items: { type: "string" },
         description:
-          'The evidence ids of the tool calls whose results show this claim is true. A result that can back a claim opens with an "evidenceId" field, written e1, e2, e3 and so on. A tool that reads nothing about your system carries no evidence id and cannot be cited. The user sees each cited result rendered underneath the claim, so cite the call whose output shows what you are asserting. At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal.',
+          'The evidence ids of the tool calls whose results show this claim is true. A result that can back a claim opens with an "evidenceId" field, written e1, e2, e3 and so on. A tool that reads nothing about your system carries no evidence id and cannot be cited. Cite only calls whose results you have already read: tools you ask for in this reply have not run yet, their results reach you in your next message, and a claim citing one of them is refused. The user sees each cited result rendered underneath the claim, so cite the call whose output shows what you are asserting. At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal. If any id you give names no answered call, none of them is recorded.',
       },
       verdict: {
         type: "string",
@@ -184,14 +184,12 @@ export function recordGapsMessage(gaps: ReportGap[]): string {
 // a model reading a flat list will sometimes lead with one already replaced.
 function findingLine(
   h: Hypothesis,
-  evidenceIds: Map<string, string>,
   leadingId: string | null,
   replaced: Set<string>,
 ): string {
-  // Repeated back in the vocabulary it was given, not in the provider's ids.
   const cites =
     h.evidenceIds.length > 0
-      ? h.evidenceIds.map((id) => evidenceIds.get(id) ?? id).join(", ")
+      ? h.evidenceIds.join(", ")
       : "nothing that resolved";
   const standing = replaced.has(h.id)
     ? " (replaced, and still on the record)"
@@ -242,13 +240,12 @@ ${lines.join("\n")}
 </nightwarden-previous-report>`;
 }
 
-// The claims are repeated here rather than left to context: the timeline cites
-// call ids verbatim, and a forty-turn context is a bad place to copy one from.
+// Repeated here rather than left to context: the timeline copies these handles
+// verbatim, and turn forty is a bad place to copy one from.
 export function reportRequest(
   hypotheses: Hypothesis[],
   writes: GatedCall[],
   unrecovered: boolean,
-  evidenceIds: Map<string, string> = new Map(),
   previous: SubmittedReport | null = null,
 ): string {
   // A run that reached here with nothing recorded exhausted the gate's requests.
@@ -259,7 +256,7 @@ export function reportRequest(
     hypotheses.length === 0
       ? "RECORDED FINDINGS\nnone. Say plainly that no cause was established."
       : `RECORDED FINDINGS\n${hypotheses
-          .map((h) => findingLine(h, evidenceIds, leadingId, replaced))
+          .map((h) => findingLine(h, leadingId, replaced))
           .join("\n")}`;
   const sections = [
     previous === null

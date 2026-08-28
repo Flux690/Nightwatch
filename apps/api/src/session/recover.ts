@@ -1,5 +1,5 @@
 import type { MessagePart, TranscriptRow } from "@nightwarden/shared";
-import { evidenceIdsByToolUseId } from "../agent/evidence-id.js";
+import { evidenceIdsIn } from "../agent/evidence-id.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
@@ -70,7 +70,7 @@ async function answerPendingCalls(
   if (!calls.every((call) => replayable(call.name))) return false;
 
   // A replay answers calls the transcript already holds, so it adds no numbers.
-  const evidenceIds = evidenceIdsByToolUseId(getTranscriptRows(sessionId));
+  const evidenceIds = evidenceIdsIn(getTranscriptRows(sessionId));
   const parts: MessagePart[] = [];
   const texts: string[] = [];
   for (const call of calls) {

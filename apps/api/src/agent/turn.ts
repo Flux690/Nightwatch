@@ -8,7 +8,7 @@ import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
-import { evidenceIdsByToolUseId } from "./evidence-id.js";
+import { evidenceIdsIn } from "./evidence-id.js";
 import { isToolName } from "@nightwarden/shared";
 
 // Which interrupt a gated call raises. An elicitation always raises one; a tool
@@ -101,7 +101,7 @@ export async function processToolUses(params: {
 
   // The trail's own numbering: this turn is already persisted when it runs, so
   // a count of our own would name every result a turn ahead of itself.
-  const evidenceIds = evidenceIdsByToolUseId(getTranscriptRows(sessionId));
+  const evidenceIds = evidenceIdsIn(getTranscriptRows(sessionId));
   const toolResults: ToolResult[] = [];
   const refused: string[] = [];
   let gated: { tool: ToolUse; kind: GateKind } | null = null;

@@ -37,7 +37,7 @@ const RESPONSE: SessionReportResponse = {
         statement: "The worker buffers each source file into memory",
         verdict: "root_cause",
         finding: "the working set climbs with accepted job size",
-        evidenceIds: ["tu-stats", "tu-stats", "tu-gone"],
+        evidenceIds: ["e-stats", "e-stats", "e-gone"],
         recordedAt: AT,
       },
       {
@@ -45,7 +45,7 @@ const RESPONSE: SessionReportResponse = {
         statement: "The ffmpeg bump leaks",
         verdict: "disproven",
         finding: "the working set was flat across that window",
-        evidenceIds: ["tu-stats"],
+        evidenceIds: ["e-stats"],
         recordedAt: AT,
       },
     ],
@@ -65,6 +65,7 @@ const RESPONSE: SessionReportResponse = {
   decisions: [],
   evidence: [
     {
+      evidenceId: "e-stats",
       toolUseId: "tu-stats",
       toolName: "GetDockerStats",
       kind: "metric",
@@ -96,7 +97,7 @@ describe("reportToMarkdown", () => {
     // must not read as two measurements.
     expect(md.match(/GetDockerStats/g)).toHaveLength(2);
     // A citation naming no call carries nothing rather than an empty bullet.
-    expect(md).not.toContain("tu-gone");
+    expect(md).not.toContain("e-gone");
   });
 
   /* The export is read where the console is not, so the line that decides

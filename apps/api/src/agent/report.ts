@@ -18,7 +18,7 @@ import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
 import { evidenceKind, evidenceSource } from "./evidence-source.js";
-import { evidenceIdsByToolUseId } from "./evidence-id.js";
+import { highestEvidenceNumber } from "./evidence-id.js";
 
 // What a recording tool tells the model. A refusal is a correction, not a fault:
 // the act was rejected and the message says what to do instead.
@@ -29,8 +29,7 @@ export interface RecordOutcome {
 
 interface ToolCall {
   toolUseId: string;
-  // e1, e2, e3 in call order. Derived by this walk rather than stored, so the
-  // side that shows it to the model and the side that resolves it agree.
+  // Absent on a tool no claim may rest on, which is never issued one.
   evidenceId?: string;
   toolName: string;
   input: Record<string, unknown>;
@@ -44,20 +43,19 @@ interface ToolCall {
   timestamp: string;
 }
 
-// One walk of the durable transcript, which is the evidence trail. The
-// provider's own call id is the handle, so nothing here numbers or renames.
+// One walk of the durable transcript, which is the evidence trail. Handles are
+// read off it rather than counted, so this walk cannot disagree with another.
 function toolCallsIn(sessionId: string): ToolCall[] {
-  const rows = getTranscriptRows(sessionId);
-  const evidenceIds = evidenceIdsByToolUseId(rows);
   const entries: ToolCall[] = [];
   const byToolUseId = new Map<string, ToolCall>();
-  for (const message of rows) {
+  for (const message of getTranscriptRows(sessionId)) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
-        const evidenceId = evidenceIds.get(part.id);
         const entry: ToolCall = {
           toolUseId: part.id,
-          ...(evidenceId !== undefined && { evidenceId }),
+          ...(part.evidenceId !== undefined && {
+            evidenceId: part.evidenceId,
+          }),
           toolName: part.name,
           input: part.input,
           result: null,
@@ -98,34 +96,45 @@ function knownCitations(
   const pending: string[] = [];
   const invented: string[] = [];
   for (const id of new Set(ids)) {
-    const entry = byEvidenceId.get(id.trim());
+    const trimmed = id.trim();
+    const entry = byEvidenceId.get(trimmed);
     if (entry === undefined) invented.push(id);
     else if (entry.result === null) pending.push(id);
-    else kept.push(entry.toolUseId);
+    // The key it resolved under, which is the form the record keeps.
+    else kept.push(trimmed);
   }
   return { kept, pending, invented };
 }
 
-// A call that has not answered is a different correction from one that does not
-// exist: the fix is to wait for it, not to pick a different id.
-function pendingRefusal(pending: string[]): string {
-  const one = pending.length === 1;
-  return `Not recorded: ${pending.join(", ")} ${one ? "has" : "have"} not answered yet, so ${one ? "it shows" : "they show"} nothing you can have read. Every tool call in one message is made before any of them returns. Record this again in a later turn, once the result is in front of you.`;
+function issuedRange(sessionId: string): string {
+  const highest = highestEvidenceNumber(getTranscriptRows(sessionId));
+  if (highest === 0) return "No call you have made can be cited yet.";
+  return highest === 1
+    ? "This investigation has e1."
+    : `This investigation has e1 through e${highest}.`;
 }
 
-// What the model cited that names no call, said back in the vocabulary it was
-// given, with the range it could have picked from.
-function citationRefusal(sessionId: string, invented: string[]): string {
-  const total = toolCallsIn(sessionId).length;
-  const available =
-    total === 0
-      ? "You have made no tool calls yet, so there is nothing to cite."
-      : total === 1
-        ? "This investigation has e1."
-        : `This investigation has e1 through e${total}.`;
-  return `Not recorded: ${invented.join(", ")} ${
-    invented.length === 1 ? "names" : "name"
-  } no call you can cite. ${available} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none. Copy one of those and record this again.`;
+/* Both kinds in one message: waiting for a result and picking a different id are
+   different corrections, and one claim can get both wrong at once. */
+function citationRefusal(
+  sessionId: string,
+  pending: string[],
+  invented: string[],
+): string {
+  const said = ["Not recorded."];
+  if (pending.length > 0) {
+    const one = pending.length === 1;
+    said.push(
+      `${pending.join(", ")} ${one ? "has" : "have"} not answered yet, so ${one ? "it shows" : "they show"} nothing you can have read. Every tool call in one message is made before any of them returns.`,
+    );
+  }
+  if (invented.length > 0) {
+    said.push(
+      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${issuedRange(sessionId)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
+    );
+  }
+  said.push("Record this again citing only calls you have already read.");
+  return said.join(" ");
 }
 
 // Everything the record points at, from either author: the hypotheses' own
@@ -150,9 +159,12 @@ export function resolveEvidence(
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
   for (const entry of toolCallsIn(sessionId)) {
-    const { toolUseId, toolName, input, result, toolOutcome } = entry;
-    if (!cited.has(toolUseId) || result === null) continue;
+    const { toolUseId, evidenceId, toolName, input, result, toolOutcome } =
+      entry;
+    if (evidenceId === undefined || !cited.has(evidenceId)) continue;
+    if (result === null) continue;
     resolved.push({
+      evidenceId,
       toolUseId,
       toolName,
       kind: evidenceKind(toolName),
@@ -243,7 +255,12 @@ export function computeConviction(
   sessionId: string,
   record: InvestigationRecord,
 ): ReportConviction {
-  const calls = new Map(toolCallsIn(sessionId).map((e) => [e.toolUseId, e]));
+  // Keyed the way a claim cites, so a lookup needs no second vocabulary.
+  const calls = new Map(
+    toolCallsIn(sessionId).flatMap((e) =>
+      e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
+    ),
+  );
   const executedAt = lastExecutedAt(calls);
   const graded: ReportConviction = {};
   for (const row of record.hypotheses) {
@@ -318,13 +335,14 @@ export function recordHypothesis(
     sessionId,
     input.evidenceIds,
   );
-  /* Refused rather than recorded with what survives. The schema check ran before
-     this filter and nothing looked again, so a claim citing two invented ids was
-     stored citing nothing. */
-  if (kept.length === 0) {
-    return pending.length > 0
-      ? { recorded: false, message: pendingRefusal(pending) }
-      : { recorded: false, message: citationRefusal(sessionId, invented) };
+  /* All of them or none: recording what survives silently changes the claim the
+     model made, and drops a conviction from corroborated to cited without ever
+     saying so. */
+  if (pending.length > 0 || invented.length > 0 || kept.length === 0) {
+    return {
+      recorded: false,
+      message: citationRefusal(sessionId, pending, invented),
+    };
   }
   const evidenceIds = kept;
   const { id, replaced } = appendHypothesis(sessionId, (record) => {
@@ -344,12 +362,6 @@ export function recordHypothesis(
     };
   });
   publishReportUpdated(sessionId);
-  // Each clause is a separate correction, so a call that got two things wrong
-  // is told about both rather than only the first.
-  const dropped =
-    invented.length === 0
-      ? ""
-      : ` ${invented.join(", ")} named no call you made and ${invented.length === 1 ? "was" : "were"} dropped.`;
   const replacement =
     replaced !== undefined
       ? ` It replaces ${replaced}, which stays on the record.`
@@ -358,7 +370,7 @@ export function recordHypothesis(
         : "";
   return {
     recorded: true,
-    message: `Recorded ${id} as "${input.verdict}".${replacement}${dropped}`,
+    message: `Recorded ${id} as "${input.verdict}".${replacement}`,
   };
 }
 

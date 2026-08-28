@@ -18,6 +18,7 @@ import type {
   HumanDecision,
   NormalizedAlert,
   ToolOutcome,
+  TranscriptRow,
 } from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
@@ -35,8 +36,13 @@ import { getRecord } from "../session/record.js";
 import { leadingHypothesis, supersededIds } from "@nightwarden/shared";
 import {
   appendTranscriptRows,
+  getNextSeq,
   getTranscriptRows,
 } from "../session/transcript-store.js";
+import {
+  highestEvidenceNumber,
+  withEvidenceIds,
+} from "../agent/evidence-id.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import {
@@ -110,6 +116,16 @@ describe("the investigation record", () => {
     commits: [],
   });
 
+  function appendCitableRows(rows: TranscriptRow[]): void {
+    const sessionId = rows[0]!.sessionId;
+    appendTranscriptRows(
+      withEvidenceIds(
+        rows,
+        highestEvidenceNumber(getTranscriptRows(sessionId)) + 1,
+      ),
+    );
+  }
+
   // One record entry at a chosen instant, so a read after a remediation is
   // distinguishable from one before. `toolOutcome` rides the part, as production does.
   function appendCall(
@@ -121,7 +137,9 @@ describe("the investigation record", () => {
     toolOutcome?: ToolOutcome,
     humanDecision?: HumanDecision,
   ): void {
-    appendTranscriptRows([
+    // Stamped as the loop stamps it, so a call here is citable exactly when a
+    // call in a real run would be.
+    appendCitableRows([
       {
         sessionId,
         seq,
@@ -179,15 +197,29 @@ describe("the investigation record", () => {
     );
   }
 
+  /* The call is written down before it runs, as the loop writes it: without that
+     a refusal counting the transcript would never see itself, which is how the
+     range it offered grew by one on every failed attempt. */
   async function call(
     toolName: string,
     sessionId: string,
     input: Record<string, unknown>,
   ): Promise<{ content: unknown; toolOutcome?: string }> {
+    const toolUseId = `tu-${toolName}-${randomUUID()}`;
+    appendCitableRows([
+      {
+        sessionId,
+        seq: getNextSeq(sessionId),
+        kind: "assistant",
+        content: `[tool: ${toolName}]`,
+        parts: [{ type: "tool_call", id: toolUseId, name: toolName, input }],
+        timestamp: new Date().toISOString(),
+      },
+    ]);
     const tool = REPORT_TOOLS.find((t) => t.schema.name === toolName);
     return executeTool(tool!, input, {
       sessionId,
-      toolUseId: `tu-${toolName}`,
+      toolUseId,
       toolCallCeilingMs: 15_000,
     });
   }
@@ -250,7 +282,7 @@ describe("the investigation record", () => {
         statement: "the cache bump leaks",
         verdict: "root_cause",
         finding: "the climb starts at the merge",
-        evidenceIds: ["tu-1"],
+        evidenceIds: ["e1"],
       });
       expect(stored.recordedAt).not.toBe("");
     });
@@ -280,7 +312,7 @@ describe("the investigation record", () => {
         statement: "the cache bump leaks",
         verdict: "open",
         finding: "still looking",
-        evidenceIds: ["tu-1"],
+        evidenceIds: ["e1"],
       });
       expect(result.toolOutcome).toBe("system");
       expect(getRecord(sessionId)).toBeUndefined();
@@ -364,18 +396,22 @@ describe("the investigation record", () => {
       expect(String(result.content)).toContain("h9 is not a claim");
     });
 
-    it("keeps a claim whose citation resolves to nothing, and drops only the citation", async () => {
+    /* All of them or none: keeping the half that resolved would change the claim
+       the model made, and drop it from corroborated to cited without saying so. */
+    it("refuses a claim citing one real call and one that names nothing", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await record(sessionId, "the cache bump leaks", "root_cause", [
-        "e1",
-        "tu-invented",
-      ]);
+      const refused = await call("RecordHypothesis", sessionId, {
+        statement: "the cache bump leaks",
+        verdict: "root_cause",
+        finding: "",
+        evidenceIds: ["e1", "e9"],
+      });
 
-      // The overreach is visible as a missing citation, never as a missing claim.
-      const stored = getRecord(sessionId)!.hypotheses[0]!;
-      expect(stored.statement).toBe("the cache bump leaks");
-      expect(stored.evidenceIds).toEqual(["tu-1"]);
+      expect(getRecord(sessionId)).toBeUndefined();
+      // Told which one failed, and the range it could have picked from.
+      expect(String(refused.content)).toContain("e9");
+      expect(String(refused.content)).toContain("e1 through e2");
     });
   });
 
@@ -585,9 +621,10 @@ describe("the investigation record", () => {
       });
       expect(String(content)).toContain("Recorded h1");
 
-      // Stored as the provider id, so the console reveals the real call.
+      // Stored as the handle it was cited by, so the record speaks one
+      // vocabulary and nothing has to translate on the way back out.
       const [hypothesis] = getRecord(sessionId)!.hypotheses;
-      expect(hypothesis?.evidenceIds).toEqual(["tu-1"]);
+      expect(hypothesis?.evidenceIds).toEqual(["e1"]);
 
       // And it resolves to real evidence rather than a dangling reference.
       const resolved = resolveEvidence(sessionId, getRecord(sessionId)!);
@@ -608,12 +645,10 @@ describe("the investigation record", () => {
         ["e1"],
         "the read showed 98 percent",
       );
-      expect(getRecord(sessionId)!.hypotheses[0]!.evidenceIds).toEqual([
-        "tu-1",
-      ]);
+      expect(getRecord(sessionId)!.hypotheses[0]!.evidenceIds).toEqual(["e1"]);
 
-      // A third call has been made by now - the recording itself - and it took
-      // no number, so the range the refusal offers still ends at e2.
+      // Two recording calls are on the transcript by now and neither took a
+      // number, so the range the refusal offers still ends at e2.
       const refused = await call("RecordHypothesis", sessionId, {
         statement: "the volume is undersized",
         verdict: "root_cause",
@@ -1035,9 +1070,6 @@ describe("the investigation record", () => {
       );
     }
 
-    // A scripted turn recording one hypothesis, citing the recording call's own
-    // id - which is in the record by then, because the assistant turn is
-    // persisted before its tools run.
     /* Two turns, because a claim cites a call whose result it has read, and a
        call is only read on the turn after the one that made it. The read fails
        with no runner connected, which still answers and so is still citable. */
@@ -1163,7 +1195,7 @@ describe("the investigation record", () => {
         { sessionId, title: "t", createdAt: new Date().toISOString() },
         [alert("unresolvable")],
       );
-      appendTranscriptRows([
+      appendCitableRows([
         {
           sessionId,
           seq: 0,
@@ -1195,10 +1227,10 @@ describe("the investigation record", () => {
       expect(getRecord(sessionId)).toBeUndefined();
 
       // Once the call answers, the same claim records against it.
-      appendTranscriptRows([
+      appendCitableRows([
         {
           sessionId,
-          seq: 1,
+          seq: getNextSeq(sessionId),
           kind: "user",
           content: "result",
           parts: [

@@ -363,7 +363,7 @@ export function ReportPanel({
     );
   }
 
-  const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
+  const byId = new Map(evidence.map((e) => [e.evidenceId, e]));
   // Null until the run reaches its report turn, which reads as "not written
   // up yet" rather than as an empty write-up.
   const submitted = record.report ?? null;

@@ -55,7 +55,7 @@ const RECORD: InvestigationRecord = {
       statement: "PR #482's cache bump leaks",
       verdict: "root_cause",
       finding: "climb starts at the merge timestamp",
-      evidenceIds: ["tu-stats"],
+      evidenceIds: ["e-stats"],
       recordedAt: RESOLVED,
     },
     {
@@ -63,7 +63,7 @@ const RECORD: InvestigationRecord = {
       statement: "Host memory pressure",
       verdict: "disproven",
       finding: "host free memory stayed flat",
-      evidenceIds: ["tu-changes"],
+      evidenceIds: ["e-changes"],
       recordedAt: RESOLVED,
     },
   ],
@@ -88,6 +88,7 @@ const CONVICTION: ReportConviction = { h1: "corroborated", h2: "cited" };
 
 const EVIDENCE: ResolvedEvidence[] = [
   {
+    evidenceId: "e-stats",
     toolUseId: "tu-stats",
     toolName: "GetDockerStats",
     kind: "metric",
@@ -99,6 +100,7 @@ const EVIDENCE: ResolvedEvidence[] = [
     }),
   },
   {
+    evidenceId: "e-changes",
     toolUseId: "tu-changes",
     toolName: "GetRecentChanges",
     kind: "change",
@@ -185,7 +187,7 @@ describe("ReportPanel", () => {
                 at: "2026-07-21T12:05:00.000Z",
                 what: "PR #482 merged",
                 lane: "change",
-                evidenceId: "tu-changes",
+                evidenceId: "e-changes",
               },
             ],
           },
@@ -330,7 +332,7 @@ describe("ReportPanel", () => {
           hypotheses: [
             {
               ...RECORD.hypotheses[0]!,
-              evidenceIds: ["tu-stats", "tu-changes"],
+              evidenceIds: ["e-stats", "e-changes"],
             },
             RECORD.hypotheses[1]!,
           ],
@@ -367,11 +369,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           hypotheses: [
-            { ...RECORD.hypotheses[0]!, evidenceIds: ["tu-stats"] },
+            { ...RECORD.hypotheses[0]!, evidenceIds: ["e-stats"] },
             {
               ...RECORD.hypotheses[1]!,
               verdict: "symptom" as const,
-              evidenceIds: ["tu-stats"],
+              evidenceIds: ["e-stats"],
             },
           ],
         },
@@ -391,10 +393,11 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-log"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-log"] }],
         },
         evidence: [
           {
+            evidenceId: "e-log",
             toolUseId: "tu-log",
             toolName: "GetDockerLogs",
             kind: "logs",
@@ -437,7 +440,7 @@ describe("ReportPanel", () => {
               statement: "The queue backed up first",
               verdict: "symptom",
               finding: "",
-              evidenceIds: ["tu-never-ran"],
+              evidenceIds: ["e-never-ran"],
               recordedAt: RESOLVED,
             },
           ],
@@ -459,10 +462,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-now"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-now"] }],
         },
         evidence: [
           {
+            evidenceId: "e-now",
             toolUseId: "tu-now",
             toolName: "QueryMetrics",
             kind: "metric",
@@ -493,10 +497,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-top"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-top"] }],
         },
         evidence: [
           {
+            evidenceId: "e-top",
             toolUseId: "tu-top",
             toolName: "QueryMetrics",
             kind: "metric",
@@ -532,10 +537,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-miss"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-miss"] }],
         },
         evidence: [
           {
+            evidenceId: "e-miss",
             toolUseId: "tu-miss",
             toolName: "ReadHostFile",
             kind: "text",
@@ -561,10 +567,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-host"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-host"] }],
         },
         evidence: [
           {
+            evidenceId: "e-host",
             toolUseId: "tu-host",
             toolName: "GetHostMemory",
             kind: "metric",
@@ -600,10 +607,11 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["tu-range"] }],
+          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-range"] }],
         },
         evidence: [
           {
+            evidenceId: "e-range",
             toolUseId: "tu-range",
             toolName: "QueryMetricsRange",
             kind: "metric",

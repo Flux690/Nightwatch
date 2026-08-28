@@ -19,6 +19,8 @@ export interface ToolCallPart {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  // Optional because a tool no claim may rest on is never issued one.
+  evidenceId?: string;
 }
 
 // Recorded rather than derived from a boolean, so a file under a different

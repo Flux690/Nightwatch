@@ -24,8 +24,6 @@ export interface Hypothesis {
   // Why it resolved that way. Deliberately not "reason": since the reason rides
   // the write call, that word means one thing across the whole contract.
   finding: string;
-  // Evidence ids, copied verbatim. Ids naming no real call are dropped; the
-  // claim itself always survives.
   evidenceIds: string[];
   recordedAt: string;
 }
@@ -142,6 +140,8 @@ export type EvidenceKind =
 // One cited tool call, resolved from the transcript at read time so the report
 // quotes what ran rather than storing a second copy of it.
 export interface ResolvedEvidence {
+  // Two ids, because a claim cites one and the console reveals the other.
+  evidenceId: string;
   toolUseId: string;
   toolName: string;
   kind: EvidenceKind;
