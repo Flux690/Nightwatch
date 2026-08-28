@@ -813,7 +813,6 @@ describe("durable approval interrupts", () => {
       annotations: {},
       generatorURL: null,
       values: {},
-      rawPayload: {},
     };
 
     setScript([

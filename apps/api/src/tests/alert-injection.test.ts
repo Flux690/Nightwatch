@@ -152,7 +152,6 @@ function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
     annotations: {},
     generatorURL: null,
     values: {},
-    rawPayload: {},
   };
 }
 

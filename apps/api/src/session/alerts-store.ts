@@ -10,10 +10,10 @@ import { getDb } from "../db.js";
 // that decides which investigation an arriving alert joins.
 
 const INSERT_ALERT = `INSERT INTO alerts
-     (session_id, group_key, source_alert_id, fired_at, arrived_at, cleared_at,
-      injected, dropped_alerts, group_context, alert)
-   VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL,
-      @injected, @droppedAlerts, @groupContext, @alert)`;
+     (session_id, group_key, source_alert_id, labels, alert_type, fired_at,
+      arrived_at, cleared_at, injected, dropped_alerts, group_context, alert)
+   VALUES (@sessionId, @groupKey, @sourceAlertId, @labels, @alertType, @firedAt,
+      @arrivedAt, NULL, @injected, @droppedAlerts, @groupContext, @alert)`;
 
 // Denormalised onto every alert the delivery carried: a row is durable before
 // any session owns it, so a queued alert has nowhere else to read them from.
@@ -29,6 +29,8 @@ function alertParams(
     sessionId,
     groupKey,
     sourceAlertId: alert.sourceAlertId,
+    labels: JSON.stringify(alert.labels),
+    alertType: alert.alertType,
     firedAt: alert.firedAt,
     arrivedAt,
     injected: injected ? 1 : 0,
@@ -83,19 +85,24 @@ export function appendSessionAlert(
     );
 }
 
-// Queued rows included: an alert that recovers while waiting for a seat is
-// cleared here and never promoted. First clear wins.
+/* Keyed the way dedup keys, so a recovery clears the firing it names rather
+   than an older one that shares the fingerprint. Queued rows included: an alert
+   that recovers while waiting for a seat is never promoted. */
 export function markAlertCleared(
   sourceAlertId: string,
+  firedAt: string,
   clearedAt: string,
 ): string[] {
   const rows = getDb()
     .prepare(
       `UPDATE alerts SET cleared_at = @clearedAt
-       WHERE source_alert_id = @sourceAlertId AND cleared_at IS NULL
+       WHERE source_alert_id = @sourceAlertId AND fired_at = @firedAt
+         AND cleared_at IS NULL
        RETURNING session_id AS sessionId`,
     )
-    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string | null }>;
+    .all({ sourceAlertId, firedAt, clearedAt }) as Array<{
+    sessionId: string | null;
+  }>;
   // A queued row has no session to publish against. One session can also cover
   // the same alert twice; the caller wants sessions.
   return [

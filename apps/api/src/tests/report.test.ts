@@ -65,7 +65,6 @@ function alert(sourceAlertId: string): NormalizedAlert {
     annotations: {},
     generatorURL: null,
     values: {},
-    rawPayload: {},
   };
 }
 
@@ -197,9 +196,8 @@ describe("the investigation record", () => {
     );
   }
 
-  /* The call is written down before it runs, as the loop writes it: without that
-     a refusal counting the transcript would never see itself, which is how the
-     range it offered grew by one on every failed attempt. */
+  // Written down before it runs, as the loop writes it, so a refusal here reads
+  // the same transcript a refusal in a real run reads.
   async function call(
     toolName: string,
     sessionId: string,

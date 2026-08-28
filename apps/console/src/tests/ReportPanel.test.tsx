@@ -20,7 +20,6 @@ const ALERT: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: {},
 };
 
 const INJECTED_ALERT: NormalizedAlert = {
@@ -31,7 +30,6 @@ const INJECTED_ALERT: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: {},
 };
 
 function onSession(

@@ -83,7 +83,6 @@ function alertCarrying(annotation: string): NormalizedAlert {
     annotations: { description: annotation },
     generatorURL: null,
     values: {},
-    rawPayload: {},
   };
 }
 
@@ -245,8 +244,8 @@ describe("the marker the harness speaks by", () => {
       expect(stripHarnessMarker("<<nightwarden>nightwarden>")).toBe("");
     });
 
-    // The report turn writes this one, and it is now stripped like anything
-    // else the harness sends, so a name that merely starts with ours must live.
+    // The report turn writes this one, and a harness turn is stripped like any
+    // other, so a tag whose name merely begins with ours has to survive.
     it("leaves a tag whose name only begins with the marker", () => {
       const previous =
         '<nightwarden-previous-report written="x">a</nightwarden-previous-report>';

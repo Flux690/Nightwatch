@@ -37,7 +37,6 @@ describe("how often an open condition is asked about", () => {
           firedAt: new Date(openedAt).toISOString(),
           generatorURL: null,
           values: {},
-          rawPayload: {},
         },
       ],
     );

@@ -158,7 +158,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       annotations: {},
       generatorURL: null,
       values: {},
-      rawPayload: {},
     };
 
     const { events, close } = await connectConsoleEvents(port, SESSION);

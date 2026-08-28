@@ -73,8 +73,12 @@ export async function registerAlertRoutes(
     // A clear is recorded before anything is routed, so a batch that clears one
     // alert and fires another leaves both facts on the sessions they belong to.
     const clearedAt = new Date().toISOString();
-    for (const sourceAlertId of parsed.clearedIds) {
-      for (const sessionId of markAlertCleared(sourceAlertId, clearedAt)) {
+    for (const { sourceAlertId, firedAt } of parsed.cleared) {
+      for (const sessionId of markAlertCleared(
+        sourceAlertId,
+        firedAt,
+        clearedAt,
+      )) {
         publishReportUpdated(sessionId);
       }
     }

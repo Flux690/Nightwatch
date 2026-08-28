@@ -258,7 +258,11 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     );
     await waitFor(() => countInvestigations() === before + 1);
     await waitFor(() => liveSessions().length === 0);
-    markAlertCleared("f-1", new Date().toISOString());
+    markAlertCleared(
+      "f-1",
+      "2026-07-07T03:00:00.000Z",
+      new Date().toISOString(),
+    );
 
     // A different startsAt is a different incident, which is what the pairing of
     // fingerprint and fired-at is for.
@@ -286,7 +290,6 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
           annotations: {},
           generatorURL: null,
           values: {},
-          rawPayload: {},
         },
       ],
     );
@@ -369,7 +372,11 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
       expect(queueDepth().waiting).toBe(1);
 
       // The resolved notification lands while it is still queued.
-      markAlertCleared("w-2", new Date().toISOString());
+      markAlertCleared(
+        "w-2",
+        "2026-07-07T03:00:00.000Z",
+        new Date().toISOString(),
+      );
       expect(queueDepth().waiting).toBe(0);
 
       await settle();

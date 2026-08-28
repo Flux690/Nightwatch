@@ -81,7 +81,6 @@ function alertOn(alertType: string, clearedAt: string | null): SessionAlert {
       firedAt: "2026-08-19T02:14:00.000Z",
       generatorURL: null,
       values: {},
-      rawPayload: null,
     },
     arrivedAt: "2026-08-19T02:14:00.000Z",
     clearedAt,

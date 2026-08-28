@@ -81,7 +81,6 @@ const alert: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: { foo: "bar" },
 };
 
 describe("API-local session store", () => {
@@ -455,11 +454,42 @@ describe("API-local session store", () => {
 
       // The ids it answers with are what ingest publishes REPORT_UPDATED for, so
       // it names the sessions actually holding the alert, and each of them once.
-      expect(markAlertCleared(sourceAlertId, new Date().toISOString())).toEqual(
-        [sessionId],
-      );
+      expect(
+        markAlertCleared(
+          sourceAlertId,
+          alert.firedAt,
+          new Date().toISOString(),
+        ),
+      ).toEqual([sessionId]);
       expect(statusOf(sessionId)).toBe("resolved");
       expect(statusOf(untouched)).toBe("inconclusive");
+    });
+
+    /* A fingerprint hashes the labels, so the same condition firing months later
+       carries the same one. Clearing the new firing must not close the old. */
+    it("clears the firing it names, not an older one sharing its fingerprint", () => {
+      const sourceAlertId = randomUUID();
+      const january = meta();
+      seedAlertSession(january, [
+        { ...alert, sourceAlertId, firedAt: "2026-01-03T02:00:00.000Z" },
+      ]);
+      const august = meta();
+      seedAlertSession(august, [
+        { ...alert, sourceAlertId, firedAt: "2026-08-12T14:00:00.000Z" },
+      ]);
+      seedCompleteReport(january.sessionId);
+      seedCompleteReport(august.sessionId);
+
+      expect(
+        markAlertCleared(
+          sourceAlertId,
+          "2026-08-12T14:00:00.000Z",
+          new Date().toISOString(),
+        ),
+      ).toEqual([august.sessionId]);
+      expect(statusOf(august.sessionId)).toBe("resolved");
+      // January never recovered, and August recovering says nothing about it.
+      expect(statusOf(january.sessionId)).toBe("inconclusive");
     });
 
     it("stays unresolved until every alert of a batch has cleared", () => {
@@ -473,12 +503,12 @@ describe("API-local session store", () => {
       );
       seedCompleteReport(m.sessionId);
 
-      markAlertCleared(ids[0]!, new Date().toISOString());
+      markAlertCleared(ids[0]!, alert.firedAt, new Date().toISOString());
       expect(statusOf(m.sessionId)).toBe("inconclusive");
-      markAlertCleared(ids[1]!, new Date().toISOString());
+      markAlertCleared(ids[1]!, alert.firedAt, new Date().toISOString());
       expect(statusOf(m.sessionId)).toBe("inconclusive");
 
-      markAlertCleared(ids[2]!, new Date().toISOString());
+      markAlertCleared(ids[2]!, alert.firedAt, new Date().toISOString());
       expect(statusOf(m.sessionId)).toBe("resolved");
     });
 
@@ -792,7 +822,7 @@ describe("API-local session store", () => {
       const sourceAlertId = randomUUID();
       const sessionId = investigation(sourceAlertId);
       seedCompleteReport(sessionId);
-      markAlertCleared(sourceAlertId, new Date().toISOString());
+      markAlertCleared(sourceAlertId, alert.firedAt, new Date().toISOString());
       expect(findingOf(sessionId)).toBe("Alert condition recovered");
     });
 

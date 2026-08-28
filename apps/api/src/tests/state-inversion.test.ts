@@ -197,7 +197,6 @@ describe("state inversion: persistence and reads are API-local", () => {
         annotations: {},
         generatorURL: null,
         values: {},
-        rawPayload: {},
       },
     ]);
     // The row carries the flag from the moment it exists - checked here, before
@@ -276,7 +275,6 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
       annotations: {},
       generatorURL: null,
       values: {},
-      rawPayload: {},
     };
 
     const { openingTurn } = buildInitialContext([alert]);

@@ -90,14 +90,18 @@ describe("parseAlertmanager", () => {
 
   describe("resolved notifications", () => {
     it("separates a cleared condition from the alerts that open an investigation", () => {
-      const { firing, clearedIds } = parseAlertmanager({
+      const { firing, cleared } = parseAlertmanager({
         alerts: [
           alert({ status: "resolved", fingerprint: "cleared" }),
           alert({ status: "firing", fingerprint: "firing-1" }),
         ],
       });
       expect(firing.map((p) => p.sourceAlertId)).toEqual(["firing-1"]);
-      expect(clearedIds).toEqual(["cleared"]);
+      // Carried with the firing it names, so clearing cannot reach an older
+      // one that shares the fingerprint.
+      expect(cleared).toEqual([
+        { sourceAlertId: "cleared", firedAt: "2026-06-21T10:00:00Z" },
+      ]);
     });
   });
 

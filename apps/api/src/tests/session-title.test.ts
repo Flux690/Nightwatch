@@ -208,7 +208,6 @@ describe("session title generation", () => {
       annotations: {},
       generatorURL: null,
       values: {},
-      rawPayload: {},
     }));
 
     const lines = buildAlertTitleSource(alerts).split("\n");

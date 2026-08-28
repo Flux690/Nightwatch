@@ -27,7 +27,9 @@ export interface ParsedWebhook {
   groupKey: string;
   delivery: DeliveryContext;
   firing: ParsedAlert[];
-  clearedIds: string[];
+  // A firing is identified by its fingerprint and when it started, so clearing
+  // one cannot reach an older firing that shares the fingerprint.
+  cleared: Array<{ sourceAlertId: string; firedAt: string }>;
 }
 
 export function parseAlertmanager(body: unknown): ParsedWebhook {
@@ -37,7 +39,7 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
   }
 
   const firing: ParsedAlert[] = [];
-  const clearedIds: string[] = [];
+  const cleared: ParsedWebhook["cleared"] = [];
   for (const raw of result.data.alerts) {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       logger.warn({ raw }, "skipping malformed alert: not an object");
@@ -52,15 +54,15 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
         ? alert["fingerprint"]
         : synthesizeFingerprint(labels);
 
-    if (alert["status"] === "resolved") {
-      clearedIds.push(fingerprint);
-      continue;
-    }
-
     const firedAt =
       typeof alert["startsAt"] === "string"
         ? alert["startsAt"]
         : new Date().toISOString();
+
+    if (alert["status"] === "resolved") {
+      cleared.push({ sourceAlertId: fingerprint, firedAt });
+      continue;
+    }
 
     firing.push({
       sourceAlertId: fingerprint,
@@ -75,7 +77,6 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
           ? alert["generatorURL"]
           : null,
       values: toNumberMap(alert["values"]),
-      rawPayload: alert,
     });
   }
 
@@ -86,7 +87,7 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
       groupContext: toGroupContext(result.data),
     },
     firing,
-    clearedIds,
+    cleared,
   };
 }
 

@@ -18,7 +18,6 @@ const ALERT: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: {},
 };
 
 interface PromMock {

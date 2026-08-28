@@ -69,7 +69,6 @@ function makeAlert(service: string): NormalizedAlert {
     annotations: {},
     generatorURL: null,
     values: {},
-    rawPayload: {},
   };
 }
 

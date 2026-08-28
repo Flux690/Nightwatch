@@ -30,7 +30,6 @@ const alert: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: {},
 };
 
 // A session that was mid-run when the process died: its row still says running,
@@ -214,8 +213,8 @@ describe("recovering runs a restart interrupted", () => {
     // Nobody has answered, so the turn is dropped: this is the crash case.
     expect(buildSeed(sessionId)).toHaveLength(1);
 
-    /* Resolving a gate writes the whole turn's results before it clears, so the
-       seed reads the exchange as answered rather than being told it will be. */
+    // Resolving a gate writes the whole turn's results before it clears, so the
+    // seed finds the exchange answered on the transcript.
     appendTranscriptRows([
       turn(sessionId, 2, {
         kind: "user",

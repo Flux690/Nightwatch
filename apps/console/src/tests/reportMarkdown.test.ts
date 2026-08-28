@@ -17,7 +17,6 @@ const ALERT: NormalizedAlert = {
   annotations: {},
   generatorURL: null,
   values: {},
-  rawPayload: {},
 };
 
 const ON_SESSION: SessionAlert = {

@@ -25,7 +25,6 @@ export interface NormalizedAlert {
   // What the rule evaluated to when it fired, keyed by the query behind each
   // number. Grafana sends these; a sender that does not carries an empty map.
   values: Record<string, number>;
-  rawPayload: unknown;
 }
 
 // Every field is optional on the wire, so an absent one is an empty map rather

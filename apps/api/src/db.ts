@@ -124,6 +124,10 @@ CREATE TABLE IF NOT EXISTS alerts (
   session_id         TEXT      REFERENCES sessions(session_id) ON DELETE CASCADE,
   group_key          TEXT      NOT NULL,
   source_alert_id    TEXT      NOT NULL,
+  -- Searched by recall, so json_each reads only the labels and not the whole
+  -- alert beside them.
+  labels             TEXT      NOT NULL DEFAULT '{}',
+  alert_type         TEXT      NOT NULL DEFAULT 'unknown',
   fired_at           TEXT      NOT NULL,
   arrived_at         TEXT      NOT NULL,
   cleared_at         TEXT,

@@ -52,7 +52,11 @@ export async function verifyRecovery(
       { sessionId, source: source.name, alertType: entry.alert.alertType },
       "verification: condition is no longer true",
     );
-    markAlertCleared(entry.alert.sourceAlertId, new Date().toISOString());
+    markAlertCleared(
+      entry.alert.sourceAlertId,
+      entry.alert.firedAt,
+      new Date().toISOString(),
+    );
     clearedAny = true;
   }
   if (clearedAny) publishReportUpdated(sessionId);

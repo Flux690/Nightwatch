@@ -39,7 +39,6 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
     annotations: {},
     generatorURL: null,
     values: {},
-    rawPayload: {},
   };
 }
 
