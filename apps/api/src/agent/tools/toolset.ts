@@ -59,7 +59,7 @@ function withEvidenceId(
 // Refused whole rather than shortened: a sliced JSON result parses as a smaller
 // truth, which is how an agent reports no errors in logs it never saw.
 function tooLarge(name: string, chars: number): string {
-  return `${name} produced ${chars} characters, past the ${MAX_TOOL_RESULT_CHARS} a single result may occupy, so none of it was read. Narrow the call - a tighter filter, a shorter window, a smaller limit - and run it again.`;
+  return `${name} produced ${chars} characters. A single result may be at most ${MAX_TOOL_RESULT_CHARS}, so none of this one was read. Narrow the call - a tighter filter, a shorter window, a smaller limit - and run it again.`;
 }
 
 // The caller supplies a ceiling, and a tool's own limit can only narrow it,

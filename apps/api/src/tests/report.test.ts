@@ -24,7 +24,7 @@ import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
   gatedCalls,
-  reportGaps,
+  recordGaps,
   reportIsBehind,
   resolveEvidence,
 } from "../agent/report.js";
@@ -909,7 +909,7 @@ describe("the investigation record", () => {
 
       // All three name what the turn held: a refusal that does not is a dead end.
       for (const message of [withheld, near, far]) {
-        expect(message).toContain("<available-tools>");
+        expect(message).toContain("What you do have:");
         expect(message).toContain("RecordHypothesis");
       }
     });
@@ -1055,7 +1055,7 @@ describe("the investigation record", () => {
       };
       return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
     }
-    // Matched on content, not the first character: the <nightwarden> tag is
+    // Matched on content, not the first character: the <harness> tag is
     // asserted on its own below rather than by each of these.
     function recordGapsMessages(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
@@ -1144,8 +1144,8 @@ describe("the investigation record", () => {
       const written = harnessMessages();
       expect(written.length).toBeGreaterThan(0);
       for (const message of written) {
-        expect(message.startsWith("<nightwarden>")).toBe(true);
-        expect(message.endsWith("</nightwarden>")).toBe(true);
+        expect(message.startsWith("<harness>")).toBe(true);
+        expect(message.endsWith("</harness>")).toBe(true);
       }
     });
 
@@ -1248,7 +1248,7 @@ describe("the investigation record", () => {
         evidenceIds: ["e1"],
       });
       expect(getRecord(sessionId)!.hypotheses).toHaveLength(1);
-      expect(reportGaps(sessionId, 0)).toEqual([]);
+      expect(recordGaps(sessionId, 0)).toEqual([]);
     });
 
     // The largest single output of the run, so the ceiling is where it most
@@ -1314,7 +1314,7 @@ describe("the investigation record", () => {
 
       await runSession({ sessionId, alerts: [alert("revise")] });
       // The first run has nothing to revise, so it is shown nothing.
-      expect(reportRequests()[0]).not.toContain("nightwarden-previous-report");
+      expect(reportRequests()[0]).not.toContain("previous-report");
 
       await runSession({
         sessionId,
@@ -1323,7 +1323,7 @@ describe("the investigation record", () => {
       });
 
       const second = harnessMessages(1).find((m) =>
-        m.includes("nightwarden-previous-report"),
+        m.includes("previous-report"),
       );
       expect(second).toBeDefined();
       // Its own work, named as such, with the text it is replacing.

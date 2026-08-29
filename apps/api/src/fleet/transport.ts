@@ -134,15 +134,15 @@ export async function sendFleetCommand(
   );
 
   let succeeded = 0;
-  const byServer = settled.map((toolOutcome, i) => {
+  const byServer = settled.map((outcome, i) => {
     const server = conns[i]!.serverName;
-    if (toolOutcome.status === "fulfilled") {
+    if (outcome.status === "fulfilled") {
       succeeded++;
-      return { server, result: toolOutcome.value };
+      return { server, result: outcome.value };
     }
     // One server's failure is that entry's result, not the whole call's: the
     // others still carry evidence.
-    const err: unknown = toolOutcome.reason;
+    const err: unknown = outcome.reason;
     const message = err instanceof Error ? err.message : String(err);
     return { server, result: `Error: ${message}` };
   });

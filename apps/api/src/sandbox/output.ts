@@ -32,7 +32,7 @@ export function capOutput(
     .toString("utf8");
   const elided = buf.length - maxBytes;
   return {
-    text: `${head}\n[... ${elided} bytes elided ...]\n${tail}`,
+    text: `${head}\n[cut: ${elided} bytes]\n${tail}`,
     truncated: true,
   };
 }

@@ -272,18 +272,18 @@ export function computeConviction(
 
 // A list rather than a boolean, so the record-gaps message can name only what
 // is absent and a surviving gap can be logged as itself.
-export type ReportGap =
+export type RecordGap =
   { kind: "empty_record" } | { kind: "unaccounted_calls"; calls: number };
 
 /* `unaccounted` is the run's own count of evidence calls answered since its last
    claim: the record cannot say, because a claim carries no mark of what it was
    recorded over. */
-export function reportGaps(
+export function recordGaps(
   sessionId: string,
   unaccounted: number,
-): ReportGap[] {
+): RecordGap[] {
   const hypotheses = getRecord(sessionId)?.hypotheses ?? [];
-  const gaps: ReportGap[] = [];
+  const gaps: RecordGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
   // Only alongside a record that holds something: an empty one is already named

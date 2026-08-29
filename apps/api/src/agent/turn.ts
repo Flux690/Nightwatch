@@ -80,7 +80,7 @@ function unavailableMessage(
     asked > 1
       ? ` You have now asked for it ${asked} times; the answer will not change.`
       : "";
-  return `${what}${suggestion}${repeat} Do not ask for it again.\n<available-tools>\n${offered.join(", ")}\n</available-tools>`;
+  return `${what}${suggestion}${repeat} Do not ask for it again. What you do have: ${offered.join(", ")}.`;
 }
 
 // Two passes: run every unapproved tool now, and pick the first call needing a human for

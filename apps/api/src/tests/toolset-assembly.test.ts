@@ -276,6 +276,46 @@ describe("toolset assembly by fleet capabilities", () => {
         }
       }
     });
+
+    /* One base and one section, so a rule stated twice is a rule two wordings
+       can drift apart. Counted rather than merely found: the duplication this
+       replaced was the same sentence written differently in each prompt. */
+    it("states each shared rule exactly once, whichever session it is for", () => {
+      const opts = { budgetMinutes: 30, repo: null, fleetTools: false };
+      const shared = [
+        "You are NightWarden, a reliability engineer",
+        "a measured value, a file path, a container, a commit, or a log line",
+        "Check database connectivity",
+        "Never invent an answer you cannot support",
+        "You have exactly the tools you were given",
+        "It arrives wrapped in a <harness> tag",
+      ];
+      for (const investigation of [true, false]) {
+        const prompt = buildChatContext([], opts, investigation).systemPrompt;
+        for (const rule of shared) {
+          expect(prompt.split(rule)).toHaveLength(2);
+        }
+      }
+    });
+
+    // The section is the only difference between the two, so what belongs to an
+    // investigation must be absent from a chat rather than merely contradicted.
+    it("gives a chat none of the investigation's framing", () => {
+      const opts = { budgetMinutes: 30, repo: null, fleetTools: false };
+      const chat = buildChatContext([], opts, false).systemPrompt;
+      const investigating = buildChatContext([], opts, true).systemPrompt;
+
+      for (const line of [
+        "You are investigating an incident",
+        "An investigation has a shape",
+        "Record what you settle as you settle it",
+        "RecordHypothesis",
+      ]) {
+        expect(investigating).toContain(line);
+        expect(chat).not.toContain(line);
+      }
+      expect(chat).toContain("you are keeping no record of one");
+    });
   });
 
   describe("agentic loop seam: a K8s write suspends for approval", () => {

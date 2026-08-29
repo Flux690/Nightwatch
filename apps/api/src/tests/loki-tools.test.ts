@@ -221,7 +221,9 @@ describe("Loki tools through the tool dispatch", () => {
     expect(mock.requests[0]!.params.get("limit")).toBe("1");
     const content = parsedContent<LokiLogsResult>(result);
     expect(content.linesTruncated).toBe(1);
-    expect(content.streams[0]!.lines[0]!.line).toContain("…[truncated]");
+    expect(content.streams[0]!.lines[0]!.line).toContain(
+      "[cut: line continues]",
+    );
     expect(content.streams[0]!.lines[0]!.line.length).toBeLessThan(huge.length);
     expect(content.hitLimit).toBe(true);
     expect(content.note).toContain("truncated");
@@ -253,7 +255,7 @@ describe("Loki tools through the tool dispatch", () => {
     // The lines that did arrive are whole, and the model is told the rest exist
     // rather than being left to read the shortfall as "there were no more".
     for (const line of content.streams[0]!.lines) {
-      expect(line.line).not.toContain("…[truncated]");
+      expect(line.line).not.toContain("[cut: line continues]");
     }
     expect(content.note).toContain("NOT in this result");
     expect(content.note).toContain("QueryLogMetrics");

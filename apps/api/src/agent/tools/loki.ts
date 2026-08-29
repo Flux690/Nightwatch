@@ -289,7 +289,7 @@ export const LOKI_TOOLS: Tool[] = [
           for (const [ns, raw] of s.values) {
             const truncated = raw.length > MAX_LINE_CHARS;
             const line = truncated
-              ? raw.slice(0, MAX_LINE_CHARS) + " …[truncated]"
+              ? raw.slice(0, MAX_LINE_CHARS) + " [cut: line continues]"
               : raw;
             if (spent + line.length > ITEM_BUDGET_CHARS) {
               linesDropped++;

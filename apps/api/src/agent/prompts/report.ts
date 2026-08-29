@@ -4,7 +4,7 @@ import type {
   SubmittedReport,
 } from "@nightwarden/shared";
 import { leadingHypothesis, supersededIds } from "@nightwarden/shared";
-import type { ReportGap } from "../report.js";
+import type { RecordGap } from "../report.js";
 import type { ToolSchema } from "../../llm/types.js";
 
 // The one thing a citation can be. The id of the call is the only handle that
@@ -143,13 +143,13 @@ You are also keeping a record of this investigation.
 
 Each time you settle a candidate explanation - whether it held up or not - call RecordHypothesis with what you tested, the verdict, what the evidence showed, and the ids of the calls that showed it. A hypothesis you ruled out is worth as much to the user as the one that held.
 
-Be specific. A finding should name a value, a file, a container, a commit or a log line. "Check database connectivity" is worthless to the person reading this at three in the morning.
-
 The record is append-only. Nothing you record can be removed or rewritten, so a claim you later disagree with stays on the record beside the one that replaced it.
 
-If you could not work out the cause, record what you tested and say so; that is an honest and useful ending, and inventing a cause to avoid it is not.`;
+If you could not work out the cause, record what you tested and say so; that is an honest and useful ending, and inventing a cause to avoid it is not.
 
-function sentenceFor(gap: ReportGap): string {
+Record what you settle as you settle it, while the results are still in front of you. When you stop calling tools your investigation is over, and the turn that follows offers one tool and nothing else: you write the report there, and you cannot add to your record from it. Anything you meant to record and did not is lost at that point.`;
+
+function sentenceFor(gap: RecordGap): string {
   switch (gap.kind) {
     case "empty_record":
       return "You have recorded nothing. Call RecordHypothesis for each explanation you considered, with the verdict it earned, so the record says what you settled, including what you ruled out. If you could not work out the cause, record what you tested and settle it as disproven; that is an honest ending, and inventing a cause to avoid it is not.";
@@ -173,7 +173,7 @@ export function recordCheck(callsSinceClaim: number): string {
 
 // Names the gaps and nothing else: a model one finding short is not told
 // about the four things it did do.
-export function recordGapsMessage(gaps: ReportGap[]): string {
+export function recordGapsMessage(gaps: RecordGap[]): string {
   return [
     "Your investigation record is not finished.",
     ...gaps.map(sentenceFor),
@@ -230,14 +230,14 @@ function previousReportBlock(previous: SubmittedReport): string {
       ? null
       : `recommendation: ${previous.recommendation}`,
   ].filter((line): line is string => line !== null);
-  return `<nightwarden-previous-report written="${previous.submittedAt}">
+  return `<previous-report written="${previous.submittedAt}">
 You wrote this at the end of your last run on this investigation. Revise it in
 light of what you have since learned: keep what still holds, change what does
 not, and do not start from nothing. What you submit replaces it entirely, so
 anything you leave out is lost.
 
 ${lines.join("\n")}
-</nightwarden-previous-report>`;
+</previous-report>`;
 }
 
 // Repeated here rather than left to context: the timeline copies these handles

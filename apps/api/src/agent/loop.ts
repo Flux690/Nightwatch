@@ -10,9 +10,9 @@ import {
 import {
   approvedWriteCount,
   gatedCalls,
-  reportGaps,
+  recordGaps,
   reportIsBehind,
-  type ReportGap,
+  type RecordGap,
 } from "./report.js";
 import { highestEvidenceNumber, withEvidenceIds } from "./evidence-id.js";
 import { isCitable } from "./evidence-source.js";
@@ -544,7 +544,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let callsSinceClaim = 0;
   let claimsSeen = 0;
   // How many completion requests each gap has survived, so a repeat is loud.
-  const gapsSeen = new Map<ReportGap["kind"], number>();
+  const gapsSeen = new Map<RecordGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
   const deadline = Date.now() + config.checkInAfterMs;
@@ -751,7 +751,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Push back up to MAX_NUDGES times, then write up regardless: the status
       // an unfinished record derives to is already the honest one.
-      const gaps = reportGaps(sessionId, callsSinceClaim);
+      const gaps = recordGaps(sessionId, callsSinceClaim);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
       // record, so the gate never makes a network call as a run happens to end.
       const recovery = recoveryState(sessionId);

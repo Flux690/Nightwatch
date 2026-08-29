@@ -190,11 +190,11 @@ describe("capOutput", () => {
     expect(capOutput(text)).toBe(text);
   });
 
-  it("caps output over 64 KB with an elision marker", () => {
+  it("caps output over 64 KB, naming how much it cut", () => {
     const big = "x".repeat(70 * 1024);
     const capped = capOutput(big);
-    expect(capped).toContain("[... ");
-    expect(capped).toContain("bytes elided");
+    expect(capped).toContain("[cut: ");
+    expect(capped).toContain("bytes]");
     expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(big.length);
   });
 
@@ -213,7 +213,7 @@ describe("capOutput", () => {
     // a naive byte slice would decode the split halves as U+FFFD.
     const big = "😀".repeat(40_000);
     const capped = capOutput(big);
-    expect(capped).toContain("bytes elided");
+    expect(capped).toContain("bytes]");
     expect(capped).not.toContain("�");
   });
 });

@@ -36,7 +36,7 @@ export async function readRepoFile(
     .map((line, i) => {
       const shown =
         line.length > MAX_LINE_CHARS
-          ? `${line.slice(0, MAX_LINE_CHARS)}... (line truncated)`
+          ? `${line.slice(0, MAX_LINE_CHARS)} [cut: line continues]`
           : line;
       return `${String(offset + i).padStart(6)}\t${shown}`;
     })
@@ -45,6 +45,6 @@ export async function readRepoFile(
   ws.readPaths.add(repoKey(input.path));
   const lastShown = offset - 1 + slice.length;
   return lastShown < lines.length
-    ? `${numbered}\n(truncated: file continues beyond line ${lastShown} of ${lines.length})`
+    ? `${numbered}\n[cut: file continues beyond line ${lastShown} of ${lines.length}]`
     : numbered;
 }

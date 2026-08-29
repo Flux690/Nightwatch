@@ -6,10 +6,12 @@ import type {
 import type { DeliveryContext } from "../alerts/delivery.js";
 import { listMetricsSources } from "../integrations/metrics/sources.js";
 import {
+  ADDRESSING_PROTOCOL,
+  BASE_PROMPT,
   budgetLine,
-  CHAT_PROMPT,
-  INVESTIGATION_PROMPT,
-  toolProtocol,
+  CHAT_SECTION,
+  HARNESS_PROTOCOL,
+  INVESTIGATION_SECTION,
   type PromptOptions,
 } from "./prompts/system.js";
 import { REPORT_PROTOCOL } from "./prompts/report.js";
@@ -30,13 +32,16 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   fleetTools: false,
 };
 
-// Two prompts, not one with a section bolted on: telling a chat it has an
-// investigation to shape is what put a stopwatch on a one-line question.
+// One base and one section, each block gated on its own condition. A chat is
+// never told it has an investigation to shape, which puts a stopwatch on a
+// one-line question.
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
-  let prompt = investigation
-    ? INVESTIGATION_PROMPT + budgetLine(opts, true) + REPORT_PROTOCOL
-    : CHAT_PROMPT + budgetLine(opts, false);
-  prompt += toolProtocol(opts.fleetTools);
+  let prompt = BASE_PROMPT;
+  prompt += investigation ? INVESTIGATION_SECTION : CHAT_SECTION;
+  prompt += budgetLine(opts, investigation);
+  if (investigation) prompt += REPORT_PROTOCOL;
+  prompt += HARNESS_PROTOCOL;
+  if (opts.fleetTools) prompt += ADDRESSING_PROTOCOL;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
 }
@@ -153,7 +158,7 @@ function buildMetricsSummary(): string {
         : "serves alerting rules";
     return `${b.label}: ${b.capabilities.label}, ${rules}`;
   });
-  return `\n<metrics-sources>\nMore than one metrics source is connected, so every metrics call must name the one you mean in its "metricsSource" argument, written exactly as it appears here.\n${lines.join("\n")}\n</metrics-sources>\n`;
+  return `\nMore than one metrics source is connected, so every metrics call must name the one you mean in its "metricsSource" argument, written exactly as it appears here.\n${lines.join("\n")}\n`;
 }
 
 // Prometheus puts the expression that fired in the generator link's query string,

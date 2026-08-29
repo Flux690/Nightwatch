@@ -87,7 +87,7 @@ export function capOutput(text: string, maxBytes = MAX_OUTPUT_BYTES): string {
     .subarray(utf8BoundaryAtOrAfter(buf, buf.length - half))
     .toString("utf8");
   const elided = buf.length - maxBytes;
-  return `${head}\n[... ${elided} bytes elided ...]\n${tail}`;
+  return `${head}\n[cut: ${elided} bytes]\n${tail}`;
 }
 
 // UTF-8 continuation bytes are 0b10xxxxxx. Move an offset back to the start of

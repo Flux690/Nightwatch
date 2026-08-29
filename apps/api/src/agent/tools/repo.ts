@@ -250,7 +250,7 @@ function composePrBody(
     const shown = filesChanged.slice(0, 50);
     const more =
       filesChanged.length > shown.length
-        ? `\n- ... and ${filesChanged.length - shown.length} more`
+        ? `\n- [cut: ${filesChanged.length - shown.length} more]`
         : "";
     sections.push(
       `## Files changed\n\n${shown.map((f) => `- ${f}`).join("\n")}${more}`,
