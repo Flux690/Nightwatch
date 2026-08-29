@@ -28,7 +28,7 @@ import { recordRunFailure } from "../session/run-state.js";
 import {
   countInvestigations,
   getSession,
-  listSessionSources,
+  listSessionFacts,
 } from "../session/store.js";
 import { appendErrorMessage } from "../session/transcript-store.js";
 import { randomUUID } from "node:crypto";
@@ -136,8 +136,8 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
   }
 
   function liveSessions(): string[] {
-    return listSessionSources(100, 0, "investigation")
-      .sources.map((s) => s.sessionId)
+    return listSessionFacts(100, 0, "investigation")
+      .facts.map((s) => s.sessionId)
       .filter((id) => dispatcher.isSessionRunning(id));
   }
 

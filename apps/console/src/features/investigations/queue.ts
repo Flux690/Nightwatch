@@ -4,18 +4,20 @@ import type { SessionListRow, InvestigationStatus } from "@nightwarden/shared";
 // through the queue walks the list exactly as it was read.
 const STATUS_ORDER: InvestigationStatus[] = [
   "action_required",
-  "investigating",
+  "running",
   "resolved",
-  "inconclusive",
+  "completed",
   "stopped",
   "failed",
 ];
 
+// `running` is the stored word and "Investigating" is the read one: the column
+// holds machine vocabulary and the console supplies the human kind.
 export const STATUS_LABEL: Record<InvestigationStatus, string> = {
   action_required: "Action required",
-  investigating: "Investigating",
+  running: "Investigating",
   resolved: "Resolved",
-  inconclusive: "Inconclusive",
+  completed: "Completed",
   stopped: "Stopped",
   failed: "Failed",
 };

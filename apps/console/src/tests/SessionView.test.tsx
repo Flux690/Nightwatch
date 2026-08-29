@@ -212,7 +212,7 @@ function setupPage({
             investigation: false,
             severityLabel: null,
             status: null,
-            finding: null,
+            statusLine: null,
             awaitingHumanInput: false,
           }))
         : [];

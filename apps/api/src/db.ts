@@ -83,8 +83,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   investigation        INTEGER   NOT NULL DEFAULT 0,
-  run_state            TEXT      NOT NULL DEFAULT 'done'
-                                 CHECK (run_state IN ('running', 'suspended', 'done')),
+  -- Every value but 'running' is derived from the columns below and rewritten on
+  -- each transition. 'running' is claimed by the conditional UPDATE in
+  -- run-state.ts, which is also the dispatch mutex.
+  status               TEXT      NOT NULL DEFAULT 'completed'
+                                 CHECK (status IN ('action_required', 'running',
+                                   'resolved', 'stopped', 'failed', 'completed')),
   failed_attempts      INTEGER   NOT NULL DEFAULT 0,
   failure_kind         TEXT      CHECK (failure_kind IN ('transient', 'permanent')),
   -- When a person ended the run. Recorded, because otherwise a stopped run is
@@ -117,7 +121,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_kind_activity
   ON sessions(investigation, last_activity_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_seats
-  ON sessions(investigation, run_state);
+  ON sessions(investigation, status);
 
 CREATE TABLE IF NOT EXISTS alerts (
   id                 INTEGER   PRIMARY KEY,
@@ -178,6 +182,12 @@ export function getDb(): Database.Database {
 // Eager, so a misconfigured data path fails at boot rather than at 3am.
 export function initDb(): void {
   getDb();
+}
+
+// The open handle, or nothing. For a caller that must not be the one to create
+// a database: getDb() opens one, which is a side effect an assertion cannot have.
+export function openDb(): Database.Database | undefined {
+  return _db;
 }
 
 export function resetDb(): void {

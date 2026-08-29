@@ -220,7 +220,7 @@ export function SessionView({
         investigation: kind === "investigation",
         severityLabel: null,
         status: null,
-        finding: null,
+        statusLine: null,
         awaitingHumanInput: false,
       });
     },

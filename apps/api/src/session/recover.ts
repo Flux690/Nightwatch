@@ -5,9 +5,9 @@ import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
 import { hasPendingHumanInput } from "./interrupts.js";
 import {
+  abandonedSessionIds,
   markDone,
   runningSessionIds,
-  suspendedSessionIds,
 } from "./run-state.js";
 import { getSession } from "./store.js";
 import {
@@ -117,16 +117,16 @@ function worthResuming(sessionId: string): boolean {
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
-// 'suspended' with no interrupt row died between approving a call and claiming
+// 'action_required' with no gate row died between approving a call and claiming
 // the resume: the write already ran, its result is gone, and it holds a seat.
 function strandedSessions(): Array<{ sessionId: string; killed: boolean }> {
-  const killed = runningSessionIds().map((sessionId) => ({
+  const killed = runningSessionIds().map((sessionId: string) => ({
     sessionId,
     killed: true,
   }));
-  const abandoned = suspendedSessionIds()
-    .filter((sessionId) => !hasPendingHumanInput(sessionId))
-    .map((sessionId) => ({ sessionId, killed: false }));
+  const abandoned = abandonedSessionIds()
+    .filter((sessionId: string) => !hasPendingHumanInput(sessionId))
+    .map((sessionId: string) => ({ sessionId, killed: false }));
   return [...killed, ...abandoned];
 }
 

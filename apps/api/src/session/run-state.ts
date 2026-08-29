@@ -1,12 +1,14 @@
 import { getDb } from "../db.js";
+import { deriveStatus, refreshSessionStatus } from "./status.js";
 
 // The conditional UPDATE is the whole mutex: two racing dispatches attempt it
-// and one changes a row. Claimable from 'suspended', which is a resume.
+// and one changes a row. Every status but 'running' is claimable, since a
+// finished session takes a new message and a gated one resumes.
 export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
-      `UPDATE sessions SET run_state = 'running', stopped_at = NULL
-       WHERE session_id = ? AND run_state IN ('done', 'suspended')`,
+      `UPDATE sessions SET status = 'running', stopped_at = NULL
+       WHERE session_id = ? AND status <> 'running'`,
     )
     .run(sessionId);
   return result.changes > 0;
@@ -19,17 +21,20 @@ export function markStopped(sessionId: string): void {
   getDb()
     .prepare(`UPDATE sessions SET stopped_at = ? WHERE session_id = ?`)
     .run(new Date().toISOString(), sessionId);
+  // stopped_at is one of the columns the status is derived from. A no-op on the
+  // ordinary path, where releaseRun settles the same answer moments later.
+  refreshSessionStatus(sessionId);
 }
 
-// Conditional on 'running' so it cannot undo the 'suspended' written with the
-// interrupt row: that session is waiting, not idle, and it keeps its seat.
+// Conditional on 'running' so it cannot overwrite the 'action_required' written
+// with the interrupt row: that session is waiting, not idle, and keeps its seat.
 export function releaseRun(sessionId: string): void {
   getDb()
     .prepare(
-      `UPDATE sessions SET run_state = 'done'
-       WHERE session_id = ? AND run_state = 'running'`,
+      `UPDATE sessions SET status = ?
+       WHERE session_id = ? AND status = 'running'`,
     )
-    .run(sessionId);
+    .run(deriveStatus(sessionId), sessionId);
 }
 
 // Recorded at the failure, because describeLLMError's prose cannot be
@@ -72,48 +77,45 @@ export function runFailure(
 }
 
 /* Unconditional, unlike releaseRun: boot recovery uses it to give back a seat
-   held by a session suspended on nobody, which releaseRun deliberately will not
+   held by a session waiting on nobody, which releaseRun deliberately will not
    touch because that session is not running. */
 
 export function markDone(sessionId: string): void {
   getDb()
-    .prepare(`UPDATE sessions SET run_state = 'done' WHERE session_id = ?`)
-    .run(sessionId);
+    .prepare(`UPDATE sessions SET status = ? WHERE session_id = ?`)
+    .run(deriveStatus(sessionId), sessionId);
 }
 
 export function isRunning(sessionId: string): boolean {
   const row = getDb()
     .prepare(
       `SELECT 1 FROM sessions
-       WHERE session_id = ? AND run_state = 'running' LIMIT 1`,
+       WHERE session_id = ? AND status = 'running' LIMIT 1`,
     )
     .get(sessionId);
   return row !== undefined;
 }
 
-/* An investigation holds a seat while suspended because the human it waits on is
-   the scarce thing. A chat holds one only while working - someone was sitting
-   right there when it started. */
+// One rule for both pools: running or waiting on a human holds a seat. Freeing
+// the seat of a gated session only queues a second request behind that person.
 
 export function countSeats(investigation: boolean): number {
-  const states = investigation ? ["running", "suspended"] : ["running"];
-  const holes = states.map(() => "?").join(", ");
   const row = getDb()
     .prepare(
       `SELECT COUNT(*) AS taken FROM sessions
-       WHERE investigation = ? AND run_state IN (${holes})`,
+       WHERE investigation = ? AND status IN ('running', 'action_required')`,
     )
-    .get(investigation ? 1 : 0, ...states) as { taken: number };
+    .get(investigation ? 1 : 0) as { taken: number };
   return row.taken;
 }
 
-// Approving deletes the interrupt row before the resume claims the run, so a
-// crash in that gap leaves a session suspended forever, holding a seat.
-export function suspendedSessionIds(): string[] {
+// Approving clears the gate before the resume claims the run, so a crash in
+// that gap leaves a session waiting on nobody, holding a seat.
+export function abandonedSessionIds(): string[] {
   const rows = getDb()
     .prepare(
       `SELECT session_id AS sessionId FROM sessions
-       WHERE run_state = 'suspended'`,
+       WHERE status = 'action_required'`,
     )
     .all() as Array<{ sessionId: string }>;
   return rows.map((r) => r.sessionId);
@@ -124,7 +126,7 @@ export function suspendedSessionIds(): string[] {
 export function runningSessionIds(): string[] {
   const rows = getDb()
     .prepare(
-      `SELECT session_id AS sessionId FROM sessions WHERE run_state = 'running'`,
+      `SELECT session_id AS sessionId FROM sessions WHERE status = 'running'`,
     )
     .all() as Array<{ sessionId: string }>;
   return rows.map((r) => r.sessionId);

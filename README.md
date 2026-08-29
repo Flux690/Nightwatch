@@ -200,14 +200,21 @@ An alert for any other group opens its own investigation, or waits for a slot.
 
 ### What a status means
 
-| Status              | What it means                                                 | What happens next                                                      |
-| ------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Investigating**   | A run is working right now                                    | Nothing to do                                                          |
-| **Action required** | It is waiting on you, or it finished with something to act on | Approve, answer, or act on the recommendation                          |
-| **Resolved**        | Every alert on it stopped firing                              | Nothing to do. This is the only status that means the incident is over |
-| **Inconclusive**    | The run ended without anything for you to act on              | Read what it ruled out; it may still recover on its own                |
-| **Stopped**         | You ended the run yourself                                    | Nothing to do. Start a new investigation to look again                 |
-| **Failed**          | The run broke - usually the model provider                    | Retried automatically if the cause was temporary; see below            |
+| Status              | What it means                                  | What happens next                                                             |
+| ------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Action required** | A run is frozen waiting on you, right now      | Approve it, answer it, or give it more time                                   |
+| **Investigating**   | A run is working right now                     | Nothing to do                                                                 |
+| **Resolved**        | Every alert on it stopped firing               | Nothing to do. This is the only status that means the incident is over        |
+| **Completed**       | The run finished and nothing is blocked on you | Read what it found or ruled out, and act on its recommendation if it made one |
+| **Stopped**         | You ended the run yourself                     | Nothing to do. Start a new investigation to look again                        |
+| **Failed**          | The run broke - usually the model provider     | Retried automatically if the cause was temporary; see below                   |
+
+**Action required means something is frozen.** It is the group to open first,
+because a run in it is doing nothing until you answer. A finished investigation
+that recommends something is **Completed**, not Action required: nothing marks
+a recommendation as acted on, so a group that collected them could only ever
+grow until the words stopped meaning anything. The recommendation still reads on
+the row.
 
 **Resolved is never inferred.** It does not mean a fix ran, and it never comes
 from the model saying it found the cause. It means the alert stopped firing,
@@ -215,11 +222,10 @@ confirmed either by your alert source's resolved notification or by asking
 Prometheus whether its rule still holds. When nothing can answer, the record
 says recovery was not confirmed rather than claiming it.
 
-Underneath, a session's run is in exactly one of three states: **running**,
-**suspended** (parked on you), or **done**. Running and suspended both hold one
-of the ten slots. This is what makes the count on the Investigations page true
-rather than an estimate, and what lets a restart tell a run that was alive from
-one that had finished.
+Underneath, that status is the only state a session carries. A run working and a
+run parked on you each hold one of the ten slots, and nothing else does. This is
+what makes the count on the Investigations page true rather than an estimate,
+and what lets a restart tell a run that was alive from one that had finished.
 
 ### When NightWarden restarts
 
@@ -254,7 +260,7 @@ again."_
 **You can stop a run.** The stop is checked between a turn's tool calls and the
 approval gate, so a run you stopped ends as stopped rather than parking an
 approval card nobody is going to answer. It also says so afterwards: the record
-reads **Stopped**, never Inconclusive, because you ending a run and the agent
+reads **Stopped**, never Completed, because you ending a run and the agent
 running out of ideas are different things and only one of them is about the
 agent.
 

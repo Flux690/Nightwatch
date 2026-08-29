@@ -4,6 +4,7 @@ import type {
   TranscriptRow,
 } from "@nightwarden/shared";
 import { getDb } from "../db.js";
+import { refreshSessionStatus } from "./status.js";
 import type { PendingHumanInput } from "./interrupts.js";
 
 // Transcript rows, appended a turn at a time.
@@ -67,7 +68,12 @@ export function appendTranscriptRows(messages: TranscriptRow[]): void {
       });
     }
     const last = rows[rows.length - 1];
-    if (last) touchSession(last.sessionId, last.timestamp);
+    if (last) {
+      touchSession(last.sessionId, last.timestamp);
+      // The tail decides whether a session reads as failed, so appending to it
+      // can change the answer. A no-op while a run holds 'running'.
+      refreshSessionStatus(last.sessionId);
+    }
   });
   insertAll(messages);
 }
@@ -111,6 +117,9 @@ export function appendErrorMessage(
       timestamp: message.timestamp,
     });
     touchSession(sessionId, message.timestamp);
+    // An error row is what makes a session read as failed. A no-op while the run
+    // still holds 'running', where releaseRun derives the same answer later.
+    refreshSessionStatus(sessionId);
   })();
   return message;
 }
@@ -126,11 +135,11 @@ export function appendRowsAndInterrupt(
        (session_id, seq, kind, content, canonical, timestamp)
      VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
   );
-  // Suspending is the gate, so the state keeping this session's seat is
+  // Suspending is the gate, so the status keeping this session's seat is
   // written with it: the two are columns on the same row.
   const suspend = getDb().prepare(
     `UPDATE sessions
-        SET run_state = 'suspended', awaiting_tool_use_id = @toolUseId,
+        SET status = 'action_required', awaiting_tool_use_id = @toolUseId,
             awaiting_kind = @kind, awaiting_results = @completedResults,
             attempt_started_at = @claimedAt
       WHERE session_id = @sessionId`,
@@ -192,6 +201,9 @@ export function appendRowsAndResolve(
     }
     const last = messages[messages.length - 1];
     if (last) touchSession(last.sessionId, last.timestamp);
+    // The gate is gone, so 'action_required' is no longer true. The resume that
+    // follows claims 'running' over whatever this settles on.
+    refreshSessionStatus(sessionId);
     return true;
   })();
 }

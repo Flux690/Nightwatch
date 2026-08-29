@@ -1,4 +1,5 @@
 import { getDb } from "../db.js";
+import { refreshSessionStatus } from "./status.js";
 import type { ToolResult } from "../llm/types.js";
 
 // Four columns on the session row, since there is at most one per session.
@@ -95,7 +96,10 @@ export function deletePendingHumanInput(sessionId: string): boolean {
         WHERE session_id = ? AND awaiting_tool_use_id IS NOT NULL`,
     )
     .run(sessionId);
-  return result.changes > 0;
+  if (result.changes === 0) return false;
+  // Nothing is being asked any more, so 'action_required' has stopped being true.
+  refreshSessionStatus(sessionId);
+  return true;
 }
 
 export function getPendingHumanInputBySessionId(

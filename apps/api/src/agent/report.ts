@@ -270,19 +270,6 @@ export function computeConviction(
   return graded;
 }
 
-// Read by the status derivation and by the report gate, so what the list calls
-// actionable and what the gate accepts cannot disagree.
-export function isActionable(record: InvestigationRecord | null): boolean {
-  if (record === null) return false;
-  const recommended = (record.report?.recommendation ?? "").trim() !== "";
-  return (
-    recommended ||
-    record.hypotheses.some(
-      (h) => h.verdict === "root_cause" && h.evidenceIds.length > 0,
-    )
-  );
-}
-
 // A list rather than a boolean, so the record-gaps message can name only what
 // is absent and a surviving gap can be logged as itself.
 export type ReportGap =

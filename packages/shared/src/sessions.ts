@@ -9,15 +9,15 @@ import type { TranscriptItem } from "./transcript.js";
 // replayed, "nightwarden" replayed but never rendered. buildSeed maps them.
 export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 
-// What an investigation currently is, derived server-side and never declared by
-// the model. Null on a chat session, which is not under investigation at all.
+// Derived server-side and never declared by the model. The console draws
+// `running` as "Investigating"; null on a chat, which has no status to show.
 export type InvestigationStatus =
   | "action_required"
-  | "investigating"
+  | "running"
   | "resolved"
-  | "inconclusive"
   | "stopped"
-  | "failed";
+  | "failed"
+  | "completed";
 
 // One row of the console's one session list. A session not under investigation
 // leaves the status fields null.
@@ -29,7 +29,7 @@ export interface SessionListRow extends SessionMeta {
   status: InvestigationStatus | null;
   // One line answering the question the status raises, drawn from the system's
   // record or the model's prose. Null when there is nothing to say.
-  finding: string | null;
+  statusLine: string | null;
   // Its own field rather than a reading of `status`, which is null unless the
   // session is under investigation - any session can be waiting on a human.
   awaitingHumanInput: boolean;

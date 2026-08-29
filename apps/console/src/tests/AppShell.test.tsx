@@ -24,7 +24,7 @@ const SESSION_1: SessionListRow = {
   investigation: false,
   severityLabel: null,
   status: null,
-  finding: null,
+  statusLine: null,
   awaitingHumanInput: false,
 };
 
@@ -51,23 +51,29 @@ const INVESTIGATIONS = [
   investigationRow("inv-p1", "Checkout latency spike", {
     severityLabel: "P1",
     status: "action_required",
-    finding: "Raise the pod memory limit",
+    statusLine: "Waiting on an answer",
   }),
   // Opened fourteen minutes ago, moved two: the row reads the second.
   investigationRow("inv-crit", "Container memory high", {
     lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
     severityLabel: "critical",
     status: "action_required",
-    finding: "Waiting on approval",
+    statusLine: "Waiting on approval",
   }),
   investigationRow("inv-run", "Redis pool exhausted", {
     severityLabel: "warning",
-    status: "investigating",
-    finding: "Connection pool starved by the checkout deploy",
+    status: "running",
+    statusLine: "Connection pool starved by the checkout deploy",
   }),
   investigationRow("inv-done", "Disk filling on db-02", {
     status: "resolved",
-    finding: "Alert condition recovered",
+    statusLine: "Alert condition recovered",
+  }),
+  // Nothing is holding this one up, so its recommendation reads under Completed
+  // rather than competing with the runs that are actually frozen.
+  investigationRow("inv-fixed", "Worker OOM on ingest", {
+    status: "completed",
+    statusLine: "Raise the pod memory limit",
   }),
 ];
 
@@ -649,6 +655,7 @@ describe("Shell", () => {
         name: "Investigating",
       });
       const resolved = screen.getByRole("region", { name: "Resolved" });
+      const completed = screen.getByRole("region", { name: "Completed" });
 
       // The header states the status and nothing else; the rows under it are
       // the count, and repeating it as a number adds no reading.
@@ -657,8 +664,12 @@ describe("Shell", () => {
       expect(within(action).getAllByRole("link")).toHaveLength(2);
       expect(within(investigating).getAllByRole("link")).toHaveLength(1);
       expect(within(resolved).getAllByRole("link")).toHaveLength(1);
+      expect(within(completed).getAllByRole("link")).toHaveLength(1);
       expect(precedes(action, investigating)).toBe(true);
       expect(precedes(investigating, resolved)).toBe(true);
+      // A finished run with a recommendation sorts below a recovered one and
+      // out of the group meaning "somebody is being asked something".
+      expect(precedes(resolved, completed)).toBe(true);
 
       // Nothing is Failed, so no Failed header is drawn.
       expect(
@@ -741,7 +752,7 @@ describe("Shell", () => {
       const { router } = setup({ path: "/investigations/inv-p1" });
 
       // First of four: the group's order is the order the API sent it in.
-      expect(await screen.findByText("1 / 4")).toBeInTheDocument();
+      expect(await screen.findByText("1 / 5")).toBeInTheDocument();
 
       await user.click(
         screen.getByRole("button", { name: "Next investigation" }),
@@ -750,7 +761,7 @@ describe("Shell", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/investigations/inv-crit");
       });
-      expect(await screen.findByText("2 / 4")).toBeInTheDocument();
+      expect(await screen.findByText("2 / 5")).toBeInTheDocument();
       // Nothing navigated back to the list to get there.
       expect(
         screen.queryByRole("region", { name: "Action required" }),

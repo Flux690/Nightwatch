@@ -19,7 +19,7 @@ import { cn } from "@/shared/lib/utils";
 
 /* Colour answers one question per hue: is a person holding this up, did the
    condition stop firing, did the run break. Everything else is ink. */
-function findingTone(row: SessionListRow): string {
+function statusLineTone(row: SessionListRow): string {
   if (row.awaitingHumanInput) return "text-wait";
   if (row.status === "resolved") return "text-ok";
   if (row.status === "failed") return "text-fail";
@@ -60,10 +60,12 @@ function InvestigationRow({
           </span>
         </span>
 
-        {(row.finding !== null || running) && (
+        {(row.statusLine !== null || running) && (
           <span className="flex items-baseline gap-3">
-            <span className={cn("min-w-0 flex-1 truncate", findingTone(row))}>
-              {row.finding}
+            <span
+              className={cn("min-w-0 flex-1 truncate", statusLineTone(row))}
+            >
+              {row.statusLine}
             </span>
             {/* Read from the live dispatcher, so it is not decoration: it says
                 a run is moving at this moment. */}
@@ -211,7 +213,7 @@ export function InvestigationsPage(): React.JSX.Element {
                     <InvestigationRow
                       key={row.sessionId}
                       row={row}
-                      running={group.status === "investigating"}
+                      running={group.status === "running"}
                     />
                   ))}
                 </ul>

@@ -26,7 +26,7 @@ import {
   createSession,
   deleteSession,
   getSession,
-  listSessionSources,
+  listSessionFacts,
 } from "../session/store.js";
 import {
   appendRowsAndInterrupt,
@@ -262,7 +262,7 @@ describe("API-local session store", () => {
     seedAlertSession(newer, [alert]);
     seedAlertSession(other, [alert]);
 
-    const list = listSessionSources(100, 0).sources.filter((session) =>
+    const list = listSessionFacts(100, 0).facts.filter((session) =>
       [other.sessionId, newer.sessionId, older.sessionId].includes(
         session.sessionId,
       ),
@@ -288,19 +288,19 @@ describe("API-local session store", () => {
     it("reaches sessions beyond the first page", () => {
       seedSessions(5, "page");
 
-      const first = listSessionSources(2, 0);
-      const second = listSessionSources(2, first.nextOffset ?? 0);
+      const first = listSessionFacts(2, 0);
+      const second = listSessionFacts(2, first.nextOffset ?? 0);
 
-      expect(first.sources).toHaveLength(2);
+      expect(first.facts).toHaveLength(2);
       expect(first.nextOffset).toBe(2);
-      expect(second.sources).toHaveLength(2);
+      expect(second.facts).toHaveLength(2);
       // No row is served on both pages, which is what the id tiebreaker buys.
-      const ids = [...first.sources, ...second.sources].map((s) => s.sessionId);
+      const ids = [...first.facts, ...second.facts].map((s) => s.sessionId);
       expect(new Set(ids).size).toBe(ids.length);
     });
 
     it("reports no next offset on the last page", () => {
-      const only = listSessionSources(1000, 0);
+      const only = listSessionFacts(1000, 0);
       expect(only.nextOffset).toBeNull();
     });
 
@@ -319,9 +319,9 @@ describe("API-local session store", () => {
       });
       seedAlertSession(meta({ title: "newer than waiting" }), [alert]);
 
-      const first = listSessionSources(1, 0);
-      expect(first.sources[0].sessionId).toBe(waiting.sessionId);
-      expect(first.sources[0].awaitingHumanInput).toBe(true);
+      const first = listSessionFacts(1, 0);
+      expect(first.facts[0].sessionId).toBe(waiting.sessionId);
+      expect(first.facts[0].awaitingHumanInput).toBe(true);
     });
   });
 
@@ -431,7 +431,7 @@ describe("API-local session store", () => {
           timestamp: new Date().toISOString(),
         },
       ]);
-      expect(statusOf(sessionId)).toBe("inconclusive");
+      expect(statusOf(sessionId)).toBe("completed");
     });
 
     // No alert means no condition, and no condition means nothing can ever say
@@ -441,7 +441,7 @@ describe("API-local session store", () => {
       const m = meta();
       createSession(m, true);
       seedCompleteReport(m.sessionId);
-      expect(statusOf(m.sessionId)).toBe("inconclusive");
+      expect(statusOf(m.sessionId)).toBe("completed");
     });
 
     it("reads Resolved when the alert cleared, with nothing run", () => {
@@ -450,7 +450,7 @@ describe("API-local session store", () => {
       const untouched = investigation();
       seedCompleteReport(sessionId);
       seedCompleteReport(untouched);
-      expect(statusOf(sessionId)).toBe("inconclusive");
+      expect(statusOf(sessionId)).toBe("completed");
 
       // The ids it answers with are what ingest publishes REPORT_UPDATED for, so
       // it names the sessions actually holding the alert, and each of them once.
@@ -462,7 +462,7 @@ describe("API-local session store", () => {
         ),
       ).toEqual([sessionId]);
       expect(statusOf(sessionId)).toBe("resolved");
-      expect(statusOf(untouched)).toBe("inconclusive");
+      expect(statusOf(untouched)).toBe("completed");
     });
 
     /* A fingerprint hashes the labels, so the same condition firing months later
@@ -489,7 +489,7 @@ describe("API-local session store", () => {
       ).toEqual([august.sessionId]);
       expect(statusOf(august.sessionId)).toBe("resolved");
       // January never recovered, and August recovering says nothing about it.
-      expect(statusOf(january.sessionId)).toBe("inconclusive");
+      expect(statusOf(january.sessionId)).toBe("completed");
     });
 
     it("stays unresolved until every alert of a batch has cleared", () => {
@@ -504,19 +504,12 @@ describe("API-local session store", () => {
       seedCompleteReport(m.sessionId);
 
       markAlertCleared(ids[0]!, alert.firedAt, new Date().toISOString());
-      expect(statusOf(m.sessionId)).toBe("inconclusive");
+      expect(statusOf(m.sessionId)).toBe("completed");
       markAlertCleared(ids[1]!, alert.firedAt, new Date().toISOString());
-      expect(statusOf(m.sessionId)).toBe("inconclusive");
+      expect(statusOf(m.sessionId)).toBe("completed");
 
       markAlertCleared(ids[2]!, alert.firedAt, new Date().toISOString());
       expect(statusOf(m.sessionId)).toBe("resolved");
-    });
-
-    it("reads Action required for a finished run whose fix nobody acted on", () => {
-      const sessionId = investigation();
-      seedCompleteReport(sessionId);
-      seedRecommendation(sessionId, "restart the container");
-      expect(statusOf(sessionId)).toBe("action_required");
     });
 
     it("reads Failed when the run crashed rather than stood down", () => {
@@ -525,26 +518,30 @@ describe("API-local session store", () => {
       expect(statusOf(sessionId)).toBe("failed");
     });
 
-    it("reads Inconclusive when the record holds no cause it could stand behind", () => {
-      const settled = investigation();
-      seedCompleteReport(settled);
-      expect(statusOf(settled)).toBe("inconclusive");
+    /* Status reads no part of the record, so every finished run reads the same
+       word whatever it found. A recommendation nobody has acted on is not a
+       gate: nothing marks one as acted on, so that group would never empty. */
+    it("reads Completed for a finished run, whatever its record holds", () => {
+      const recommended = investigation();
+      seedCompleteReport(recommended);
+      seedRecommendation(recommended, "restart the container");
+      expect(statusOf(recommended)).toBe("completed");
 
-      // Recording nothing at all is the same answer, honestly stated.
-      expect(statusOf(investigation())).toBe("inconclusive");
-    });
+      const ruledOut = investigation();
+      seedCompleteReport(ruledOut);
+      expect(statusOf(ruledOut)).toBe("completed");
 
-    // Answering null here put the row in no group while it still counted in
-    // the total, so the stepper read "3 / 12" over eleven rows.
-    it("reads Inconclusive when a cause was found but nothing was recommended", () => {
-      const sessionId = investigation();
-      recordHypothesis(sessionId, {
+      const named = investigation();
+      recordHypothesis(named, {
         statement: "the deploy set the cache size",
         verdict: "trigger",
         finding: "the climb starts at the merge",
-        evidenceIds: [seedCitedCall(sessionId)],
+        evidenceIds: [seedCitedCall(named)],
       });
-      expect(statusOf(sessionId)).toBe("inconclusive");
+      expect(statusOf(named)).toBe("completed");
+
+      // Recording nothing at all is the same answer, honestly stated.
+      expect(statusOf(investigation())).toBe("completed");
     });
 
     /* Verification asks whoever owns the condition, never the model, and writes
@@ -606,7 +603,7 @@ describe("API-local session store", () => {
       it("resolves once the rules API no longer holds the rule firing", async () => {
         const sessionId = investigation();
         seedCompleteReport(sessionId);
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
 
         rulesAnswer([]);
         await expect(verifyRecovery(sessionId)).resolves.toBe("confirmed");
@@ -620,7 +617,7 @@ describe("API-local session store", () => {
       it("resolves after the run ended, with no webhook, when the sweep next asks", async () => {
         const sessionId = investigation();
         seedCompleteReport(sessionId);
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
 
         rulesAnswer([]);
         await reconcileRecovery();
@@ -634,7 +631,7 @@ describe("API-local session store", () => {
 
         rulesAnswer([{ state: "firing", labels: {} }]);
         await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
       });
 
       // The rule is true but has not held long enough to fire. Reading that as
@@ -667,7 +664,7 @@ describe("API-local session store", () => {
           },
         ]);
         await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
       });
 
       // The load-bearing case: an unanswerable question is not a yes. If this
@@ -682,7 +679,7 @@ describe("API-local session store", () => {
           vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
         );
         await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
       });
 
       it("never reads a rule Prometheus does not know as recovery", async () => {
@@ -704,7 +701,7 @@ describe("API-local session store", () => {
           ),
         );
         await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
-        expect(statusOf(sessionId)).toBe("inconclusive");
+        expect(statusOf(sessionId)).toBe("completed");
       });
 
       it("has nothing to verify on a session no alert opened", async () => {
@@ -733,14 +730,14 @@ describe("API-local session store", () => {
 
   // The line answers the question its status raises, so the list can be triaged
   // without opening every row. Every branch is a record or the model's prose.
-  describe("the finding line", () => {
+  describe("the status line", () => {
     function rowOf(sessionId: string) {
       return listSessionPage(500, 0).rows.find(
         (r) => r.sessionId === sessionId,
       );
     }
-    function findingOf(sessionId: string): string | null | undefined {
-      return rowOf(sessionId)?.finding;
+    function statusLineOf(sessionId: string): string | null | undefined {
+      return rowOf(sessionId)?.statusLine;
     }
     function investigation(sourceAlertId = randomUUID()): string {
       const m = meta();
@@ -778,14 +775,14 @@ describe("API-local session store", () => {
         completedResults: [],
         claimedAt: null,
       });
-      expect(findingOf(sessionId)).toBe("Waiting on approval");
+      expect(statusLineOf(sessionId)).toBe("Waiting on approval");
     });
 
     it("names the fix a finished run is waiting on somebody to take", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
       seedRecommendation(sessionId, "raise the pod memory limit to 2Gi");
-      expect(findingOf(sessionId)).toBe("raise the pod memory limit to 2Gi");
+      expect(statusLineOf(sessionId)).toBe("raise the pod memory limit to 2Gi");
     });
 
     // With no fix written the claim stands in for one, and the claim that leads
@@ -805,7 +802,7 @@ describe("API-local session store", () => {
         evidenceIds: [cite(sessionId, "tu-2", 1)],
       });
       // The cause outranks the symptom even though the symptom settled first.
-      expect(findingOf(sessionId)).toBe("the sidecar leaks between deploys");
+      expect(statusLineOf(sessionId)).toBe("the sidecar leaks between deploys");
 
       recordHypothesis(sessionId, {
         statement: "the pool never returns its connections",
@@ -813,7 +810,7 @@ describe("API-local session store", () => {
         finding: "the pool is full at the crash",
         evidenceIds: [cite(sessionId, "tu-3", 2)],
       });
-      expect(findingOf(sessionId)).toBe(
+      expect(statusLineOf(sessionId)).toBe(
         "the pool never returns its connections",
       );
     });
@@ -823,14 +820,14 @@ describe("API-local session store", () => {
       const sessionId = investigation(sourceAlertId);
       seedCompleteReport(sessionId);
       markAlertCleared(sourceAlertId, alert.firedAt, new Date().toISOString());
-      expect(findingOf(sessionId)).toBe("Alert condition recovered");
+      expect(statusLineOf(sessionId)).toBe("Alert condition recovered");
     });
 
-    it("names what an inconclusive run ruled out, and nothing when it recorded nothing", () => {
+    it("names what a completed run ruled out, and nothing when it recorded nothing", () => {
       const ruled = investigation();
       seedCompleteReport(ruled); // one disproven hypothesis
-      expect(findingOf(ruled)).toBe("Ruled out: seeded by test");
-      expect(findingOf(investigation())).toBeNull();
+      expect(statusLineOf(ruled)).toBe("Ruled out: seeded by test");
+      expect(statusLineOf(investigation())).toBeNull();
     });
 
     it("gives a failed run its own error text", () => {
@@ -838,13 +835,13 @@ describe("API-local session store", () => {
       appendTranscriptRows([
         msg(sessionId, 0, { kind: "error", content: "the provider timed out" }),
       ]);
-      expect(findingOf(sessionId)).toBe("the provider timed out");
+      expect(statusLineOf(sessionId)).toBe("the provider timed out");
     });
 
     it("leaves a session that is not under investigation with no finding", () => {
       const m = meta();
       createSession(m);
-      expect(findingOf(m.sessionId)).toBeNull();
+      expect(statusLineOf(m.sessionId)).toBeNull();
     });
 
     // The rank orders rows; the label is what the user wrote and is the

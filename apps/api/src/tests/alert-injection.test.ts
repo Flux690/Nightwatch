@@ -34,7 +34,7 @@ import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { dispatchAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import { routeDelivery } from "../alerts/route-alert.js";
 import { sessionCoveringGroup } from "../session/alerts-store.js";
-import { countInvestigations, listSessionSources } from "../session/store.js";
+import { countInvestigations, listSessionFacts } from "../session/store.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
 import {
@@ -76,7 +76,7 @@ const OTHER_GROUP = '{}:{alertname="Unrelated"}';
 // Every run this file starts has to be drained before the next test, or a
 // parked provider script is inherited by a run that did not queue it.
 function nothingRunning(): boolean {
-  return !listSessionSources(100, 0, "investigation").sources.some((s) =>
+  return !listSessionFacts(100, 0, "investigation").facts.some((s) =>
     dispatcher.isSessionRunning(s.sessionId),
   );
 }

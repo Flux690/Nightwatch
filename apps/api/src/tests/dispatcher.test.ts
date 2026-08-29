@@ -8,7 +8,7 @@ import {
   countInvestigations,
   createSession,
   getSession,
-  listSessionSources,
+  listSessionFacts,
 } from "../session/store.js";
 import { seedAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
@@ -220,7 +220,7 @@ describe("dispatcher", () => {
 // Every investigation, as the alert ids it covers - which is what says whether a
 // group was taken whole and whether two groups stayed apart.
 function investigationAlertIds(): string[][] {
-  return listSessionSources(100, 0, "investigation").sources.map((s) =>
+  return listSessionFacts(100, 0, "investigation").facts.map((s) =>
     s.alerts.map((entry) => entry.alert.sourceAlertId),
   );
 }

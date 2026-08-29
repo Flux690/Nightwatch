@@ -1,5 +1,6 @@
 import type {
   InvestigationRecord,
+  InvestigationStatus,
   SessionAlert,
   SessionKind,
   SessionMeta,
@@ -70,31 +71,29 @@ export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
 
-// Raw material for the sessions queue: one row per session, with its action log
-// and the transcript's tail. Deriving a status from all that lives in
-// session/list.ts, which also knows the dispatcher.
-export interface SessionListSource {
+// Raw material for the sessions queue: one row per session, its record and the
+// transcript's tail. The status is read, not computed - session/status.ts wrote
+// it on the transition that made it true.
+export interface SessionListFacts {
   sessionId: string;
   title: string;
   createdAt: string;
   lastActivityAt: string;
   alerts: SessionAlert[];
   investigation: boolean;
+  status: InvestigationStatus;
   record: InvestigationRecord | null;
-  lastKind: string | null;
-  // The tail's text, which is why a failed run failed when lastKind is "error".
+  // The tail's text, which is why a failed run failed when the status is failed.
   lastContent: string | null;
   awaitingHumanInput: boolean;
   // What the session is waiting on, null when it waits on nothing.
   pendingKind: PendingHumanInput["kind"] | null;
-  // When a person ended the run, null when nobody did.
-  stoppedAt: string | null;
 }
 
 // One page of it. nextOffset is the offset to ask for next, or null once the
 // list is exhausted.
-interface SessionListSourcePage {
-  sources: SessionListSource[];
+interface SessionListFactsPage {
+  facts: SessionListFacts[];
   nextOffset: number | null;
 }
 
@@ -104,34 +103,30 @@ interface SessionListRawRow {
   createdAt: string;
   lastActivityAt: string;
   investigation: number;
+  status: string;
   hypotheses: string;
   report: string | null;
   recordUpdatedAt: string | null;
-  lastKind: string | null;
   lastContent: string | null;
   awaitingHumanInput: number;
   pendingKind: string | null;
-  stoppedAt: string | null;
 }
 
 const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-        s.investigation, s.hypotheses, s.report,
+        s.investigation, s.status, s.hypotheses, s.report,
         s.record_updated_at AS recordUpdatedAt,
-        (SELECT m.kind FROM session_transcript m
-          WHERE m.session_id = s.session_id
-          ORDER BY m.seq DESC LIMIT 1) AS lastKind,
         (SELECT m.content FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastContent,
         s.last_activity_at AS lastActivityAt,
         (s.awaiting_tool_use_id IS NOT NULL) AS awaitingHumanInput,
-        s.awaiting_kind AS pendingKind,
-        s.stopped_at AS stoppedAt`;
+        s.awaiting_kind AS pendingKind`;
 
-function toSource(
+// The status cast is safe because the column CHECKs against the same members.
+function toFacts(
   r: SessionListRawRow,
   alerts: SessionAlert[],
-): SessionListSource {
+): SessionListFacts {
   return {
     sessionId: r.sessionId,
     title: r.title,
@@ -139,30 +134,29 @@ function toSource(
     lastActivityAt: r.lastActivityAt,
     alerts,
     investigation: r.investigation === 1,
+    status: r.status as InvestigationStatus,
     record:
       assembleRecord({
         hypotheses: r.hypotheses,
         report: r.report,
         updatedAt: r.recordUpdatedAt,
       }) ?? null,
-    lastKind: r.lastKind,
     lastContent: r.lastContent,
     awaitingHumanInput: r.awaitingHumanInput === 1,
     pendingKind:
       r.pendingKind !== null && isHumanInputKind(r.pendingKind)
         ? r.pendingKind
         : null,
-    stoppedAt: r.stoppedAt,
   };
 }
 
 // Ordering is the store's, not the console's: a waiting session leads the whole
 // list, and the id tiebreak stops a row swapping pages between fetches.
-export function listSessionSources(
+export function listSessionFacts(
   limit: number,
   offset: number,
   kind?: SessionKind,
-): SessionListSourcePage {
+): SessionListFactsPage {
   const filter =
     kind === undefined
       ? ""
@@ -182,7 +176,7 @@ export function listSessionSources(
   const page = rows.slice(0, limit);
   const alerts = alertsForMany(page.map((r) => r.sessionId));
   return {
-    sources: page.map((r) => toSource(r, alerts.get(r.sessionId) ?? [])),
+    facts: page.map((r) => toFacts(r, alerts.get(r.sessionId) ?? [])),
     nextOffset: rows.length > limit ? offset + page.length : null,
   };
 }

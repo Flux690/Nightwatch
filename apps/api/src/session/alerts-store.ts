@@ -5,6 +5,7 @@ import type {
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
 import { getDb } from "../db.js";
+import { refreshSessionStatus } from "./status.js";
 
 // Every alert row: the queue before a session owns one, and the group coverage
 // that decides which investigation an arriving alert joins.
@@ -105,11 +106,14 @@ export function markAlertCleared(
   }>;
   // A queued row has no session to publish against. One session can also cover
   // the same alert twice; the caller wants sessions.
-  return [
+  const sessionIds = [
     ...new Set(
       rows.map((r) => r.sessionId).filter((id): id is string => id !== null),
     ),
   ];
+  // The last alert clearing is what makes a session read as resolved.
+  for (const sessionId of sessionIds) refreshSessionStatus(sessionId);
+  return sessionIds;
 }
 
 // Scoped to uncleared rows rather than live runs: Alertmanager repeats a firing
@@ -137,7 +141,7 @@ export function sessionCoveringGroup(groupKey: string): string | undefined {
       `SELECT a.session_id AS sessionId
        FROM alerts a
        JOIN sessions s ON s.session_id = a.session_id
-       WHERE a.group_key = ? AND s.run_state IN ('running', 'suspended')
+       WHERE a.group_key = ? AND s.status IN ('running', 'action_required')
        LIMIT 1`,
     )
     .get(groupKey) as { sessionId: string } | undefined;

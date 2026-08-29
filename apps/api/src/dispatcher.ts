@@ -54,11 +54,60 @@ interface DispatcherOptions {
   run: (input: RunSessionInput) => Promise<RunOutcome>;
 }
 
+// How a run ended, named once. Consumers subscribe to this rather than working
+// out which promise arm they are in - .finally fires on a suspend as well.
+type RunEnding = RunOutcome | "failed";
+
 export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const { run } = opts;
 
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
+
+  /* Classified here or not at all: only the error object can say whether trying
+     again could ever work, and it does not survive into the transcript row. */
+  function recordFailure(sessionId: string, err: unknown): void {
+    logger.error({ err, sessionId }, "investigation failed");
+    recordRunFailure(
+      sessionId,
+      isTransientLLMError(err) ? "transient" : "permanent",
+    );
+    // The failure becomes a durable transcript row rendered like any other
+    // message; a synthetic row still unsticks the console if persist fails.
+    const text = describeLLMError(err);
+    let row: TranscriptRow;
+    try {
+      row = appendErrorMessage(sessionId, text);
+    } catch (persistErr: unknown) {
+      logger.warn(
+        { err: persistErr, sessionId },
+        "run failure row not persisted",
+      );
+      row = {
+        sessionId,
+        seq: 0,
+        kind: "error",
+        content: text,
+        parts: [],
+        timestamp: new Date().toISOString(),
+      };
+    }
+    publishRunFailed(sessionId, row);
+  }
+
+  // Every run ends here, named. Exactly one terminal event each: a suspended run
+  // already published its interrupt, and a failed one its row above.
+  function onRunEnded(sessionId: string, ending: RunEnding): void {
+    if (ending === "failed") return;
+    // A run that reached an ending, however it ended, is not a failure any more,
+    // so it stops carrying one and gets its full three attempts back.
+    clearRunFailure(sessionId);
+    if (ending === "completed") publishRunFinished(sessionId);
+    else if (ending === "stopped") {
+      markStopped(sessionId);
+      publishRunStopped(sessionId);
+    }
+  }
 
   function drainInbox(sessionId: string): NormalizedAlert[] {
     const arr = inbox.get(sessionId) ?? [];
@@ -88,52 +137,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     controllers.set(input.sessionId, controller);
 
     void run({ ...input, signal: controller.signal, drainInbox })
-      .then((toolOutcome) => {
-        // A run that reached an ending, however it ended, is not a failure any
-        // more - so it stops carrying one and gets its full three attempts back.
-        clearRunFailure(input.sessionId);
-        // Single lifecycle owner: exactly one terminal event per run. Completed and
-        // stopped runs need theirs here; suspended runs already ended via the loop's
-        // interrupt event, and failed runs terminate in the catch below.
-        if (toolOutcome === "completed") publishRunFinished(input.sessionId);
-        else if (toolOutcome === "stopped") {
-          markStopped(input.sessionId);
-          publishRunStopped(input.sessionId);
-        }
-      })
+      .then((outcome) => onRunEnded(input.sessionId, outcome))
       .catch((err: unknown) => {
-        logger.error(
-          { err, sessionId: input.sessionId },
-          "investigation failed",
-        );
-        /* Classified here or not at all: only the error object can say whether
-           trying again could ever work, and it does not survive into the
-           transcript row written below. */
-        recordRunFailure(
-          input.sessionId,
-          isTransientLLMError(err) ? "transient" : "permanent",
-        );
-        // The failure becomes a durable transcript row rendered like any other
-        // message; a synthetic row still unsticks the console if persist fails.
-        const text = describeLLMError(err);
-        let row: TranscriptRow;
-        try {
-          row = appendErrorMessage(input.sessionId, text);
-        } catch (persistErr: unknown) {
-          logger.warn(
-            { err: persistErr, sessionId: input.sessionId },
-            "run failure row not persisted",
-          );
-          row = {
-            sessionId: input.sessionId,
-            seq: 0,
-            kind: "error",
-            content: text,
-            parts: [],
-            timestamp: new Date().toISOString(),
-          };
-        }
-        publishRunFailed(input.sessionId, row);
+        recordFailure(input.sessionId, err);
+        onRunEnded(input.sessionId, "failed");
       })
       .finally(() => {
         // Conditional on 'running', so a run that suspended keeps the seat it is

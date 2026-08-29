@@ -14,6 +14,19 @@ schema all change freely, and `1.0.0` will be the first public stable release.
 
 ## [Unreleased]
 
+### Changed
+
+- **Action required** on the Investigations page now means a run is frozen
+  waiting on you, and nothing else. A finished investigation whose
+  recommendation nobody has acted on moves to **Completed**, where its
+  recommendation still reads on the row. Nothing marks a recommendation as acted
+  on, so the old group could only ever grow.
+
+### Removed
+
+- The **Inconclusive** status. A finished run reads **Completed** whatever its
+  record holds, and what it found or ruled out reads on the row beneath it.
+
 ### Security
 
 - An alert label can no longer close the harness tag and speak as NightWarden.
