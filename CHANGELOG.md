@@ -1,39 +1,37 @@
 # Changelog
 
-NightWarden has not had a public release. Every version below `1.0.0` is a
-prelaunch development build and carries no stability guarantee: the API, the
-runner protocol and the database schema all changed freely across them.
+Every notable change to NightWarden, newest first. The format is
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning is
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`1.0.0` will be the first public stable release.
+An entry says what a user can now do differently. A change nobody outside this
+repository can notice does not go in, which is what keeps this from becoming a
+second copy of the commit log.
 
-The minor number marks a change of shape, not a feature. Three of them have
-happened so far, and everything between two of them is a patch.
+NightWarden has not had a public release. Everything below `1.0.0` is a
+prelaunch development build: the API, the runner protocol and the database
+schema all change freely, and `1.0.0` will be the first public stable release.
 
-## 0.3.x - platform-aware runners
+## [Unreleased]
 
-From `0.3.0`, 2026-07-31, "a runner declares its platform at onboarding".
+### Security
 
-One runner serves exactly one platform, decided when its token is minted rather
-than discovered at runtime, so routing and the offered toolset read the row
-instead of asking the fleet. Two apps produce two images: a Docker runner
-carries no Kubernetes client and a Kubernetes runner carries no dockerode.
-Alert ingest resolves against the live fleet or rejects loudly. Investigations
-gained an evidence record, a Prometheus-compatible metrics integration and a
-sandbox with deny-by-default egress.
+- An alert label can no longer close the harness tag and speak as NightWarden.
+  Anything the harness sends the model is stripped of the marker first, so text
+  arriving from a monitored host reaches the model as data rather than as an
+  instruction wearing the system's voice.
 
-## 0.2.x - the monorepo
+### Fixed
 
-From `0.2.0`, 2026-06-03, "harness setup and Phase 1 monorepo scaffold".
-
-The single application became a pnpm workspace: an API that owns the SQLite
-system of record, a console, a runner and shared packages. The agent loop, the
-approval gate, the tool registry and secret redaction all landed here, as did
-the split between what a tool does (`effect`) and what the operator permits
-(`policy`).
-
-## 0.1.x - prototype
-
-From `0.1.0`, 2026-02-08.
-
-The original Nightwatch prototype, alongside the Clipper video-processing demo
-that later became Encodr and moved to its own repository.
+- A resolved alert clears only the firing it names, matched on its fingerprint
+  and its start time together. A recovery can no longer resolve an older
+  incident that shares the fingerprint.
+- An approved command's result is written to the transcript in the same
+  transaction that clears its approval gate, so a crash in that instant no
+  longer loses the investigation the command was part of.
+- A refused citation names only evidence ids that were actually issued. It
+  previously counted every tool call, so the range it offered grew by one on
+  each failed attempt.
+- A claim citing an unanswered or invented evidence id is refused whole, rather
+  than recorded citing only what survived and silently earning a lower
+  conviction than the model was told it had.
