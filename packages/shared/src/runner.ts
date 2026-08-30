@@ -92,9 +92,10 @@ export type FleetRunner = DockerFleetRunner | KubernetesFleetRunner;
 const SERVER_NAME = /^[A-Za-z0-9._-]+$/;
 
 export function serverNameError(name: string): string | null {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return "Server name is required";
-  if (!SERVER_NAME.test(trimmed)) {
+  if (name.trim().length === 0) return "Server name is required";
+  // The raw value, not the trimmed one: a trailing space that trims away reads
+  // as accepted and then fails the moment a second word follows it.
+  if (!SERVER_NAME.test(name)) {
     return "Server name may only use letters, numbers, dots, dashes and underscores";
   }
   return null;

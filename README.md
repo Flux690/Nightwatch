@@ -1,9 +1,6 @@
 # NightWarden
 
-[![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml)
-![License: FCL-1.0-ALv2](https://img.shields.io/badge/license-FCL--1.0--ALv2-blue.svg)
-![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)
-![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
+[![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml) ![License: FCL-1.0-ALv2](https://img.shields.io/badge/license-FCL--1.0--ALv2-blue.svg) ![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg) ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
 
 NightWarden is a self-hosted, source-available AI SRE agent for Docker and Kubernetes workloads. It watches your servers and clusters, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
 
@@ -75,34 +72,13 @@ If nothing can answer - the source unreachable, the rule renamed, no rules endpo
 
 A run that had you approve a write and then goes quiet while the condition is still firing is pushed back and asked what you should do about it. It is never asked to try again: repeating a write that did not work is the exact mistake this catches.
 
-**What a tool does and what you permit are two separate facts.** Every tool
-declares an _effect_ - whether the call reads or writes - and a _policy_ -
-whether it runs on its own or waits for you. Reads run freely so the agent can
-investigate without waking anyone. Writes pause the loop and show you an
-approval card, and nothing resumes until you approve, reject, or answer. The two
-are recorded apart on purpose: there is no separate list of gated actions that
-could fall out of step with the actions themselves, so the gate cannot be
-forgotten when a tool is added.
+**What a tool does and what you permit are two separate facts.** Every tool declares an _effect_ - whether the call reads or writes - and a _policy_ - whether it runs on its own or waits for you. Reads run freely so the agent can investigate without waking anyone. Writes pause the loop and show you an approval card, and nothing resumes until you approve, reject, or answer. The two are recorded apart on purpose: there is no separate list of gated actions that could fall out of step with the actions themselves, so the gate cannot be forgotten when a tool is added.
 
-Asking you a question is not a tool. It is offered to the model as one, because
-tool-calling is the only channel it has to request anything, but it carries no
-implementation and no policy - it always suspends, and no setting can turn that
-off. A question offers at most four answers and always a free-text box beside
-them, so you are never boxed into a list; pick one by clicking it or by pressing
-its number.
+Asking you a question is not a tool. It is offered to the model as one, because tool-calling is the only channel it has to request anything, but it carries no implementation and no policy - it always suspends, and no setting can turn that off. A question offers at most four answers and always a free-text box beside them, so you are never boxed into a list; pick one by clicking it or by pressing its number.
 
-**The two interruptions sit differently, because they stop different amounts.**
-An approval holds up one tool call, so its card stays inline in the transcript
-where it happened and you can scroll past it. A question holds up the whole run,
-so it pins above the message box until you answer. Either way, once it is
-settled it becomes an ordinary line in the transcript like any other call, with
-what you decided or what you said readable on it.
+**The two interruptions sit differently, because they stop different amounts.** An approval holds up one tool call, so its card stays inline in the transcript where it happened and you can scroll past it. A question holds up the whole run, so it pins above the message box until you answer. Either way, once it is settled it becomes an ordinary line in the transcript like any other call, with what you decided or what you said readable on it.
 
-The agent is also told what an approved write did: a rejection comes back saying
-you refused and that nothing changed, so it redirects rather than trying the
-same call again. And when the same write has already run in this investigation,
-the approval card says how many times. Restarting a service a fifth time is a
-decision, not a mistake, so it is reported and never refused.
+The agent is also told what an approved write did: a rejection comes back saying you refused and that nothing changed, so it redirects rather than trying the same call again. And when the same write has already run in this investigation, the approval card says how many times. Restarting a service a fifth time is a decision, not a mistake, so it is reported and never refused.
 
 When a GitHub repository is connected and the cause is in your code, the same loop checks the code out into an isolated sandbox on the API host, builds and tests a fix there, and leaves a draft pull request for you to review.
 
@@ -120,81 +96,41 @@ When a GitHub repository is connected and the cause is in your code, the same lo
 
 ## The life of an investigation
 
-Everything below is behaviour you can rely on. Where NightWarden cannot know
-something, it says so rather than guessing - that rule is the reason for most of
-the design here.
+Everything below is behaviour you can rely on. Where NightWarden cannot know something, it says so rather than guessing - that rule is the reason for most of the design here.
 
 ### One alert group, one investigation
 
-Your alert source has already decided which alerts belong together. Alertmanager
-groups by the labels in your `group_by`, holds the group open for `group_wait`,
-and posts the whole group as a single webhook. NightWarden takes that grouping
-as given: **one delivery is one group is one investigation.**
+Your alert source has already decided which alerts belong together. Alertmanager groups by the labels in your `group_by`, holds the group open for `group_wait`, and posts the whole group as a single webhook. NightWarden takes that grouping as given: **one delivery is one group is one investigation.**
 
-It does not regroup on a timer of its own. Two alerts that your Alertmanager put
-in different groups become two investigations however close together they fire,
-because a wrong split costs duplicated work you can see, while a wrong merge
-writes one report about two incidents and stops either from resolving.
+It does not regroup on a timer of its own. Two alerts that your Alertmanager put in different groups become two investigations however close together they fire, because a wrong split costs duplicated work you can see, while a wrong merge writes one report about two incidents and stops either from resolving.
 
-If you want more alerts investigated together, widen `group_by` in your
-`alertmanager.yml`. That is the only knob, and it is one you already understand.
+If you want more alerts investigated together, widen `group_by` in your `alertmanager.yml`. That is the only knob, and it is one you already understand.
 
-This works the same for Grafana Alerting, Mimir, Thanos and VictoriaMetrics:
-all of them notify through Alertmanager or a fork of it, and all of them send
-the same grouping information.
+This works the same for Grafana Alerting, Mimir, Thanos and VictoriaMetrics: all of them notify through Alertmanager or a fork of it, and all of them send the same grouping information.
 
 ### What is dropped, and what is not
 
-An alert is a **duplicate** when some investigation already covers that exact
-alert and nothing has said the condition recovered. Alertmanager re-sends a
-still-firing alert on `repeat_interval` - as often as every few minutes - and
-every one of those repeats is dropped. Without that, a single incident would
-open a fresh investigation of the identical alert all day.
+An alert is a **duplicate** when some investigation already covers that exact alert and nothing has said the condition recovered. Alertmanager re-sends a still-firing alert on `repeat_interval` - as often as every few minutes - and every one of those repeats is dropped. Without that, a single incident would open a fresh investigation of the identical alert all day.
 
-Two things are _not_ duplicates. An alert that cleared and later fires again
-carries a new start time, so it is a new incident and opens a new investigation.
-And a genuinely different alert in a group already being investigated joins that
-investigation rather than opening another - see below.
+Two things are _not_ duplicates. An alert that cleared and later fires again carries a new start time, so it is a new incident and opens a new investigation. And a genuinely different alert in a group already being investigated joins that investigation rather than opening another - see below.
 
-If your alert source leaves alerts out of a delivery, which Alertmanager does
-when a group is very large, it says how many. NightWarden passes that straight
-to the agent: _"the alert source left 6 further alerts out of this delivery, so
-this group is larger than what you can see here."_ An investigation working from
-a partial group is told it is working from a partial group.
+If your alert source leaves alerts out of a delivery, which Alertmanager does when a group is very large, it says how many. NightWarden passes that straight to the agent: _"the alert source left 6 further alerts out of this delivery, so this group is larger than what you can see here."_ An investigation working from a partial group is told it is working from a partial group.
 
 ### Waiting for a free slot
 
-**Ten investigations run at once by default**, a setting under Settings → Agent.
-An investigation waiting on your approval still counts, because starting another
-one only puts a second write in front of the same person.
+**Ten investigations run at once by default**, a setting under Settings → Agent. An investigation waiting on your approval still counts, because starting another one only puts a second write in front of the same person.
 
-When every slot is busy, alerts **wait their turn**. They are never dropped -
-your alert source was already told the webhook was accepted, and it has nobody
-to retry to. The Investigations page shows a band saying how many are waiting,
-how many are running, and how long the oldest has waited. A slot frees when a
-run ends, and the alerts that have waited longest go first, as a whole group.
+When every slot is busy, alerts **wait their turn**. They are never dropped - your alert source was already told the webhook was accepted, and it has nobody to retry to. The Investigations page shows a band saying how many are waiting, how many are running, and how long the oldest has waited. A slot frees when a run ends, and the alerts that have waited longest go first, as a whole group.
 
-An alert that recovers while it is waiting is never investigated at all. There
-is nothing to look into, and no investigation is created to explain that.
+An alert that recovers while it is waiting is never investigated at all. There is nothing to look into, and no investigation is created to explain that.
 
-Two things are refused rather than queued, because you are watching the screen
-when they happen: starting an investigation yourself from the frontend when all
-ten slots are busy, and starting a chat when twenty are already running. You get
-a message immediately instead of a spinner with no end in sight. The chat number
-is a runaway backstop rather than a usage limit; reaching it means something is
-very wrong.
+Two things are refused rather than queued, because you are watching the screen when they happen: starting an investigation yourself from the frontend when all ten slots are busy, and starting a chat when twenty are already running. You get a message immediately instead of a spinner with no end in sight. The chat number is a runaway backstop rather than a usage limit; reaching it means something is very wrong.
 
 ### When another alert fires mid-investigation
 
-If a new alert arrives for a group NightWarden is already investigating, it
-joins that investigation - even if the run is paused waiting for your approval.
-The agent is _told_ the alert fired. It is never asked whether the alert belongs,
-because your alert source already answered that.
+If a new alert arrives for a group NightWarden is already investigating, it joins that investigation - even if the run is paused waiting for your approval. The agent is _told_ the alert fired. It is never asked whether the alert belongs, because your alert source already answered that.
 
-The alert appears in the transcript at the point it interrupted, so you can read
-what the agent knew and when. It is also added to the investigation's alert list,
-which means the investigation cannot be called Resolved until that alert clears
-too.
+The alert appears in the transcript at the point it interrupted, so you can read what the agent knew and when. It is also added to the investigation's alert list, which means the investigation cannot be called Resolved until that alert clears too.
 
 An alert for any other group opens its own investigation, or waits for a slot.
 
@@ -209,108 +145,47 @@ An alert for any other group opens its own investigation, or waits for a slot.
 | **Stopped**         | You ended the run yourself                     | Nothing to do. Start a new investigation to look again                        |
 | **Failed**          | The run broke - usually the model provider     | Retried automatically if the cause was temporary; see below                   |
 
-**Action required means something is frozen.** It is the group to open first,
-because a run in it is doing nothing until you answer. A finished investigation
-that recommends something is **Completed**, not Action required: nothing marks
-a recommendation as acted on, so a group that collected them could only ever
-grow until the words stopped meaning anything. The recommendation still reads on
-the row.
+**Action required means something is frozen.** It is the group to open first, because a run in it is doing nothing until you answer. A finished investigation that recommends something is **Completed**, not Action required: nothing marks a recommendation as acted on, so a group that collected them could only ever grow until the words stopped meaning anything. The recommendation still reads on the row.
 
-**Resolved is never inferred.** It does not mean a fix ran, and it never comes
-from the model saying it found the cause. It means the alert stopped firing,
-confirmed either by your alert source's resolved notification or by asking
-Prometheus whether its rule still holds. When nothing can answer, the record
-says recovery was not confirmed rather than claiming it.
+**Resolved is never inferred.** It does not mean a fix ran, and it never comes from the model saying it found the cause. It means the alert stopped firing, confirmed either by your alert source's resolved notification or by asking Prometheus whether its rule still holds. When nothing can answer, the record says recovery was not confirmed rather than claiming it.
 
-Underneath, that status is the only state a session carries. A run working and a
-run parked on you each hold one of the ten slots, and nothing else does. This is
-what makes the count on the Investigations page true rather than an estimate,
-and what lets a restart tell a run that was alive from one that had finished.
+Underneath, that status is the only state a session carries. A run working and a run parked on you each hold one of the ten slots, and nothing else does. This is what makes the count on the Investigations page true rather than an estimate, and what lets a restart tell a run that was alive from one that had finished.
 
 ### When NightWarden restarts
 
-There is one process and one SQLite file, so a restart is the only way work is
-interrupted. Nothing is held in memory that matters: alerts are written to disk
-the moment they arrive, before anything decides whether there is a slot.
+There is one process and one SQLite file, so a restart is the only way work is interrupted. Nothing is held in memory that matters: alerts are written to disk the moment they arrive, before anything decides whether there is a slot.
 
-**Alerts still waiting** are still waiting. They start as soon as the API is
-back and a slot is free.
+**Alerts still waiting** are still waiting. They start as soon as the API is back and a slot is free.
 
-**A run that was working** is picked up. If its last exchange was cut in half,
-NightWarden repairs it where that is safe - a read can simply be run again -
-and unwinds past it where it is not, because a write it cannot prove the outcome
-of must never be replayed. If the alert is still firing and the run was recent,
-it carries on from its last complete exchange. Otherwise it is marked as
-interrupted, so it reads as broken rather than as an investigation that
-concluded nothing.
+**A run that was working** is picked up. If its last exchange was cut in half, NightWarden repairs it where that is safe - a read can simply be run again - and unwinds past it where it is not, because a write it cannot prove the outcome of must never be replayed. If the alert is still firing and the run was recent, it carries on from its last complete exchange. Otherwise it is marked as interrupted, so it reads as broken rather than as an investigation that concluded nothing.
 
-**A run parked on you** is left alone. It is waiting, not broken, and it keeps
-its slot. Whatever it is parked on comes back with the page: an approval, a
-question, or the check-in a long run makes when its time budget runs out.
+**A run parked on you** is left alone. It is waiting, not broken, and it keeps its slot. Whatever it is parked on comes back with the page: an approval, a question, or the check-in a long run makes when its time budget runs out.
 
-There is one narrow case in between. If NightWarden stops in the instant between
-running an approved command and recording its result, it comes back knowing the
-command ran but not what it returned. It does not run it again - that is the one
-thing it must never do. The investigation stops with a note saying exactly that:
-_"whether the call took effect is unknown - check the target before approving it
-again."_
+There is one narrow case in between. If NightWarden stops in the instant between running an approved command and recording its result, it comes back knowing the command ran but not what it returned. It does not run it again - that is the one thing it must never do. The investigation stops with a note saying exactly that: _"whether the call took effect is unknown - check the target before approving it again."_
 
 ### Stopping, checking in, and running out of room
 
-**You can stop a run.** The stop is checked between a turn's tool calls and the
-approval gate, so a run you stopped ends as stopped rather than parking an
-approval card nobody is going to answer. It also says so afterwards: the record
-reads **Stopped**, never Completed, because you ending a run and the agent
-running out of ideas are different things and only one of them is about the
-agent.
+**You can stop a run.** The stop is checked between a turn's tool calls and the approval gate, so a run you stopped ends as stopped rather than parking an approval card nobody is going to answer. It also says so afterwards: the record reads **Stopped**, never Completed, because you ending a run and the agent running out of ideas are different things and only one of them is about the agent.
 
-**A long run checks in rather than being killed.** After its time budget
-(Settings → Agent, thirty minutes by default) it finishes the step it is on and
-asks whether to continue. Say no and it writes up what it has rather than
-stopping mid-thought. Every repository tool call extends the sandbox's own idle
-timer, so a run doing real code work does not have its checkout swept from under
-it.
+**A long run checks in rather than being killed.** After its time budget (Settings → Agent, thirty minutes by default) it finishes the step it is on and asks whether to continue. Say no and it writes up what it has rather than stopping mid-thought. Every repository tool call extends the sandbox's own idle timer, so a run doing real code work does not have its checkout swept from under it.
 
-**A conversation can outgrow the model's context window.** Tool results are the
-bulk of it, and a long investigation eventually reaches the limit. What happens
-then depends on the model.
+**A conversation can outgrow the model's context window.** Tool results are the bulk of it, and a long investigation eventually reaches the limit. What happens then depends on the model.
 
-Where the provider can summarise - Anthropic models whose catalog says they
-support it - NightWarden asks for that instead of letting the request be
-refused. The model is handed a summary of the earlier part of the conversation
-and carries on, and the transcript marks where that happened. **Nothing leaves
-the record.** Every tool result is kept in full, so the report still quotes and
-charts evidence the model itself no longer holds, and every claim still cites
-the exact call behind it. The threshold is derived from the model's own
-published window, never a number NightWarden invented.
+Where the provider can summarise - Anthropic models whose catalog says they support it - NightWarden asks for that instead of letting the request be refused. The model is handed a summary of the earlier part of the conversation and carries on, and the transcript marks where that happened. **Nothing leaves the record.** Every tool result is kept in full, so the report still quotes and charts evidence the model itself no longer holds, and every claim still cites the exact call behind it. The threshold is derived from the model's own published window, never a number NightWarden invented.
 
-Where the provider cannot, the run stops and says so plainly, naming the two
-things that work: start a new session, or pick a model with a larger window
-under Settings → Provider. OpenRouter is deliberately left on that path: it
-truncates from the middle of a conversation rather than summarising, and in an
-agentic transcript the middle is where every piece of evidence lives.
+Where the provider cannot, the run stops and says so plainly, naming the two things that work: start a new session, or pick a model with a larger window under Settings → Provider. OpenRouter is deliberately left on that path: it truncates from the middle of a conversation rather than summarising, and in an agentic transcript the middle is where every piece of evidence lives.
 
 ### When a run fails
 
-A failed run is retried **up to three times**, and only when the cause was worth
-waiting out: a dropped connection, a rate limit, a provider having a bad day.
-The retry rides the same schedule that checks whether the alert recovered, so it
-is minutes apart rather than seconds - the run already spent about a minute
-retrying inside itself before giving up.
+A failed run is retried **up to three times**, and only when the cause was worth waiting out: a dropped connection, a rate limit, a provider having a bad day. The retry rides the same schedule that checks whether the alert recovered, so it is minutes apart rather than seconds - the run already spent about a minute retrying inside itself before giving up.
 
-It is never retried when trying again cannot work. A rejected API key, an empty
-account, or a model that no longer exists fails identically every time, and
-three more attempts would only write three more failures for you to read. Those
-stop and wait for you, and the message says which one it was.
+It is never retried when trying again cannot work. A rejected API key, an empty account, or a model that no longer exists fails identically every time, and three more attempts would only write three more failures for you to read. Those stop and wait for you, and the message says which one it was.
 
 A retry picks up from the last complete exchange, not from the beginning.
 
 ## What the agent can see
 
-The agent works only through typed tools. Each one returns a structured result,
-and each result is kept in full so the report can quote it months later. What
-follows is what those tools reach, and where they stop - because a tool that
-quietly shows you less than it looked at is worse than one that finds nothing.
+The agent works only through typed tools. Each one returns a structured result, and each result is kept in full so the report can quote it months later. What follows is what those tools reach, and where they stop - because a tool that quietly shows you less than it looked at is worse than one that finds nothing.
 
 ### The evidence it has
 
@@ -323,69 +198,39 @@ quietly shows you less than it looked at is worse than one that finds nothing.
 | **Changes**                  | GitHub           | Merged pull requests and commits in a window                                       |
 | **The code**                 | GitHub           | Read, edit, build and test inside a sandbox; open a draft pull request             |
 
-A runner is optional. A metrics source and Loki alone are a working install - the
-agent investigates on metrics and logs, and simply has no container evidence to
-reach for. It is told which tools it has, so it never proposes one it lacks.
+A runner is optional. A metrics source and Loki alone are a working install - the agent investigates on metrics and logs, and simply has no container evidence to reach for. It is told which tools it has, so it never proposes one it lacks.
 
 ### Every result has a ceiling
 
-A single tool result may occupy **30,000 characters**. Tools that can return a
-lot drop whole items to stay under it and say in the result what they left out
-and how to ask a narrower question.
+A single tool result may occupy **30,000 characters**. Tools that can return a lot drop whole items to stay under it and say in the result what they left out and how to ask a narrower question.
 
-A result still over the line after that is refused **whole**, and the agent is
-told to narrow the call and run it again. It is never truncated, because half a
-JSON result parses cleanly as a smaller truth - a list of three failing pods cut
-to two reads as two failing pods, and nothing about it looks wrong.
+A result still over the line after that is refused **whole**, and the agent is told to narrow the call and run it again. It is never truncated, because half a JSON result parses cleanly as a smaller truth - a list of three failing pods cut to two reads as two failing pods, and nothing about it looks wrong.
 
 ### Reading logs
 
-**Windows.** Loki and Docker logs take `since` and `until`, so the agent can
-walk backwards through a noisy period rather than re-reading the newest lines
-forever. When a result is capped it names the timestamp of its oldest line, and
-that is the cursor for the next call.
+**Windows.** Loki and Docker logs take `since` and `until`, so the agent can walk backwards through a noisy period rather than re-reading the newest lines forever. When a result is capped it names the timestamp of its oldest line, and that is the cursor for the next call.
 
-Kubernetes logs take only `since`. The Kubernetes API has no end-time parameter
-at all, so the tool offers the window the platform can honour and says where the
-limit comes from.
+Kubernetes logs take only `since`. The Kubernetes API has no end-time parameter at all, so the tool offers the window the platform can honour and says where the limit comes from.
 
-**Filtering.** `contains` keeps lines holding any of the given words; `excludes`
-drops them, and is applied first so an excluded line never comes back. Both
-match **plain text, ignoring case, on whole lines** - deliberately not regular
-expressions, because a pattern the model wrote, run over hundreds of thousands
-of lines on your server, is a risk the runner would be wearing on your behalf.
+**Filtering.** `contains` keeps lines holding any of the given words; `excludes` drops them, and is applied first so an excluded line never comes back. Both match **plain text, ignoring case, on whole lines** - deliberately not regular expressions, because a pattern the model wrote, run over hundreds of thousands of lines on your server, is a risk the runner would be wearing on your behalf.
 
-**The tail is read before any filtering.** So the result carries how many lines
-were actually searched and whether it reached the end of what the engine holds.
-That matters: "two matches" out of two hundred lines searched and "two matches"
-out of two hundred thousand are different findings, and only one of them is
-evidence of anything.
+**The tail is read before any filtering.** So the result carries how many lines were actually searched and whether it reached the end of what the engine holds. That matters: "two matches" out of two hundred lines searched and "two matches" out of two hundred thousand are different findings, and only one of them is evidence of anything.
 
 ### Where evidence expires
 
-Kubernetes deletes events on a timer, commonly an hour, and does not report what
-that timer is set to. So an empty event list can mean the workload is healthy or
-it can mean the evidence aged out before anyone looked. The result says which
-window was searched, how many events sit before it, and that a window past the
-common TTL may be asking for events that no longer exist.
+Kubernetes deletes events on a timer, commonly an hour, and does not report what that timer is set to. So an empty event list can mean the workload is healthy or it can mean the evidence aged out before anyone looked. The result says which window was searched, how many events sit before it, and that a window past the common TTL may be asking for events that no longer exist.
 
-A deleted pod's events stay unattributable. An event carries no owner reference,
-and matching on name prefixes is a guess, so events belonging to a pod that has
-gone are left out rather than credited to a workload that may not own them.
+A deleted pod's events stay unattributable. An event carries no owner reference, and matching on name prefixes is a guess, so events belonging to a pod that has gone are left out rather than credited to a workload that may not own them.
 
 ### Absence is never treated as evidence
 
-This is the rule the three sections above are instances of. A result that shows
-less than the tool searched has to say so: what was looked at, what was left
-out, and what the call cannot speak for. An empty list that cannot distinguish
-"nothing happened" from "we did not look there" is a defect, because the agent
-reads both as the first and stops.
+This is the rule the three sections above are instances of. A result that shows less than the tool searched has to say so: what was looked at, what was left out, and what the call cannot speak for. An empty list that cannot distinguish "nothing happened" from "we did not look there" is a defect, because the agent reads both as the first and stops.
 
-Where the gap cannot be closed, the result states the limit rather than guessing
-past it. A wrong fact is worse than a stated unknown, and a stated unknown is
-itself a finding.
+Where the gap cannot be closed, the result states the limit rather than guessing past it. A wrong fact is worse than a stated unknown, and a stated unknown is itself a finding.
 
 ## Features
+
+The sections above in one list, for scanning.
 
 - **A report, not a wall of chat.** The agent records each claim as it settles it, then writes the report from that record once the run is over: a headline, a summary you can paste into a postmortem, a timeline that includes every write it was allowed to make, who was affected, and what to do next. What backs each claim is drawn beneath it from the recorded results - a chart of every series the query returned, the log lines that matched against how many were searched, the state a container was in, the diff of a change - so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran. If the write-up itself fails, the reason is on screen and one click runs it again.
 - **It cannot finish without concluding.** A run is not allowed to end on an empty record, or on a claim backed only by a call that returned nothing, and no claim can be recorded at all without citing one. If it cannot find the cause it records what it ruled out and says so.
@@ -405,39 +250,29 @@ itself a finding.
 - **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Those same four are queryable as metrics sources - one client and a preset each, because they all speak the Prometheus API - and you can connect several products at once, one connection each: what you point at is already an aggregate, so a second Prometheus is a mistake to refuse rather than a name to invent. Nothing to rip out - NightWarden plugs into the stack you already run.
 - **A rules endpoint of its own.** Recovery is confirmed by asking whether the rule that fired still holds, and the address serving that is not always the one you query: vmalert on VictoriaMetrics, your Grafana stack on Grafana Cloud, a separate ruler on a microservices Mimir. Each connection names its own, with its own credential, so recovery verification works on the products people actually deploy rather than only on single-binary Prometheus.
 
-## Getting started
+## Install
 
-You need Node.js 24 or newer, pnpm 11 or newer, and an Anthropic or OpenRouter API key.
-
-### 1. Clone and install
+NightWarden ships as one image: the API and the frontend on a single origin, with SQLite as the system of record. One container on one Linux host with Docker, and no database alongside it.
 
 ```bash
-git clone https://github.com/PrabhatMattoo/NightWarden.git
-cd NightWarden
-pnpm install
+curl -O https://raw.githubusercontent.com/PrabhatMattoo/NightWarden/main/docker-compose.yml
+export NIGHTWARDEN_PUBLIC_URL=http://203.0.113.10:3000   # routable from your servers, not localhost
+docker compose up -d
 ```
 
-### 2. Configure the API
+`NIGHTWARDEN_PUBLIC_URL` is the only variable you must set. It is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else has a default and is listed under [Configuration](#configuration).
 
-```bash
-cp apps/api/.env.example apps/api/.env
-```
+Open that address, create the owner account, then go to **Settings → Provider**: choose Anthropic or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert.
 
-Leave the LLM variables unset and pick a provider in the frontend after boot, or set `NIGHTWARDEN_LLM_PROVIDER` with the matching `*_MODEL` and `*_API_KEY` to seed that choice. Either way the database owns it from then on: the environment is read once, on an install that has no configuration yet, and never again - so changing a key later means changing it in Settings, not in this file. Everything else has defaults; the full list of variables is in [Configuration](#configuration).
+To run from source instead, see [Development](#development).
 
-### 3. Start everything
-
-```bash
-pnpm dev
-```
-
-This runs the API on port 3000 and the frontend on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
+## Connect your stack
 
 In the frontend go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics source, or Loki).
 
 **Add a runner.** Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Either wizard is three steps and needs no manual config editing:
 
-1. **Name it** - a display name is optional and only tells connected runners apart. It affects nothing else: services are identified by what your infrastructure already publishes.
+1. **Name it** - the server name NightWarden addresses this host or cluster by, and the first part of every service address it reports. It must be unique, and the services beneath it are identified by what your infrastructure already publishes.
 2. **Install the runner** - NightWarden mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target host or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
 3. **Confirm what it sees** - the runner's advertised services, with the full identity key each one resolves under. Read straight from the manifest it already sent, so checking the wiring costs nothing and starts nothing.
 
@@ -464,19 +299,9 @@ That is the whole setup: an alert resolves to a service from the Compose labels 
 
 **Connect Loki.** The **Loki** card takes the base URL of the Loki you already run (and, only if yours needs them, a verbatim `Authorization` header value and a tenant `X-Scope-OrgID` for multi-tenant Loki - both optional, the header stored encrypted). NightWarden only ever reads: the agent gains three log tools - one for log lines (newest first, filtered in LogQL), one for log-derived metrics (rate/count over logs), and a label-discovery tool it uses to learn which labels select a service's logs, since log labels are not a fixed convention. All three window on the alert. The connection is probed against the labels endpoint before it saves, so a successful connect is itself the proof it is reachable. Loki alone is a sufficient evidence source, so a logs-first fleet with no metrics can still be investigated. Keep Loki off the public internet; NightWarden needs to reach it over your private network.
 
-## Self-hosting
+## Running it
 
-The API and the frontend ship as one image on a single origin, and SQLite is the system of record - one container on one Linux host with Docker, no database alongside it.
-
-```bash
-curl -O https://raw.githubusercontent.com/PrabhatMattoo/NightWarden/main/docker-compose.yml
-export NIGHTWARDEN_PUBLIC_URL=http://203.0.113.10:3000   # routable from your servers, not localhost
-docker compose up -d
-```
-
-Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings → Provider**: choose Anthropic or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert. Runners and monitoring are wired up afterwards from **Integrations**, exactly as in [Getting started](#getting-started).
-
-`NIGHTWARDEN_PUBLIC_URL` is the only required variable - it is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else is optional and listed under [Configuration](#configuration); the LLM variables seed the database on first boot only, after which the frontend is the place to change them.
+What an install needs you to know once it is up.
 
 **The state directory must be a host path mounted at the same path inside and out** - never a named volume. Code sandboxes run as sibling containers started through the mounted Docker socket, and the host's daemon resolves their workspace mounts against the host filesystem: a path that exists only inside the container does not error, it mounts an empty directory and every sandbox comes up with an empty checkout. The compose file derives both sides from one variable so they cannot drift; if you move the path, keep the mapping symmetrical. NightWarden also refuses to boot when its state directory is on the container's writable layer, since the database and secret key would be discarded on the next restart.
 
@@ -524,82 +349,16 @@ Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings �
 
 ### GitHub integration
 
-Connecting a repository (frontend → Integrations) lets investigations read the
-code, build and test a fix in an isolated checkout, and propose it as a draft
-pull request that a human reviews and merges on GitHub - NightWarden never
-merges. Requirements and properties:
+Connecting a repository (frontend → Integrations) lets investigations read the code, build and test a fix in an isolated checkout, and propose it as a draft pull request that a human reviews and merges on GitHub - NightWarden never merges. Requirements and properties:
 
-- **Docker and git must be installed on the API host** - each code session runs
-  in a hardened container there, from a `nightwarden-sandbox` image built
-  locally on top of `node:24` (rebuilt automatically whenever its definition
-  changes). Prerequisites are checked when you click Connect, not at 3am. If
-  the API itself runs in a container it needs the Docker socket mounted.
-- **The token stays out of reach.** The connect page deep-links to a
-  fine-grained token with exactly Contents and Pull requests (write) on the one
-  repository and a 90-day expiry; the frontend shows the remaining days and
-  warns as it nears, and organizations that block fine-grained tokens can use
-  a classic PAT instead. The token is encrypted at rest, never returned by any
-  endpoint, never enters the sandbox container, and never appears in any URL
-  or log: git runs host-side against the bind-mounted checkout and
-  authenticates per invocation, so nothing lands in `.git/config`.
-  Disconnecting tears down live sandboxes first, then deletes NightWarden's
-  stored copy - full invalidation means revoking the token on GitHub.
-- **Container hardening**: read-only root filesystem (the writable surfaces are
-  exactly the checkout, the sandbox home, and a bounded `/tmp`), all Linux
-  capabilities dropped, no-new-privileges, real CPU/memory caps (swap pinned so
-  the memory limit can't be doubled; both are Settings knobs), a fork-bomb PID
-  limit and an open-files limit, and the sandbox runs as the API process's own
-  non-root user - the API warns at boot when it runs as root, because its
-  sandboxes then do too. gVisor (`runsc`) is used automatically wherever the
-  Docker host provides it; the sandbox settings can require it. The worst code
-  outcome under injection is a commit on a `nightwarden/*` branch inside a
-  draft PR behind GitHub's human merge gate.
-- **Egress is allowlisted** (Settings → Sandbox, default). All sandbox traffic
-  is forced through a shared filtering proxy - built locally from Alpine's own
-  tinyproxy package, so no third-party proxy image enters the supply chain -
-  that only reaches the allowlisted hosts, out of the box the npm and yarn
-  registries. The agent installs what it needs itself (dependencies, global
-  CLI tools into its writable home); a blocked host fails loudly, and the
-  agent is instructed to name any legitimately needed one in the PR so you can
-  extend the list. Container loopback is untouched, so the repo's own local
-  test servers still work. The other two modes: "None" gives the container no
-  network at all (dependency installs are skipped), "Open" keeps the default
-  Docker bridge attached - accepting that a prompt-injected agent could then
-  exfiltrate repository content.
-- **Provisioning is deterministic and visible.** A session's sandbox clones the
-  repo onto that session's own `nightwarden/*` branch (a resumed session finds
-  its branch on the remote and continues it) and, when the repo pins
-  `packageManager` or has a Node lockfile, installs dependencies up front - a
-  pinned pnpm or yarn runs through corepack at its exact pinned version. Each
-  stage (cloning, starting, installing) streams live to the frontend
-  transcript. A failed install is survivable - read, edit, and PR keep
-  working - and its output tail reaches the logs and the agent, which is told
-  to fix or work around it before building or testing.
-- **Opening the PR is deliberately not approval-gated.** The PR is a draft
-  proposal; the repository's own CI and the human merge are the review layers,
-  and gating creation would stall the very 3am flow this exists for. The agent
-  is instructed to verify with the repo's own build and tests first and state
-  in the PR body what it ran; NightWarden appends the incident context, the
-  changed files, and a session reference. One session maps to one branch and
-  at most one open PR - calling the tool again pushes the newest commits and
-  updates it, which is also what makes a retry after a crash update the
-  proposal rather than open a second one. (Repos whose GitHub plan lacks draft
-  PRs get a normal PR, and the tool result says so.)
-- **Work survives every death mode.** Files must be read before they can be
-  edited, and edits come back as real diffs in the transcript. One rule governs
-  every way a sandbox ends: its work is committed and pushed to the session
-  branch first, and if that push cannot be made the checkout is kept for the
-  next boot to retry while the container is stopped regardless. A container
-  outliving its session is waste; the work is not replaceable. That covers the
-  sandbox idling out (default one hour, a Settings knob, alongside the session
-  time budget every repo tool call extends), the API shutting down, the
-  repository being disconnected, and you deleting the session. At boot the API
-  reaps orphaned containers and salvages orphaned workspaces the same way,
-  before accepting sessions, so even a crash mid-edit leaves the work on its
-  branch rather than gone.
-- We recommend enabling branch protection on the repository's default branch
-  (GitHub → Settings → Branches); NightWarden's token deliberately has no
-  Administration permission and cannot do this for you.
+- **Docker and git must be installed on the API host** - each code session runs in a hardened container there, from a `nightwarden-sandbox` image built locally on top of `node:24` (rebuilt automatically whenever its definition changes). Prerequisites are checked when you click Connect, not at 3am. If the API itself runs in a container it needs the Docker socket mounted.
+- **The token stays out of reach.** The connect page deep-links to a fine-grained token with exactly Contents and Pull requests (write) on the one repository and a 90-day expiry; the frontend shows the remaining days and warns as it nears, and organizations that block fine-grained tokens can use a classic PAT instead. The token is encrypted at rest, never returned by any endpoint, never enters the sandbox container, and never appears in any URL or log: git runs host-side against the bind-mounted checkout and authenticates per invocation, so nothing lands in `.git/config`. Disconnecting tears down live sandboxes first, then deletes NightWarden's stored copy - full invalidation means revoking the token on GitHub.
+- **Container hardening**: read-only root filesystem (the writable surfaces are exactly the checkout, the sandbox home, and a bounded `/tmp`), all Linux capabilities dropped, no-new-privileges, real CPU/memory caps (swap pinned so the memory limit can't be doubled; both are Settings knobs), a fork-bomb PID limit and an open-files limit, and the sandbox runs as the API process's own non-root user - the API warns at boot when it runs as root, because its sandboxes then do too. gVisor (`runsc`) is used automatically wherever the Docker host provides it; the sandbox settings can require it. The worst code outcome under injection is a commit on a `nightwarden/*` branch inside a draft PR behind GitHub's human merge gate.
+- **Egress is allowlisted** (Settings → Sandbox, default). All sandbox traffic is forced through a shared filtering proxy - built locally from Alpine's own tinyproxy package, so no third-party proxy image enters the supply chain - that only reaches the allowlisted hosts, out of the box the npm and yarn registries. The agent installs what it needs itself (dependencies, global CLI tools into its writable home); a blocked host fails loudly, and the agent is instructed to name any legitimately needed one in the PR so you can extend the list. Container loopback is untouched, so the repo's own local test servers still work. The other two modes: "None" gives the container no network at all (dependency installs are skipped), "Open" keeps the default Docker bridge attached - accepting that a prompt-injected agent could then exfiltrate repository content.
+- **Provisioning is deterministic and visible.** A session's sandbox clones the repo onto that session's own `nightwarden/*` branch (a resumed session finds its branch on the remote and continues it) and, when the repo pins `packageManager` or has a Node lockfile, installs dependencies up front - a pinned pnpm or yarn runs through corepack at its exact pinned version. Each stage (cloning, starting, installing) streams live to the frontend transcript. A failed install is survivable - read, edit, and PR keep working - and its output tail reaches the logs and the agent, which is told to fix or work around it before building or testing.
+- **Opening the PR is deliberately not approval-gated.** The PR is a draft proposal; the repository's own CI and the human merge are the review layers, and gating creation would stall the very 3am flow this exists for. The agent is instructed to verify with the repo's own build and tests first and state in the PR body what it ran; NightWarden appends the incident context, the changed files, and a session reference. One session maps to one branch and at most one open PR - calling the tool again pushes the newest commits and updates it, which is also what makes a retry after a crash update the proposal rather than open a second one. (Repos whose GitHub plan lacks draft PRs get a normal PR, and the tool result says so.)
+- **Work survives every death mode.** Files must be read before they can be edited, and edits come back as real diffs in the transcript. One rule governs every way a sandbox ends: its work is committed and pushed to the session branch first, and if that push cannot be made the checkout is kept for the next boot to retry while the container is stopped regardless. A container outliving its session is waste; the work is not replaceable. That covers the sandbox idling out (default one hour, a Settings knob, alongside the session time budget every repo tool call extends), the API shutting down, the repository being disconnected, and you deleting the session. At boot the API reaps orphaned containers and salvages orphaned workspaces the same way, before accepting sessions, so even a crash mid-edit leaves the work on its branch rather than gone.
+- We recommend enabling branch protection on the repository's default branch (GitHub → Settings → Branches); NightWarden's token deliberately has no Administration permission and cannot do this for you.
 
 ### Runners (`apps/runners/docker/.env`, `apps/runners/kubernetes/.env`)
 
@@ -611,15 +370,24 @@ merges. Requirements and properties:
 | `NIGHTWARDEN_FILE_ALLOWLIST` | no       | Docker runner only. Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool. |
 | `NIGHTWARDEN_LOG_LEVEL`      | no       | Pino log level for the runner process (default: `info`).                                                  |
 
-There is no variable naming the platform. A runner is a Docker runner or a Kubernetes runner because of which image you installed, and the token you installed it with says the same thing; if the two disagree the API refuses the connection and says so. Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`), so there is no Kubernetes-specific env var either. A runner's display name is set when you add it in the frontend, never on the runner itself. Write tools like `RestartDockerService`/`DockerBash` are always offered and always gated: a write suspends the investigation for human approval, so there is no mode to configure and no env var to set.
+There is no variable naming the platform. A runner is a Docker runner or a Kubernetes runner because of which image you installed, and the token you installed it with says the same thing; if the two disagree the API refuses the connection and says so. Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`), so there is no Kubernetes-specific env var either. A runner's server name is set when you add it in the frontend, never on the runner itself: it is the first segment of every target key that runner advertises. Write tools like `RestartDockerService`/`DockerBash` are always offered and always gated: a write suspends the investigation for human approval, so there is no mode to configure and no env var to set.
 
 ## Development
 
-`pnpm dev` is all you need for day-to-day work; it runs every app from source with live reload, so there is no build step involved.
+To run from source you need Node.js 24 or newer, pnpm 11 or newer, and an Anthropic or OpenRouter API key.
 
-To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/api/alerts/ingest` endpoint, which drives an investigation end to end on your machine.
+```bash
+git clone https://github.com/PrabhatMattoo/NightWarden.git
+cd NightWarden
+pnpm install
+pnpm dev
+```
 
-Four checks gate every change, across every package:
+That starts the API on port 3000 and the frontend on port 5173, both with live reload. Open `http://localhost:5173` and set an owner password on first visit.
+
+To exercise the alert pipeline without a monitoring stack, POST an Alertmanager-format body to the API's `/api/alerts/ingest` endpoint, which drives an investigation end to end on your machine.
+
+Four checks gate every change, and they are exactly what CI runs:
 
 ```bash
 pnpm typecheck
@@ -628,177 +396,14 @@ pnpm format:check   # pnpm format fixes what it reports
 pnpm build
 ```
 
-These are exactly what CI runs. `.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request, and `publish-images.yml` calls the same one on every push to `main` before it pushes anything to the registry, so a release can never clear a lower bar than a pull request. `pnpm test` is a single run over every workspace, so one command reports the whole repo; a package can still be run on its own with `pnpm --filter @nightwarden/<package> test`. `pnpm build` is in the list because a tree that type-checks can still fail to produce an artifact, and finding that out on the push to `main` is finding it out after review.
-
-`pnpm build` produces exactly what the image ships:
-
-```bash
-pnpm build
-```
-
-`@nightwarden/shared` and `@nightwarden/runner-core` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the frontend with Vite. The frontend is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
-
-### Monorepo layout
-
-NightWarden is a pnpm workspace. Apps consume shared code only through its packages, never through relative paths. The two runners never import from each other.
-
-```
-apps/
-  api/                  Fastify API: the brain
-    src/
-      agent/            agent loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
-                        report.ts is the only place the investigation record is written
-                        evidence-source.ts answers which source a cited call questioned
-      alerts/           alert ingest, dedup, and routing a delivery to its group
-      auth/             owner password, the owner row, session signing
-      config/           user settings: the config store, its routes, health and the run-readiness gate
-      fleet/            one runner in three parts - its row and token, its live socket,
-                        and the install artifact that creates it - plus command routing
-      integrations/     GitHub / Loki clients, connect/status routes, and the one table
-                        every configured connection lives in
-                        metrics/ one Prometheus-API client, the per-product presets and
-                        what each source cannot answer
-      llm/              provider factory (Anthropic / OpenRouter)
-      sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
-      session/          the session and everything that cascades from it: its row, its
-                        alerts and queue, its run state and seat, its transcript rows,
-                        then the routes, the SSE bus, the interrupt coordinator and
-                        approval executor, and the projection the frontend draws
-      verification/     whether an alert's condition has actually cleared: the reconciler's
-                        schedule, and sources/ for each way of asking
-      index.ts          boot: resolve the key, open the db, register every route
-      dispatcher.ts     single entry point for every investigation, and the run pool's promotions
-      run-pool.ts       how many runs may be in flight, counted per pool from the session rows
-      frontend.ts       serves the frontend the build embedded beside the bundle, with an SPA fallback
-      db.ts             the SQLite handle and the whole schema (FKs on, no migrations)
-      logger.ts         the process logger
-      secrets.ts        resolves the key at boot, then encrypt/decrypt/mask over it
-      paths.ts          the state directory and every path derived from it
-      public-url.ts     the address other machines reach this install on
-  runners/              Two programs, never one with a switch. Neither imports the
-                        other; what both need lives in packages/runner-core
-    docker/             Executor for one Docker host: the hands
-      src/
-        commands/       the command table (registry.ts) + host, file tools
-        docker/         dockerode client, container commands, service resolution
-        manifest/       what this host advertises to the API
-        safety/         host path allowlist for ReadHostFile
-    kubernetes/         Executor for one Kubernetes cluster
-      src/
-        commands/       the command table (registry.ts)
-        kubernetes/     @kubernetes/client-node client, workload commands, workload resolution
-        manifest/       what this cluster advertises to the API
-  frontend/              React user UI
-    src/
-      styles.css        the whole theme: one base colour, one accent, one contrast
-                        number, and every surface, edge, control and ink derived from
-                        them (see "The frontend's theme" below)
-      app/              the router, the authenticated layout and the shell it mounts.
-                        Every page is loaded lazily, so a route costs nothing until visited
-      shared/           what more than one feature needs, and which knows of none of them
-        ui/             shadcn-style primitives (Base UI under the hood), the page frame
-                        and its breadcrumb. Primitives take props; none reads app state
-        lib/            class merging, toast, the one clock, relative time, icon props
-        api/            one typed fetch boundary (apiFetch), errors carrying their body
-        hooks/          the viewport tier, debouncing
-        events/         the frontend event-stream (SSE) provider
-      features/         grouped by the feature served, not by what kind of file it is
-        auth/           login, owner-password setup, the session context
-        integrations/   the catalogue every integration page reads, the shared connect
-                        chrome and disconnect flow, then one folder per product -
-                        github/ loki/ metrics/ alerting/ - and runners/ for the two
-                        fleets and the add-runner wizard, which live under /integrations
-        investigations/ the list, the record page, and the queue's ordering
-        session/        the transcript and the view that renders it, the agent page, the
-                        resizable chat rail, and the session readers behind them
-        report/         the rendered report: its prose, the timeline, each claim and the
-                        drawing of every call it cites, by the kind that call declares
-        settings/       the page and the rows each of its tabs is built from
-packages/
-  runner-core/          What is identical for every runner, whatever it serves
-    src/
-      client.ts         outbound WSS client (reconnect, watchdog, manifest refresh),
-                        and the dispatch that looks a command up in the runner's table
-      identity.ts       the name the API addresses this runner by
-      logger.ts         the process logger
-      log-filter.ts     plain-text line matching, shared by both log tools
-      redact.ts         secret redaction and output capping, applied on the way out
-      wire.ts           decoding the untrusted side of the socket
-      tests/            architecture.test.ts holds the no-reaching-across rule
-  shared/               Shared TypeScript types: the contract
-    src/
-      index.ts          the one public entry: explicit named re-exports, never export *
-      ws.ts             runner wire protocol
-      frontend-events.ts frontend event envelopes
-      service-identity.ts the two unrelated identity shapes and their key builders
-      tools/            tool input/output payload types, by platform: docker.ts, kubernetes.ts,
-                        host.ts, common.ts (the LLM schemas live in apps/api/src/agent/tools/)
-      sessions.ts       session, message and queue-row shapes
-      messages.ts       canonical message parts and the native envelope a provider replays verbatim
-      transcript.ts     the render-ready transcript items and their explicit tool-call states
-      reports.ts        investigation record shape (hypotheses, verdicts, the composed report, conviction)
-      approvals.ts      approval and clarification shapes
-      config.ts         agent + sandbox settings shape
-      integrations.ts   integration payloads (GitHub, Loki)
-      metrics.ts        metrics source kinds, endpoint inputs and statuses
-      alerts.ts         normalized alert shapes
-      auth.ts           owner auth payloads
-      runner.ts         Platform, the two manifest shapes, and the fleet view
-```
-
-### The frontend's theme
-
-`apps/frontend/src/styles.css` is the whole of it. Four numbers are the input - a
-base colour as lightness, chroma and hue, plus one contrast number - and every
-other value in the frontend is a departure from them, written in `lch()` so the
-browser does the conversion and devtools show a colour as what it means.
-
-Four rules carry it, and they are worth knowing before changing a value:
-
-- **The base never moves.** Every surface, edge, control and ink states how far
-  it sits from the ground it lands on, multiplied by contrast. Nothing but the
-  base is an absolute colour.
-- **A role re-anchors.** A container that changes the ground says so with
-  `data-ground`, and everything inside re-derives against that surface rather
-  than against the page. This is why a secondary button is visible on the stage,
-  on a card and inside a menu without a single depth-specific override.
-- **Lightness and chroma are separate laws.** Surfaces, borders and controls add
-  a departure; text mixes a proportion of the distance to white, so it barely
-  moves when the surface under it does. Chroma re-anchors too - fully for
-  surfaces, at half rate for ink. Holding chroma flat is what made a control on
-  a card read grey where it should read faintly violet.
-- **Status ramps are generated.** Each hue is one `[L, C, H]` triple; its text,
-  fill and tint follow from it, and a tint is its own ground washed with the hue
-  so it re-anchors like everything else.
-
-`src/tests/design-tokens.test.ts` holds the system to those rules. It asserts
-relationships rather than values - a ladder that rises, an edge above the ground
-it is drawn on, contrast floors measured within each ground - and then runs the
-whole suite again against a second, unrelated base. That last part is the point:
-at one base a hard-coded number and a real derivation are indistinguishable, so
-only a palette the sheet has never seen can tell them apart.
-
-`src/tests/architecture.test.ts` holds the folder layout to the same standard:
-`shared` may not import a feature, a feature may not import the router, and a
-primitive may not read application state.
+`.github/workflows/verify.yml` holds the definition; `ci.yml` calls it on every pull request and `publish-images.yml` calls the same one before it pushes an image, so a release can never clear a lower bar than a pull request.
 
 ## License
 
-**Run NightWarden on your own infrastructure, for your own organisation, free
-and without limits.** What the licence does not allow is making NightWarden
-available to other people as part of a commercial product or service, whether
-that is NightWarden itself or something built on it offering the same or
-substantially similar functionality. A licence covering that use is available on
-request.
+**Run NightWarden on your own infrastructure, for your own organisation, free and without limits.** What the licence does not allow is making NightWarden available to other people as part of a commercial product or service, whether that is NightWarden itself or something built on it offering the same or substantially similar functionality. A licence covering that use is available on request.
 
-NightWarden is licensed under the [Fair Core License, Version 1.0, ALv2 Future
-License](LICENSE) (FCL-1.0-ALv2), which calls the first a Permitted Purpose and
-the second a Competing Use. Reading, modifying and redistributing the source are
-Permitted Purposes too, as are non-commercial education and research.
+NightWarden is licensed under the [Fair Core License, Version 1.0, ALv2 Future License](LICENSE) (FCL-1.0-ALv2), which calls the first a Permitted Purpose and the second a Competing Use. Reading, modifying and redistributing the source are Permitted Purposes too, as are non-commercial education and research.
 
-Each version becomes Apache-2.0 on the second anniversary of its release, and
-that grant is irrevocable.
+Each version becomes Apache-2.0 on the second anniversary of its release, and that grant is irrevocable.
 
-This is **source available**, not open source: the Open Source Definition does
-not allow a licence to restrict what software may be used for, so calling it open
-source would be wrong.
+This is **source available**, not open source: the Open Source Definition does not allow a licence to restrict what software may be used for, so calling it open source would be wrong.

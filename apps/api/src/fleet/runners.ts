@@ -8,7 +8,6 @@ type RunnerRow = {
   id: string;
   tokenHash: string;
   platform: Platform;
-  label: string | null;
   serverName: string;
   createdAt: string;
   lastUsedAt: string | null;
@@ -18,7 +17,6 @@ type RunnerRow = {
 type RunnerMeta = {
   id: string;
   platform: Platform;
-  label: string | null;
   serverName: string;
   createdAt: string;
   lastUsedAt: string | null;
@@ -33,7 +31,6 @@ export function hashToken(plaintext: string): string {
 export function generateRunnerToken(
   platform: Platform,
   serverName: string,
-  label?: string,
 ): { plaintext: string } & RunnerMeta {
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
@@ -47,13 +44,12 @@ export function generateRunnerToken(
       `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
     ).run(serverName);
     db.prepare(
-      `INSERT INTO runner (id, token, platform, label, server_name, created_at)
-       VALUES (@id, @tokenHash, @platform, @label, @serverName, @createdAt)`,
+      `INSERT INTO runner (id, token, platform, server_name, created_at)
+       VALUES (@id, @tokenHash, @platform, @serverName, @createdAt)`,
     ).run({
       id,
       tokenHash: hashToken(plaintext),
       platform,
-      label: label ?? null,
       serverName,
       createdAt,
     });
@@ -64,7 +60,6 @@ export function generateRunnerToken(
     plaintext,
     id,
     platform,
-    label: label ?? null,
     serverName,
     createdAt,
     lastUsedAt: null,
@@ -75,7 +70,6 @@ const SELECT_ROW = `
   id,
   token             AS tokenHash,
   platform,
-  label,
   server_name       AS serverName,
   created_at        AS createdAt,
   last_used_at      AS lastUsedAt
@@ -108,7 +102,6 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
     id: text(raw, "id"),
     tokenHash: text(raw, "tokenHash"),
     platform,
-    label: nullableText(raw, "label"),
     serverName: text(raw, "serverName"),
     createdAt: text(raw, "createdAt"),
     lastUsedAt: nullableText(raw, "lastUsedAt"),

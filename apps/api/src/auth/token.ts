@@ -14,7 +14,7 @@ export async function registerTokenRoutes(
   // Generate a new runner token. The plaintext nwr_... value is returned
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
   fastify.post<{
-    Body: { platform?: unknown; label?: string; serverName?: string };
+    Body: { platform?: unknown; serverName?: string };
   }>("/tokens", { preHandler: requireSession }, async (request, reply) => {
     // Refused rather than defaulted: a guess here throws away the platform the
     // frontend was told, and the row is what everything else reads.
@@ -24,11 +24,6 @@ export async function registerTokenRoutes(
         error: `platform is required and must be one of: ${PLATFORMS.join(", ")}`,
       });
     }
-
-    const label =
-      typeof request.body?.label === "string"
-        ? request.body.label.trim() || undefined
-        : undefined;
 
     // Required, because it is the first segment of every target key this runner
     // will advertise: a nameless runner has nothing to address its services by.
@@ -43,12 +38,11 @@ export async function registerTokenRoutes(
     const serverName = rawServerName.trim();
 
     try {
-      const generated = generateRunnerToken(platform, serverName, label);
+      const generated = generateRunnerToken(platform, serverName);
       return reply.code(201).send({
         id: generated.id,
         token: generated.plaintext,
         platform: generated.platform,
-        label: generated.label,
         serverName: generated.serverName,
         createdAt: generated.createdAt,
       });

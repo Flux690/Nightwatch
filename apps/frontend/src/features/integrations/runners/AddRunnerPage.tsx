@@ -174,12 +174,15 @@ export function AddRunnerPage({
                 setServerName(e.currentTarget.value);
               }}
             />
-            {shownError && (
-              <FieldError>
-                <AlertCircle {...ICON_INLINE} />
-                {shownError}
-              </FieldError>
-            )}
+            {/* Always present: a row that appears on error shifts the form. */}
+            <div className="min-h-5">
+              {shownError && (
+                <FieldError>
+                  <AlertCircle {...ICON_INLINE} />
+                  {shownError}
+                </FieldError>
+              )}
+            </div>
           </Field>
 
           {installError !== null && (
