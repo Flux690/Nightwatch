@@ -154,7 +154,7 @@ async function startInstall(
 ): Promise<void> {
   const { name = "test-runner" } = opts;
   await user.type(
-    await screen.findByRole("textbox", { name: /display name/i }),
+    await screen.findByRole("textbox", { name: /server name/i }),
     name,
   );
   await user.click(screen.getByRole("button", { name: /continue/i }));

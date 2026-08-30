@@ -76,8 +76,7 @@ function RootLayout(): React.JSX.Element {
           NightWarden is built for desktop
         </h1>
         <p className="m-0 text-sm text-muted-foreground">
-          An investigation needs a screen at least 768px wide. Open NightWarden
-          on a laptop.
+          It needs a screen at least 768px wide.
         </p>
       </div>
     );

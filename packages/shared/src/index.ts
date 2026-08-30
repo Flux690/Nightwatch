@@ -140,7 +140,7 @@ export type {
   RunnerManifest,
   RunnerRecord,
 } from "./runner.js";
-export { PLATFORMS, isPlatform } from "./runner.js";
+export { PLATFORMS, isPlatform, serverNameError } from "./runner.js";
 export type {
   TranscriptKind,
   SessionMeta,

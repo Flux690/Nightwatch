@@ -86,3 +86,16 @@ export interface KubernetesFleetRunner extends FleetRunnerBase {
 }
 
 export type FleetRunner = DockerFleetRunner | KubernetesFleetRunner;
+
+// The first segment of every target key, which the model copies verbatim into a
+// call, so it is held to what reads unambiguously inside an address.
+const SERVER_NAME = /^[A-Za-z0-9._-]+$/;
+
+export function serverNameError(name: string): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return "Server name is required";
+  if (!SERVER_NAME.test(trimmed)) {
+    return "Server name may only use letters, numbers, dots, dashes and underscores";
+  }
+  return null;
+}

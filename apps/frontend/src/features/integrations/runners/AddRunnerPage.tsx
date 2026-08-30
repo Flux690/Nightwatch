@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import type { Platform, RunnerRecord } from "@nightwarden/shared";
+import { serverNameError } from "@nightwarden/shared";
 import { ServerCard } from "@/features/integrations/runners/ServerCard";
 import { AlertCircle } from "lucide-react";
 
@@ -48,18 +49,21 @@ export function AddRunnerPage({
   const listPath = `/integrations/${platform}`;
 
   const [step, setStep] = useState(0);
-  const [displayName, setDisplayName] = useState("");
+  const [serverName, setServerName] = useState("");
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [committed, setCommitted] = useState(false);
+  const [touched, setTouched] = useState(false);
 
   const STEP_TITLES = ["Name it", "Install the runner", "Confirm what it sees"];
 
-  const nameError = displayName.includes("/")
-    ? "Display name must not contain '/'"
-    : null;
+  // The same rule the mint route enforces, so a name that passes here cannot
+  // come back a 400. Shown once typing starts: an untouched field is not a
+  // mistake, but Continue stays shut from the moment the page loads.
+  const nameError = serverNameError(serverName);
+  const shownError = touched ? nameError : null;
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
@@ -114,7 +118,7 @@ export function AddRunnerPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           platform: platform,
-          serverName: displayName.trim(),
+          serverName: serverName.trim(),
         }),
       });
       setMintedToken(minted);
@@ -152,26 +156,28 @@ export function AddRunnerPage({
       {step === 0 && (
         <div className="flex flex-col gap-8">
           <Field>
-            <FieldLabel htmlFor="display-name">
-              Display name (optional)
-            </FieldLabel>
+            <FieldLabel htmlFor="server-name">Server name</FieldLabel>
             <FieldDescription>
-              What tells your runners apart in NightWarden.
+              The name NightWarden addresses this {copy.singular.toLowerCase()}{" "}
+              by, and the first part of every service address. Must be unique.
             </FieldDescription>
             <Input
               measure="short"
-              id="display-name"
+              id="server-name"
               placeholder={
                 platform === "docker" ? "e.g. prod-web-01" : "e.g. prod-cluster"
               }
-              value={displayName}
-              aria-invalid={nameError !== null}
-              onChange={(e) => setDisplayName(e.currentTarget.value)}
+              value={serverName}
+              aria-invalid={shownError !== null}
+              onChange={(e) => {
+                setTouched(true);
+                setServerName(e.currentTarget.value);
+              }}
             />
-            {nameError && (
+            {shownError && (
               <FieldError>
                 <AlertCircle {...ICON_INLINE} />
-                {nameError}
+                {shownError}
               </FieldError>
             )}
           </Field>

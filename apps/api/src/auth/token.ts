@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { isPlatform, PLATFORMS } from "@nightwarden/shared";
+import { PLATFORMS, isPlatform, serverNameError } from "@nightwarden/shared";
 import {
   generateRunnerToken,
   deleteRunner,
@@ -7,12 +7,6 @@ import {
 } from "../fleet/runners.js";
 import { closeRunnerConnections } from "../fleet/connections.js";
 import { requireSession } from "./session.js";
-
-function validateServerName(name: string): string | null {
-  if (name.trim().length === 0) return "serverName must not be empty";
-  if (name.includes("/")) return "serverName must not contain '/'";
-  return null;
-}
 
 export async function registerTokenRoutes(
   fastify: FastifyInstance,
@@ -44,7 +38,7 @@ export async function registerTokenRoutes(
         .code(400)
         .send({ error: "serverName is required and must be a string" });
     }
-    const nameError = validateServerName(rawServerName);
+    const nameError = serverNameError(rawServerName);
     if (nameError) return reply.code(400).send({ error: nameError });
     const serverName = rawServerName.trim();
 
