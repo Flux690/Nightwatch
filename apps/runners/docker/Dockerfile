@@ -10,7 +10,8 @@ ENV CI=true
 WORKDIR /build
 
 
-# better-sqlite3 and argon2 compile native bindings.
+# ssh2 compiles an optional crypto binding, reached through dockerode. Only the
+# install stages descend from here, so no compiler reaches the shipped image.
 FROM base AS toolchain
 
 RUN apt-get update \
@@ -22,20 +23,14 @@ RUN apt-get update \
 # until a dependency actually changes rather than on every source edit.
 FROM toolchain AS manifests
 
-# --frozen-lockfile resolves the whole workspace, so every member's manifest must
-# be here even when this image ships none of its code.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY apps/api/package.json apps/api/
-COPY apps/console/package.json apps/console/
 COPY apps/runners/docker/package.json apps/runners/docker/
-COPY apps/runners/kubernetes/package.json apps/runners/kubernetes/
 COPY packages/shared/package.json packages/shared/
 COPY packages/runner-core/package.json packages/runner-core/
 
 
-# The tree the image ships: it never sees a devDependency, so nothing needs
-# pruning - `--prod` decides what to install and cannot uninstall. Filtered to
-# the api, or it also installs the console's React tree that Vite has bundled.
+# The tree the image ships. It never sees a devDependency, so there is nothing
+# to prune afterwards - `--prod` decides what to install, and cannot uninstall.
 FROM manifests AS prod-deps
 
 # The store is a build cache, so a package is fetched once across every stage of
@@ -43,35 +38,34 @@ FROM manifests AS prod-deps
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --store-dir=/pnpm/store \
-      --filter @nightwarden/api
+      --filter @nightwarden/docker-runner
 
 
-# The full install, used only to produce dist and then discarded. The api's own
-# devDependencies pull in shared and the console, so no runner's are fetched.
+# The full install, used only to produce dist and then discarded.
 FROM manifests AS build
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir=/pnpm/store \
-      --filter "@nightwarden/api..."
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
 COPY tsconfig.base.json ./
 COPY scripts/ scripts/
 COPY packages/shared/ packages/shared/
-COPY apps/api/ apps/api/
-COPY apps/console/ apps/console/
+COPY packages/runner-core/ packages/runner-core/
+COPY apps/runners/docker/ apps/runners/docker/
 
-# The console is a devDependency of the api, so this builds it first and the
-# api's own build embeds it. Nothing about the artifact is decided here.
-RUN pnpm --filter "@nightwarden/api..." build
+RUN pnpm --filter @nightwarden/docker-runner build
 
 
 FROM base AS runtime
 
-# git for the per-session repo checkout; ca-certificates for outbound TLS to the
-# LLM, GitHub, and the monitoring integrations.
+# Host metrics tooling plus ca-certificates for the outbound WSS dial. No docker
+# package: dockerode speaks to the mounted socket, nothing shells out to a binary.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       git \
+       procps \
+       sysstat \
+       iproute2 \
+       util-linux \
        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -80,20 +74,16 @@ WORKDIR /app
 # pnpm links each package as a relative symlink into the virtual store, so these
 # must land at the same depth they had under /build or they resolve to nothing.
 COPY --from=prod-deps /build/node_modules ./node_modules
-COPY --from=prod-deps /build/apps/api/node_modules ./apps/api/node_modules
-COPY --from=build /build/apps/api/dist ./apps/api/dist
+COPY --from=prod-deps /build/apps/runners/docker/node_modules ./apps/runners/docker/node_modules
+COPY --from=build /build/apps/runners/docker/dist ./apps/runners/docker/dist
 # Publishing an image is redistribution, which the licence requires carry it.
 COPY LICENSE NOTICE ./
 
-# 127.0.0.1 would make the API unreachable outside the container's namespace.
-ENV HOST=0.0.0.0
-ENV PORT=3000
-ENV NODE_ENV=production
-ENV NIGHTWARDEN_DIR=/opt/nightwarden
+ENV HOST_PROC=/host/proc
 # The bundle ships a sourcemap; without this a stack trace names a line in the
 # bundle instead of the file it came from.
 ENV NODE_OPTIONS=--enable-source-maps
 
-EXPOSE 3000
-
-ENTRYPOINT ["node", "apps/api/dist/index.js"]
+# Root, because the Docker socket and host /proc are root-owned and this runner
+# reads both. The socket is mounted read-only and no capability is added.
+ENTRYPOINT ["node", "apps/runners/docker/dist/index.js"]

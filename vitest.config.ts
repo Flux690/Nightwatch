@@ -5,6 +5,8 @@ import { defineConfig } from "vitest/config";
    config, so this decides how many processes run them, never what under. */
 export default defineConfig({
   test: {
-    projects: ["apps/*", "packages/*"],
+    // Named, not "apps/*": that glob also matches apps/runners and discovers
+    // each runner's tests a second time through it.
+    projects: ["apps/api", "apps/console", "apps/runners/*", "packages/*"],
   },
 });

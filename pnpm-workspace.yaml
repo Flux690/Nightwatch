@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "apps/runners/*"
   - "packages/*"
 # No injectWorkspacePackages: shared is consumed as a live symlink to its source,
 # so an edit is visible immediately instead of needing a re-copy.

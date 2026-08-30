@@ -492,7 +492,7 @@ Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings �
 
 **Architecture.** The published images are `linux/amd64`, which is what a standard cloud VM runs. `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures, so on arm64 hosts - Apple Silicon, Graviton, Ampere - build locally rather than pulling.
 
-**Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/docker-runner/Dockerfile -t nightwarden-docker-runner .` and `docker build -f apps/kubernetes-runner/Dockerfile -t nightwarden-kubernetes-runner .` for the two runners. Both build natively for whatever machine you are on; add `--platform linux/amd64` on an Apple Silicon Mac when the image is destined for an x86 host.
+**Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/runners/docker/Dockerfile -t nightwarden-docker-runner .` and `docker build -f apps/runners/kubernetes/Dockerfile -t nightwarden-kubernetes-runner .` for the two runners. Both build natively for whatever machine you are on; add `--platform linux/amd64` on an Apple Silicon Mac when the image is destined for an x86 host.
 
 ## Configuration
 
@@ -601,7 +601,7 @@ merges. Requirements and properties:
   (GitHub → Settings → Branches); NightWarden's token deliberately has no
   Administration permission and cannot do this for you.
 
-### Runners (`apps/docker-runner/.env`, `apps/kubernetes-runner/.env`)
+### Runners (`apps/runners/docker/.env`, `apps/runners/kubernetes/.env`)
 
 | Variable                     | Required | Description                                                                                               |
 | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
@@ -636,7 +636,7 @@ These are exactly what CI runs. `.github/workflows/verify.yml` holds the definit
 pnpm build
 ```
 
-`@nightwarden/shared` and `@nightwarden/runner-transport` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
+`@nightwarden/shared` and `@nightwarden/runner-core` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
 
 ### Monorepo layout
 
@@ -675,17 +675,19 @@ apps/
       secrets.ts        resolves the key at boot, then encrypt/decrypt/mask over it
       paths.ts          the state directory and every path derived from it
       public-url.ts     the address other machines reach this install on
-  docker-runner/        Executor for one Docker host: the hands
-    src/
-      commands/         command dispatch (registry.ts, which decodes the wire) + host, file tools
-      docker/           dockerode client, container commands, service resolution
-      manifest/         what this host advertises to the API
-      safety/           host path allowlist for ReadHostFile
-  kubernetes-runner/    Executor for one Kubernetes cluster
-    src/
-      commands/         command dispatch (registry.ts, which decodes the wire)
-      kubernetes/       @kubernetes/client-node client, workload commands, workload resolution
-      manifest/         what this cluster advertises to the API
+  runners/              Two programs, never one with a switch. Neither imports the
+                        other; what both need lives in packages/runner-core
+    docker/             Executor for one Docker host: the hands
+      src/
+        commands/       the command table (registry.ts) + host, file tools
+        docker/         dockerode client, container commands, service resolution
+        manifest/       what this host advertises to the API
+        safety/         host path allowlist for ReadHostFile
+    kubernetes/         Executor for one Kubernetes cluster
+      src/
+        commands/       the command table (registry.ts)
+        kubernetes/     @kubernetes/client-node client, workload commands, workload resolution
+        manifest/       what this cluster advertises to the API
   console/              React user UI
     src/
       styles.css        the whole theme: one base colour, one accent, one contrast
@@ -713,11 +715,16 @@ apps/
                         drawing of every call it cites, by the kind that call declares
         settings/       the page and the rows each of its tabs is built from
 packages/
-  runner-transport/     Everything about talking to NightWarden, shared by both runners
+  runner-core/          What is identical for every runner, whatever it serves
     src/
-      client.ts         outbound WSS client (reconnect, watchdog, manifest refresh)
+      client.ts         outbound WSS client (reconnect, watchdog, manifest refresh),
+                        and the dispatch that looks a command up in the runner's table
+      identity.ts       the name the API addresses this runner by
+      logger.ts         the process logger
+      log-filter.ts     plain-text line matching, shared by both log tools
       redact.ts         secret redaction and output capping, applied on the way out
       wire.ts           decoding the untrusted side of the socket
+      tests/            architecture.test.ts holds the no-reaching-across rule
   shared/               Shared TypeScript types: the contract
     src/
       index.ts          the one public entry: explicit named re-exports, never export *

@@ -1,0 +1,27 @@
+{
+  "name": "@nightwarden/runner-core",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pino": "10.3.1",
+    "ws": "8.21.1"
+  },
+  "devDependencies": {
+    "@nightwarden/shared": "workspace:*",
+    "@types/ws": "8.18.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10",
+    "@types/node": "26.1.1"
+  }
+}
