@@ -26,8 +26,8 @@ const DIALECT: WireDialect = "openrouter-chat";
 export const OPENROUTER_MODELS_PATH = "/models";
 export const OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 
-// The gateway's full ladder, strongest first. "none" is omitted: disabling is
-// expressed by canDisable, so it never doubles as a rung the form could send.
+// The gateway's full ladder, strongest first. "none" is omitted: reasoning is
+// never switched off, so it must never be a rung the form could send.
 const OPENROUTER_LADDER: readonly ReasoningLevel[] = [
   { value: "max", label: "Max" },
   { value: "xhigh", label: "Extra high" },
@@ -93,10 +93,9 @@ function usageCost(response: unknown): number | undefined {
   return typeof cost === "number" ? cost : undefined;
 }
 
-// A model's reasoning block, as OpenRouter's catalog publishes it. Only
-// `mandatory` is present on every entry; the rest are absent on most models.
+// A model's reasoning block, as OpenRouter's catalog publishes it. Every field
+// is absent on most models.
 interface OpenRouterReasoning {
-  mandatory?: boolean;
   default_enabled?: boolean;
   supported_efforts?: string[];
   default_effort?: string;
@@ -109,7 +108,6 @@ function readReasoning(raw: unknown): OpenRouterReasoning | null {
   const efforts = r["supported_efforts"];
   const defaultEffort = r["default_effort"];
   return {
-    ...(typeof r["mandatory"] === "boolean" && { mandatory: r["mandatory"] }),
     ...(Array.isArray(efforts) && {
       supported_efforts: efforts.filter(
         (e): e is string => typeof e === "string",
@@ -168,9 +166,6 @@ function describeReasoning(
       levels,
       reasoning.default_effort ?? OPENROUTER_FALLBACK_EFFORT,
     ),
-    // OpenRouter's docs are explicit: for a mandatory model, hide the disable
-    // control and never send effort "none", because the model rejects it.
-    canDisable: reasoning.mandatory !== true,
   };
 }
 
@@ -377,13 +372,11 @@ export class OpenRouterProvider implements LLMProvider {
   // OpenRouter's own param, absent from the OpenAI SDK's types. Requesting it is
   // also what makes reasoning_details stream back.
   private reasoningParam(): { reasoning?: OpenRouterReasoningParam } {
-    const level = this.config.reasoningLevel;
-    if (this.opts?.reasoning === "off") {
-      // A mandatory model rejects being switched off, and OpenRouter's docs say
-      // not to ask: hide the control and never send effort "none".
-      if (!this.config.reasoning?.canDisable) return {};
-      return { reasoning: { enabled: false } };
-    }
+    const levels = this.config.reasoning?.levels ?? [];
+    // Ordered strongest to weakest, so the last rung is the cheapest one offered.
+    const level = this.opts?.minimalReasoning
+      ? (levels[levels.length - 1]?.value ?? null)
+      : this.config.reasoningLevel;
     return level === null ? {} : { reasoning: { effort: level } };
   }
 

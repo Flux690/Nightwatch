@@ -3,7 +3,7 @@ import type {
   ReasoningDescriptor,
   ResolvedLLMConfig,
 } from "@nightwarden/shared";
-import type { ToolSchema } from "../llm/types.js";
+import type { ProviderCallOptions, ToolSchema } from "../llm/types.js";
 import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
@@ -36,7 +36,6 @@ const LADDER: ReasoningDescriptor = {
     { value: "low", label: "Low" },
   ],
   defaultLevel: "high",
-  canDisable: true,
 };
 
 const BASE_CONFIG: ResolvedLLMConfig = {
@@ -95,7 +94,7 @@ describe("OpenRouterProvider", () => {
   describe("reasoning param", () => {
     async function sentParams(
       config: ResolvedLLMConfig,
-      opts?: { reasoning: "off" },
+      opts?: ProviderCallOptions,
     ): Promise<{
       reasoning?: { effort?: string; enabled?: boolean };
       reasoning_effort?: string;
@@ -133,28 +132,13 @@ describe("OpenRouterProvider", () => {
       expect(params.reasoning_effort).toBeUndefined();
     });
 
-    it("never asks a mandatory model to stop reasoning, which OpenRouter documents as rejected", async () => {
+    it("asks for the weakest rung the model publishes on a minimal-reasoning call", async () => {
       const params = await sentParams(
-        {
-          ...BASE_CONFIG,
-          reasoningLevel: "medium",
-          reasoning: { ...LADDER, canDisable: false },
-        },
-        { reasoning: "off" },
+        { ...BASE_CONFIG, reasoningLevel: "high" },
+        { minimalReasoning: true },
       );
 
-      expect(params.reasoning).toBeUndefined();
-      expect(params.reasoning_effort).toBeUndefined();
-    });
-
-    it("disables reasoning by flag rather than by an effort value for a model that allows it", async () => {
-      const params = await sentParams(
-        { ...BASE_CONFIG, reasoningLevel: "medium" },
-        { reasoning: "off" },
-      );
-
-      expect(params.reasoning).toEqual({ enabled: false });
-      expect(params.reasoning_effort).toBeUndefined();
+      expect(params.reasoning).toEqual({ effort: "low" });
     });
   });
 

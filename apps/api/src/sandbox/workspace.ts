@@ -377,27 +377,31 @@ export async function teardown(
   }
   const { workspace, options } = entry;
   let saved = true;
-  try {
-    if (await isDirty(workspace.dir)) {
-      await commitAll(
-        workspace.dir,
-        `nightwarden: checkpoint at sandbox teardown (${reason})`,
-        options.commitAuthor,
+  // A delete takes the work with it. Committing to someone's repository for a
+  // session they asked to remove is a side effect they did not ask for.
+  if (reason !== "deleted") {
+    try {
+      if (await isDirty(workspace.dir)) {
+        await commitAll(
+          workspace.dir,
+          `nightwarden: checkpoint at sandbox teardown (${reason})`,
+          options.commitAuthor,
+        );
+      }
+      if (await hasUnpushedWork(workspace.dir)) {
+        await push(workspace.dir, workspace.branch, await options.authHeader());
+      }
+    } catch (err) {
+      saved = false;
+      options.log?.warn(
+        {
+          sessionId,
+          reason,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "sandbox teardown: work could not be pushed, keeping the checkout for boot salvage",
       );
     }
-    if (await hasUnpushedWork(workspace.dir)) {
-      await push(workspace.dir, workspace.branch, await options.authHeader());
-    }
-  } catch (err) {
-    saved = false;
-    options.log?.warn(
-      {
-        sessionId,
-        reason,
-        err: err instanceof Error ? err.message : String(err),
-      },
-      "sandbox teardown: work could not be pushed, keeping the checkout for boot salvage",
-    );
   }
   if (entry.idleTimer !== null) clearTimeout(entry.idleTimer);
   sessions.delete(sessionId);

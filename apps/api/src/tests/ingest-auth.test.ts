@@ -174,7 +174,9 @@ describe("POST /alerts/ingest auth", () => {
       method: "POST",
       url: "/api/alerts/ingest",
       headers: { authorization: `Bearer ${VALID_TOKEN}` },
-      payload: ALERTMANAGER_BODY,
+      // Its own fingerprint: sharing ALERTMANAGER_BODY with the header-token
+      // test above deduped this one, so it processed nothing and still passed.
+      payload: alertmanagerBody("nwi-bearer-auth"),
     });
 
     expect(res.statusCode).toBe(200);

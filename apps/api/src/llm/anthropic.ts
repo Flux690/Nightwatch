@@ -105,22 +105,6 @@ function effortLevels(capabilities: unknown): ReasoningLevel[] {
   });
 }
 
-// A model that accepts thinking type "enabled" also accepts "disabled"; one
-// that does not has no way to be told to stop reasoning.
-function canDisableThinking(capabilities: unknown): boolean {
-  if (typeof capabilities !== "object" || capabilities === null) return false;
-  const thinking = (capabilities as Record<string, unknown>)["thinking"];
-  if (typeof thinking !== "object" || thinking === null) return false;
-  const types = (thinking as Record<string, unknown>)["types"];
-  if (typeof types !== "object" || types === null) return false;
-  const enabled = (types as Record<string, unknown>)["enabled"];
-  return (
-    typeof enabled === "object" &&
-    enabled !== null &&
-    (enabled as Record<string, unknown>)["supported"] === true
-  );
-}
-
 // Compaction is nested two levels deep and every hop is nullable, so absence at
 // any of them reads as "cannot compact" rather than as a shape to assume.
 function supportsCompaction(capabilities: unknown): boolean {
@@ -165,7 +149,6 @@ export function describeAnthropicModels(data: unknown): ModelOption[] {
                 label: "Effort",
                 levels,
                 defaultLevel: resolveDefault(levels, ANTHROPIC_DEFAULT_EFFORT),
-                canDisable: canDisableThinking(entry["capabilities"]),
               },
         maxOutputTokens: positiveNumber(entry["max_tokens"]),
         maxInputTokens: positiveNumber(entry["max_input_tokens"]),
@@ -313,29 +296,19 @@ export class AnthropicProvider implements LLMProvider {
     };
   }
 
-  // Thinking and effort are separate controls here: `thinking` decides whether
-  // the model reasons at all, `output_config.effort` how hard it works.
+  // Thinking is always adaptive: a model told not to reason writes tool calls
+  // as prose instead of calling them. Effort is the only dial.
   private thinkingParams(): ThinkingParams {
-    // A model that publishes no ladder is sent neither param: there is nothing
-    // to ask it for, and a guess would be a 400.
     if (this.config.reasoning === null) return {};
-    const effort = toEffort(this.config.reasoningLevel);
-    // A model that cannot be told to stop reasoning keeps its normal config;
-    // the caller's small token budget is the remaining brake.
-    if (this.opts?.reasoning !== "off" || !this.config.reasoning.canDisable) {
-      // display "summarized" is the opt-in that makes reasoning visible: it
-      // defaults to "omitted" on current models, which streams no thinking
-      // deltas at all. The raw chain of thought is never returned either way.
-      return {
-        thinking: { type: "adaptive", display: "summarized" },
-        ...effortParam(effort),
-      };
-    }
+    const { levels } = this.config.reasoning;
+    // Ordered strongest to weakest, so the last rung is the cheapest one offered.
+    const level = this.opts?.minimalReasoning
+      ? (levels[levels.length - 1]?.value ?? null)
+      : this.config.reasoningLevel;
     return {
-      thinking: { type: "disabled" },
-      // Opus 5 rejects disabled thinking at xhigh or max with a 400, so the
-      // effort steps down to the strongest level that accepts it.
-      ...effortParam(effort === "xhigh" || effort === "max" ? "high" : effort),
+      // "summarized" opts into thinking deltas; the raw chain never returns.
+      thinking: { type: "adaptive", display: "summarized" },
+      ...effortParam(toEffort(level)),
     };
   }
 

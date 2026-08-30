@@ -3,7 +3,7 @@ import type {
   ReasoningDescriptor,
   ResolvedLLMConfig,
 } from "@nightwarden/shared";
-import type { ToolSchema } from "../llm/types.js";
+import type { ProviderCallOptions, ToolSchema } from "../llm/types.js";
 
 const mockFinalMessage = vi.fn();
 const mockAnthropicOn = vi.fn().mockReturnThis();
@@ -34,7 +34,6 @@ const LADDER: ReasoningDescriptor = {
     { value: "low", label: "Low" },
   ],
   defaultLevel: "high",
-  canDisable: true,
 };
 
 const BASE_CONFIG: ResolvedLLMConfig = {
@@ -131,7 +130,7 @@ describe("AnthropicProvider", () => {
     // the model reasons, `output_config.effort` how hard it works.
     async function sentParams(
       config: ResolvedLLMConfig,
-      opts?: { reasoning: "off" },
+      opts?: ProviderCallOptions,
     ): Promise<{ thinking?: unknown; output_config?: { effort?: string } }> {
       mockFinalMessage.mockResolvedValueOnce({
         stop_reason: "end_turn",
@@ -171,35 +170,22 @@ describe("AnthropicProvider", () => {
       expect(params.output_config).toBeUndefined();
     });
 
-    it("disables thinking for a reasoning-off call, which omitting the param would not do", async () => {
-      const params = await sentParams(BASE_CONFIG, { reasoning: "off" });
-
-      expect(params.thinking).toEqual({ type: "disabled" });
-    });
-
-    it("steps effort down to high when disabling thinking, which Opus 5 rejects at xhigh or max", async () => {
-      const params = await sentParams(
-        { ...BASE_CONFIG, reasoningLevel: "max" },
-        { reasoning: "off" },
-      );
-
-      expect(params.thinking).toEqual({ type: "disabled" });
-      expect(params.output_config).toEqual({ effort: "high" });
-    });
-
-    it("keeps thinking on for a reasoning-off call when the model refuses to be switched off", async () => {
-      const params = await sentParams(
-        {
-          ...BASE_CONFIG,
-          reasoning: { ...LADDER, canDisable: false },
-        },
-        { reasoning: "off" },
-      );
+    it("keeps thinking adaptive on the cheapest call, so no turn writes a tool call as prose", async () => {
+      const params = await sentParams(BASE_CONFIG, { minimalReasoning: true });
 
       expect(params.thinking).toEqual({
         type: "adaptive",
         display: "summarized",
       });
+    });
+
+    it("asks for the weakest rung the model publishes on a minimal-reasoning call", async () => {
+      const params = await sentParams(
+        { ...BASE_CONFIG, reasoningLevel: "high" },
+        { minimalReasoning: true },
+      );
+
+      expect(params.output_config).toEqual({ effort: "low" });
     });
   });
 

@@ -119,7 +119,6 @@ const ReasoningDescriptorSchema = z.object({
   label: z.string(),
   levels: z.array(z.object({ value: z.string(), label: z.string() })),
   defaultLevel: z.string(),
-  canDisable: z.boolean(),
 });
 
 // A row written by an older shape, or hand-edited, reads as no ladder rather

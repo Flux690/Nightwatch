@@ -40,7 +40,6 @@ const EFFORT_LADDER: ReasoningDescriptor = {
     { value: "low", label: "Low" },
   ],
   defaultLevel: "high",
-  canDisable: true,
 };
 
 const CONFIG: AgentConfig = {
@@ -96,7 +95,6 @@ const MODELS_RESPONSE: ModelCatalog = {
           { value: "low", label: "Low" },
         ],
         defaultLevel: "high",
-        canDisable: true,
       },
       maxOutputTokens: 64_000,
       maxInputTokens: null,
@@ -590,7 +588,6 @@ describe("SettingsPage", () => {
       const options = within(list).getAllByRole("option");
 
       expect(options.map((o) => o.textContent)).toEqual([
-        "Off",
         "Max",
         "High",
         "Medium",
@@ -611,14 +608,13 @@ describe("SettingsPage", () => {
       expect(await screen.findByText(/loading models/i)).toBeInTheDocument();
     });
 
-    it("offers no off switch for a model that rejects being switched off", async () => {
+    it("never offers an off switch: reasoning is not something a model may be told to skip", async () => {
       const user = userEvent.setup();
       setup(
         withLadder({
           label: "Reasoning",
           levels: [{ value: "medium", label: "Medium" }],
           defaultLevel: "medium",
-          canDisable: false,
         }),
       );
       await openSection(user, /provider/i);
@@ -656,7 +652,6 @@ describe("SettingsPage", () => {
                 { value: "low", label: "Low" },
               ],
               defaultLevel: "low",
-              canDisable: false,
             },
             maxOutputTokens: null,
             maxInputTokens: null,
@@ -692,7 +687,6 @@ describe("SettingsPage", () => {
                 { value: "low", label: "Low" },
               ],
               defaultLevel: "low",
-              canDisable: false,
             },
             maxOutputTokens: null,
             maxInputTokens: null,

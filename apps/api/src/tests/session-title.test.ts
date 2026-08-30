@@ -36,7 +36,6 @@ function configuredConfig(): ResolvedLLMConfig {
         { value: "low", label: "Low" },
       ],
       defaultLevel: "high",
-      canDisable: true,
     },
   };
 }
@@ -157,7 +156,7 @@ describe("session title generation", () => {
 
     const call = mockCreateTitleProvider.mock.calls.at(-1);
     expect(call?.[1]).toMatchObject({ maxOutputTokens: 1024 });
-    expect(call?.[3]).toEqual({ reasoning: "off" });
+    expect(call?.[3]).toEqual({ minimalReasoning: true });
     expect(getSession(sessionId)?.title).toBe("Greeting");
   });
 

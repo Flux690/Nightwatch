@@ -5,7 +5,7 @@ import { dispatcher } from "../dispatcher.js";
 import { hasSeat } from "../run-pool.js";
 import { buildSeed } from "../session/seed.js";
 import { logger } from "../logger.js";
-import { verifyRecovery } from "./recovery.js";
+import { type ConditionCache, verifyRecovery } from "./recovery.js";
 
 // Nothing here detects that a fix happened, since a bash call may only have
 // read. It asks about every open condition, less and less often.
@@ -66,13 +66,14 @@ export async function reconcileRecovery(
   const result = { asked: 0, cleared: 0, retried: 0 };
   const sessionIds = sessionIdsWithOpenAlerts();
   forgetSettled(new Set(sessionIds));
+  const answered: ConditionCache = new Map();
 
   for (const sessionId of sessionIds) {
     if (!due(sessionId, now - watchingSince(sessionId), now)) continue;
     lastAsked.set(sessionId, now);
     result.asked++;
     try {
-      if ((await verifyRecovery(sessionId)) === "confirmed") {
+      if ((await verifyRecovery(sessionId, answered)) === "confirmed") {
         result.cleared++;
         continue;
       }

@@ -59,9 +59,8 @@ export async function generateSessionTitle(
   try {
     const trimmed = source.trim();
     if (!trimmed) return;
-    // reasoning "off": a 4-word label has nothing to think about. The 1024
-    // window is a seatbelt for models that reason regardless - reasoning
-    // shares the output budget, and a starved budget returns empty text.
+    // A 4-word label needs the cheapest rung, and 1024 is the seatbelt:
+    // reasoning shares the output budget, and a starved budget returns nothing.
     const titleConfig: ResolvedLLMConfig = {
       ...config,
       maxOutputTokens: 1024,
@@ -70,7 +69,7 @@ export async function generateSessionTitle(
       TITLE_SYSTEM_PROMPT,
       titleConfig,
       apiKey,
-      { reasoning: "off" },
+      { minimalReasoning: true },
     );
     // Framed as quoted material inside an instruction: a bare conversational
     // message in the user slot pulls the model into answering it instead.

@@ -383,7 +383,6 @@ describe("provider/model config seam", () => {
           { value: "low", label: "Low" },
         ],
         defaultLevel: "high",
-        canDisable: true,
       });
     });
 
@@ -499,7 +498,6 @@ describe("provider/model config seam", () => {
           { value: "low", label: "Low" },
         ],
         defaultLevel: "high",
-        canDisable: true,
       });
     });
 
@@ -668,28 +666,6 @@ describe("provider/model config seam", () => {
 
       expect(models[0]?.maxOutputTokens).toBeNull();
       expect(models[1]?.maxOutputTokens).toBe(8_192);
-    });
-
-    it("OpenRouter: refuses to offer an off switch for a mandatory model, which rejects it", async () => {
-      useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              id: "openai/gpt-oss-20b:free",
-              reasoning: {
-                mandatory: true,
-                supported_efforts: ["high", "medium", "low"],
-                default_effort: "medium",
-              },
-            },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.reasoning?.canDisable).toBe(false);
     });
 
     it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {

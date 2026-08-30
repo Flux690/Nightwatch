@@ -93,7 +93,6 @@ export function ProviderSection({
     ),
   };
   const levelItems: Record<string, string> = {
-    ...(reasoning?.canDisable === true ? { "": "Off" } : {}),
     ...Object.fromEntries(
       (reasoning?.levels ?? []).map((l) => [l.value, l.label]),
     ),

@@ -12,13 +12,21 @@ initSecrets();
 // A dispatched investigation that throws is caught and logged (correct in production, but a
 // swallowed failure would pass green in tests) - fail the test if any run logs it instead.
 const errorSpy = vi.spyOn(logger, "error");
+const infoSpy = vi.spyOn(logger, "info");
 
 let expectingFailure = false;
+let expectingDuplicate = false;
 
 // Failure-path tests declare the "investigation failed" log as intended;
 // everywhere else it still fails the test.
 export function expectInvestigationFailure(): void {
   expectingFailure = true;
+}
+
+// Dedup tests declare the drop; everywhere else it means a fingerprint and
+// startsAt this file already used, so the investigation never opened.
+export function expectDuplicateAlert(): void {
+  expectingDuplicate = true;
 }
 
 /* A stored status that a fresh derivation disagrees with means a transition
@@ -48,6 +56,24 @@ function assertStatusesDerivable(): void {
 
 afterEach(() => {
   assertStatusesDerivable();
+  const dropped = infoSpy.mock.calls.some((args) =>
+    args.includes("duplicate alerts dropped"),
+  );
+  const wantedDrop = expectingDuplicate;
+  expectingDuplicate = false;
+  infoSpy.mockClear();
+  if (dropped && !wantedDrop) {
+    throw new Error(
+      "An alert was dropped as a duplicate during this test. Dedup matches on " +
+        "fingerprint plus startsAt, so another case in this file used both - " +
+        "give this one its own, or call expectDuplicateAlert() if the drop is the point.",
+    );
+  }
+  if (wantedDrop && !dropped) {
+    throw new Error(
+      "expectDuplicateAlert() was called but no alert was dropped as a duplicate",
+    );
+  }
   const failure = errorSpy.mock.calls.find((args) =>
     args.includes("investigation failed"),
   );

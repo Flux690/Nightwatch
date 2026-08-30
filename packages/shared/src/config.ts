@@ -40,8 +40,6 @@ export interface ReasoningDescriptor {
   // xhigh), so this is the authority rather than any assumed ordering.
   levels: ReasoningLevel[];
   defaultLevel: string;
-  // False when the model rejects being asked not to reason, so no off is offered.
-  canDisable: boolean;
 }
 
 // One entry of a provider's model catalog, with everything the settings form

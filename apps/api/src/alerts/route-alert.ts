@@ -29,6 +29,10 @@ export function routeDelivery(
     if (isDuplicate(alert)) skipped++;
     else fresh.push(alert);
   }
+  // Repeats are ordinary - Alertmanager re-sends on repeat_interval - but a
+  // silent drop is what makes a reused fingerprint invisible in a test.
+  if (skipped > 0)
+    logger.info({ groupKey, skipped }, "duplicate alerts dropped");
   if (fresh.length === 0) return { enqueued: 0, skipped };
 
   const sessionId = sessionCoveringGroup(groupKey);

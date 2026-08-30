@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 import { harness, type Harness } from "./harness.js";
+import { expectDuplicateAlert } from "./setup.js";
 import {
   createContractFakeProvider,
   createGateController,
@@ -232,6 +233,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
   // Alertmanager repeats a still-firing alert every few minutes. Scoped to the
   // run, this would reopen the identical alert every time one finished.
   it("a repeat of the same alert is dropped even after its investigation ended", async () => {
+    expectDuplicateAlert();
     useImmediateProvider();
     const groupKey = '{}:{alertname="Repeating"}';
     const spec = { fingerprint: "rep-1", startsAt: "2026-07-07T03:00:00.000Z" };

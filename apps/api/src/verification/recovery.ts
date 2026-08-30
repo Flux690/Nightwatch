@@ -3,7 +3,7 @@ import { markAlertCleared } from "../session/alerts-store.js";
 import { getSession } from "../session/store.js";
 import { logger } from "../logger.js";
 import { publishReportUpdated } from "../session/stream.js";
-import type { VerificationSource } from "./source.js";
+import type { ConditionState, VerificationSource } from "./source.js";
 import { metricsRulesSource } from "./sources/metrics-rules.js";
 
 // A static list for the same reason the tool registry is one: what the system
@@ -32,10 +32,19 @@ export function recoveryState(sessionId: string): RecoveryState {
   return uncleared(alerts).length === 0 ? "confirmed" : "unconfirmed";
 }
 
+// One sweep's answers, keyed by the firing asked about. Several sessions opened
+// on one alert otherwise send the rules API the same question several times.
+export type ConditionCache = Map<string, ConditionState>;
+
+function conditionKey(alert: SessionAlert["alert"]): string {
+  return `${alert.sourceAlertId}\u0000${alert.firedAt}`;
+}
+
 // Stamps the same `clearedAt` the resolved webhook writes, so status stays a
 // synchronous read. Called when a run tries to end, never on the read path.
 export async function verifyRecovery(
   sessionId: string,
+  cache?: ConditionCache,
 ): Promise<RecoveryState> {
   const alerts = getSession(sessionId)?.alerts ?? [];
   if (alerts.length === 0) return "no_condition";
@@ -47,7 +56,13 @@ export async function verifyRecovery(
   for (const entry of open) {
     const source = SOURCES.find((s) => s.claims(entry.alert));
     if (source === undefined) continue;
-    if ((await source.checkCondition(entry.alert)) === "unknown") continue;
+    const key = conditionKey(entry.alert);
+    let state = cache?.get(key);
+    if (state === undefined) {
+      state = await source.checkCondition(entry.alert);
+      cache?.set(key, state);
+    }
+    if (state === "unknown") continue;
     logger.info(
       { sessionId, source: source.name, alertType: entry.alert.alertType },
       "verification: condition is no longer true",

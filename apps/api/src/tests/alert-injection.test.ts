@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { expectDuplicateAlert } from "./setup.js";
 import {
   afterAll,
   afterEach,
@@ -389,6 +390,7 @@ describe("mid-run alert injection (loop seam)", () => {
   // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
   // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
+    expectDuplicateAlert();
     const runnerId = generateRunnerToken("docker", "inject-resume").id;
     const tokenPlaintext = generateAlertSourceToken("alertmanager");
     const conn = registerRunner({

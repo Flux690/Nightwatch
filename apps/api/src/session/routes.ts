@@ -152,8 +152,8 @@ export async function registerSessionRoutes(
           .code(409)
           .send({ error: "session is running: stop it before deleting" });
       }
-      // Left behind, the idle sweep pushes to the user's repository for a
-      // session they deleted. Awaited, because a truthful 204 beats a fast one.
+      // Awaited, because a truthful 204 beats a fast one. Left behind, the idle
+      // sweep would push work for a session the user asked to remove.
       await teardown(sessionId, "deleted");
       deleteSession(sessionId);
       // The one way a seat frees without a run ending, so nothing else would

@@ -16,6 +16,13 @@ schema all change freely, and `1.0.0` will be the first public stable release.
 
 ### Changed
 
+- **Reasoning is always on.** Settings offers only the model's own effort
+  ladder; the **Off** option is gone. A model told not to reason writes its tool
+  calls as prose instead of calling them, so the run does nothing while looking
+  busy. Session titles now use the weakest rung the model publishes instead.
+- **Deleting a session discards its sandbox work.** It no longer commits and
+  pushes to your repository on the way out. Every other way a sandbox ends still
+  saves the work first.
 - **Action required** on the Investigations page now means a run is frozen
   waiting on you, and nothing else. A finished investigation whose
   recommendation nobody has acted on moves to **Completed**, where its

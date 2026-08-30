@@ -63,11 +63,10 @@ export interface ProviderMessage {
   native?: NativeEnvelope;
 }
 
-// Per-call behavior toggles, provider-neutral: callers state intent and each
-// adapter translates it into its own wire dialect. "off" - Anthropic: omit the
-// thinking param; OpenAI-compatible completions: reasoning_effort "none".
+// Reasoning is never switched off, so the model's weakest rung is as low as a
+// caller may ask for.
 export interface ProviderCallOptions {
-  reasoning?: "off";
+  minimalReasoning?: true;
 }
 
 // Implement this interface to add a new provider, then wire it into createProvider.
