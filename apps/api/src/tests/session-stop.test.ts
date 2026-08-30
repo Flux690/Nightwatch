@@ -16,10 +16,10 @@ mockCreateProvider.mockImplementation(() =>
 
 import { connectTestMetrics } from "./temp-db.js";
 import { waitFor } from "./wait.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import { connectFrontendEvents } from "./frontend-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
 import { deleteMetricsSource } from "../integrations/metrics/store.js";
@@ -32,7 +32,7 @@ describe("POST /sessions/:id/stop", () => {
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerSessionRoutes, registerConsoleEventRoutes],
+      routes: [registerSessionRoutes, registerFrontendEventRoutes],
     });
     ({ port } = nw);
     SESSION = nw.session;
@@ -136,7 +136,7 @@ describe("POST /sessions/:id/stop", () => {
       }),
     );
 
-    const console = await connectConsoleEvents(port, SESSION);
+    const frontend = await connectFrontendEvents(port, SESSION);
     const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
@@ -159,7 +159,7 @@ describe("POST /sessions/:id/stop", () => {
 
     releaseRead();
     await waitFor(() =>
-      console.events.some(
+      frontend.events.some(
         (e) => e.type === "RUN_STOPPED" && e.payload["sessionId"] === sessionId,
       ),
     );
@@ -168,7 +168,7 @@ describe("POST /sessions/:id/stop", () => {
     // Nothing to approve: the user stopped the run before the write ran.
     expect(hasPendingHumanInput(sessionId)).toBe(false);
     expect(
-      console.events.some(
+      frontend.events.some(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
           e.payload["sessionId"] === sessionId,
@@ -182,7 +182,7 @@ describe("POST /sessions/:id/stop", () => {
     );
     expect(row?.status).toBe("stopped");
 
-    console.close();
+    frontend.close();
     vi.unstubAllGlobals();
     deleteMetricsSource(sourceId);
   });

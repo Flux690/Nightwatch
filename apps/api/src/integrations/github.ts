@@ -27,7 +27,7 @@ function baseHeaders(token: string): Record<string, string> {
 }
 
 // The header is "YYYY-MM-DD HH:MM:SS UTC", absent for non-expiring tokens;
-// normalized to ISO so the console can compute days-remaining.
+// normalized to ISO so the frontend can compute days-remaining.
 function parseExpiryHeader(res: Response): string | null {
   const raw = res.headers.get("github-authentication-token-expiration");
   if (!raw) return null;

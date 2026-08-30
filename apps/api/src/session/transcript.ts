@@ -113,7 +113,7 @@ function toolCallState(
   return { phase: "complete", result, ...classified };
 }
 
-// Everything the console needs about a call is decided here, so the browser
+// Everything the frontend needs about a call is decided here, so the browser
 // never reconciles two sources against each other.
 export function buildTranscript(sessionId: string): TranscriptItem[] {
   const messages: TranscriptRow[] = getTranscriptRows(sessionId);

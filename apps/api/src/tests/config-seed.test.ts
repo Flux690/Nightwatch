@@ -116,7 +116,7 @@ describe("first-boot config seed from the environment", () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-first");
     seedConfigFromEnv();
 
-    // The user then changes their mind in the console, and the box restarts
+    // The user then changes their mind in the frontend, and the box restarts
     // with the old environment still in its compose file.
     vi.stubEnv("ANTHROPIC_MODEL", "claude-opus-4-8");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-second");

@@ -129,7 +129,7 @@ describe("GET /runners/install", () => {
     it("bakes in NIGHTWARDEN_PUBLIC_URL over the request Host, so a runner dials the address that is reachable from its own machine", async () => {
       vi.stubEnv("NIGHTWARDEN_PUBLIC_URL", "https://nightwarden.example.com");
       try {
-        // What a user's browser reached the console on: useless to a runner.
+        // What a user's browser reached the frontend on: useless to a runner.
         const res = await get(DOCKER_TOKEN, { host: "localhost:3000" });
         expect(res.body).toContain(
           "wss://nightwarden.example.com/api/clients/connect",
@@ -182,7 +182,7 @@ describe("GET /runners/install", () => {
     it("carries no bundled-monitoring plumbing (unbundled runner)", async () => {
       const res = await get(DOCKER_TOKEN);
       // No sidecar ports, no monitoring env, no ingest credential - alert wiring
-      // now lives entirely on the console's Alertmanager page.
+      // now lives entirely on the frontend's Alertmanager page.
       for (const token of [
         "9090",
         "9093",

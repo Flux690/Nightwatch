@@ -15,7 +15,7 @@ services:
       NIGHTWARDEN_PUBLIC_URL: ${NIGHTWARDEN_PUBLIC_URL:?set NIGHTWARDEN_PUBLIC_URL, e.g. http://203.0.113.10:3000}
       # One variable for all three references so the paths cannot drift.
       NIGHTWARDEN_DIR: ${NIGHTWARDEN_DIR:-/opt/nightwarden}
-      # Optional first-boot seed; otherwise pick the provider in the console.
+      # Optional first-boot seed; otherwise pick the provider in the frontend.
       NIGHTWARDEN_LLM_PROVIDER: ${NIGHTWARDEN_LLM_PROVIDER:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

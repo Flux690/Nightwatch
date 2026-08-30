@@ -9,7 +9,7 @@ import type { TranscriptItem } from "./transcript.js";
 // replayed, "nightwarden" replayed but never rendered. buildSeed maps them.
 export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 
-// Derived server-side and never declared by the model. The console draws
+// Derived server-side and never declared by the model. The frontend draws
 // `running` as "Investigating"; null on a chat, which has no status to show.
 export type InvestigationStatus =
   | "action_required"
@@ -19,7 +19,7 @@ export type InvestigationStatus =
   | "failed"
   | "completed";
 
-// One row of the console's one session list. A session not under investigation
+// One row of the frontend's one session list. A session not under investigation
 // leaves the status fields null.
 export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;

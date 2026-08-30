@@ -17,11 +17,11 @@ const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
 import { waitFor } from "./wait.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
 import {
-  connectConsoleEvents,
+  connectFrontendEvents,
   toolCallReached,
-} from "./console-events-helper.js";
+} from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
@@ -94,7 +94,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      routes: [registerFrontendEventRoutes, registerSessionRoutes],
       runners: [
         {
           name: "access-gate-host",
@@ -131,7 +131,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       { text: "Investigation complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -183,7 +183,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       { text: "Done.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -241,7 +241,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       { text: "Understood. Investigation complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -326,7 +326,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       { text: "Complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",

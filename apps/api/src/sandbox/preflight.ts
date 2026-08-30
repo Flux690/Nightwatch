@@ -9,7 +9,7 @@ import {
 interface PreflightResult {
   ok: boolean;
   reason?: string;
-  // Which isolation the host will actually use for sandboxes, so the console
+  // Which isolation the host will actually use for sandboxes, so the frontend
   // can show it plainly rather than leaving it silent.
   isolation?: Isolation;
 }

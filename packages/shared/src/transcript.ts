@@ -1,4 +1,4 @@
-// What the console renders, built server-side from the stored transcript joined
+// What the frontend renders, built server-side from the stored transcript joined
 // with whatever the session is suspended on. The browser draws these; it never
 // works out what state a tool call is in.
 

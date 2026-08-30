@@ -17,8 +17,8 @@ const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
 import { waitFor } from "./wait.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
+import { connectFrontendEvents } from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
@@ -38,7 +38,7 @@ describe("continue-request interrupts", () => {
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      routes: [registerFrontendEventRoutes, registerSessionRoutes],
       runners: [{ name: "continue-host", services: ["web-01/api"] }],
     });
     ({ port, session: SESSION } = nw);
@@ -98,7 +98,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -157,7 +157,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -222,7 +222,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -281,7 +281,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",

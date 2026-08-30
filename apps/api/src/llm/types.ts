@@ -10,7 +10,7 @@ import type {
 } from "@nightwarden/shared";
 
 export interface ToolSchema {
-  // Checked against the shared list, so a tool the console draws by name cannot
+  // Checked against the shared list, so a tool the frontend draws by name cannot
   // be added or renamed here without the other end being made to agree.
   name: ToolName;
   description: string;

@@ -7,6 +7,6 @@ export default defineConfig({
   test: {
     // Named, not "apps/*": that glob also matches apps/runners and discovers
     // each runner's tests a second time through it.
-    projects: ["apps/api", "apps/console", "apps/runners/*", "packages/*"],
+    projects: ["apps/api", "apps/frontend", "apps/runners/*", "packages/*"],
   },
 });

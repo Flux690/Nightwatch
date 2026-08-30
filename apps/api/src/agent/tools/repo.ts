@@ -144,7 +144,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
   }
 }
 
-// The sentence the model reads and the class the console renders are decided
+// The sentence the model reads and the class the frontend renders are decided
 // together: a message that says "reconnect the token" while the class says
 // "expected miss" would be two answers to one question.
 function corrective(err: unknown): {

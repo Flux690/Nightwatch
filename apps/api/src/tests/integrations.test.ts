@@ -548,7 +548,7 @@ describe("metrics source routes", () => {
     expect(rawSecrets("amp")).not.toContain("wJalrXUtnFEMI");
   });
 
-  /* A legitimate configuration, not an error - and the one the console has to
+  /* A legitimate configuration, not an error - and the one the frontend has to
      say out loud, because without it recovery can never be confirmed. */
   it("accepts a source with no rules endpoint and reports the gap as null", async () => {
     stubFetch(() => jsonResponse(PROM_OK));

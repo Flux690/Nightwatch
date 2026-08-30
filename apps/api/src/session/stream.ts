@@ -2,168 +2,168 @@ import { randomUUID } from "node:crypto";
 import { queueDepth } from "./alerts-store.js";
 import { countSeats } from "./run-state.js";
 import { seatLimit } from "../run-pool.js";
-import { publishConsoleEvent } from "./bus.js";
+import { publishFrontendEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
-  ConsoleInterrupt,
-  ConsoleInterruptResolved,
-  ConsoleMessage,
-  ConsoleQueueChanged,
-  ConsoleReportUpdated,
-  ConsoleRunFinished,
-  ConsoleRunStopped,
-  ConsoleSandboxStatus,
-  ConsoleRunRetrying,
-  ConsoleRunFailed,
-  ConsoleSessionTitleUpdated,
-  ConsoleTextMessageContent,
-  ConsoleTranscriptItem,
+  FrontendInterrupt,
+  FrontendInterruptResolved,
+  FrontendMessage,
+  FrontendQueueChanged,
+  FrontendReportUpdated,
+  FrontendRunFinished,
+  FrontendRunStopped,
+  FrontendSandboxStatus,
+  FrontendRunRetrying,
+  FrontendRunFailed,
+  FrontendSessionTitleUpdated,
+  FrontendTextMessageContent,
+  FrontendTranscriptItem,
   TranscriptRow,
 } from "@nightwarden/shared";
 
-// Every envelope goes to the one console bus as a typed ConsoleEvent; the SSE route
+// Every envelope goes to the one frontend bus as a typed FrontendEvent; the SSE route
 // serializes it on the wire and the client routes by type/sessionId.
 export function publishTextMessageContent(
   sessionId: string,
   turn: number,
   delta: StreamDelta,
 ): void {
-  const env: ConsoleTextMessageContent = {
+  const env: FrontendTextMessageContent = {
     messageId: randomUUID(),
     type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId, kind: delta.kind, delta: delta.text, turn },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
-// A persisted transcript row; the console appends it. Fires per message, many
+// A persisted transcript row; the frontend appends it. Fires per message, many
 // times per run - a content event, orthogonal to run lifecycle.
 export function publishMessage(
   sessionId: string,
   message: TranscriptRow,
 ): void {
-  const env: ConsoleMessage = {
+  const env: FrontendMessage = {
     messageId: randomUUID(),
     type: "MESSAGE",
     payload: { sessionId, message },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 // The single terminal event for a run that finished on its own. The dispatcher
 // is its sole caller; stopped/failed/suspended runs end via their own events.
 export function publishRunFinished(sessionId: string): void {
-  const env: ConsoleRunFinished = {
+  const env: FrontendRunFinished = {
     messageId: randomUUID(),
     type: "RUN_FINISHED",
     payload: { sessionId, reason: "completed" },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
-export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
-  const env: ConsoleInterrupt = {
+export function publishInterrupt(payload: FrontendInterrupt["payload"]): void {
+  const env: FrontendInterrupt = {
     messageId: randomUUID(),
     type: "HUMAN_INPUT_REQUIRED",
     payload,
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 // One card, built by the projection, inserted or replaced by its key.
 export function publishTranscriptItem(
-  payload: ConsoleTranscriptItem["payload"],
+  payload: FrontendTranscriptItem["payload"],
 ): void {
-  const env: ConsoleTranscriptItem = {
+  const env: FrontendTranscriptItem = {
     messageId: randomUUID(),
     type: "TRANSCRIPT_ITEM",
     payload,
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishRunStopped(sessionId: string): void {
-  const env: ConsoleRunStopped = {
+  const env: FrontendRunStopped = {
     messageId: randomUUID(),
     type: "RUN_STOPPED",
     payload: { sessionId },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishSandboxStatus(
-  payload: ConsoleSandboxStatus["payload"],
+  payload: FrontendSandboxStatus["payload"],
 ): void {
-  const env: ConsoleSandboxStatus = {
+  const env: FrontendSandboxStatus = {
     messageId: randomUUID(),
     type: "SANDBOX_STATUS",
     payload,
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishRunRetrying(
-  payload: ConsoleRunRetrying["payload"],
+  payload: FrontendRunRetrying["payload"],
 ): void {
-  const env: ConsoleRunRetrying = {
+  const env: FrontendRunRetrying = {
     messageId: randomUUID(),
     type: "RUN_RETRYING",
     payload,
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishRunFailed(
   sessionId: string,
   message: TranscriptRow,
 ): void {
-  const env: ConsoleRunFailed = {
+  const env: FrontendRunFailed = {
     messageId: randomUUID(),
     type: "RUN_FAILED",
     payload: { sessionId, message },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishInterruptResolved(
-  payload: ConsoleInterruptResolved["payload"],
+  payload: FrontendInterruptResolved["payload"],
 ): void {
-  const env: ConsoleInterruptResolved = {
+  const env: FrontendInterruptResolved = {
     messageId: randomUUID(),
     type: "HUMAN_INPUT_RESOLVED",
     payload,
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 export function publishSessionTitleUpdated(
   sessionId: string,
   title: string,
 ): void {
-  const env: ConsoleSessionTitleUpdated = {
+  const env: FrontendSessionTitleUpdated = {
     messageId: randomUUID(),
     type: "SESSION_TITLE_UPDATED",
     payload: { sessionId, title },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
-// The session's stored report changed; the console refetches it. Fires many
+// The session's stored report changed; the frontend refetches it. Fires many
 // times per run - a content event like MESSAGE, orthogonal to run lifecycle.
 export function publishReportUpdated(sessionId: string): void {
-  const env: ConsoleReportUpdated = {
+  const env: FrontendReportUpdated = {
     messageId: randomUUID(),
     type: "REPORT_UPDATED",
     payload: { sessionId },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }
 
 // Published from the dispatcher and the ingest path rather than computed by
-// the console, so the numbers are the ones the pool actually used.
+// the frontend, so the numbers are the ones the pool actually used.
 export function publishQueueChanged(): void {
   const { waiting, oldestArrivedAt } = queueDepth();
-  const env: ConsoleQueueChanged = {
+  const env: FrontendQueueChanged = {
     messageId: randomUUID(),
     type: "QUEUE_CHANGED",
     payload: {
@@ -173,5 +173,5 @@ export function publishQueueChanged(): void {
       oldestArrivedAt,
     },
   };
-  publishConsoleEvent(env);
+  publishFrontendEvent(env);
 }

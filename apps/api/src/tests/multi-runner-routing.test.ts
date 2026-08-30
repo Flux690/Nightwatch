@@ -44,8 +44,8 @@ import { resolveCommand } from "../fleet/transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { createSession } from "../session/store.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
+import { connectFrontendEvents } from "./frontend-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { mountApi } from "./api-server.js";
@@ -203,7 +203,7 @@ describe("multi-runner routing", () => {
     );
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerFrontendEventRoutes);
     await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -411,7 +411,7 @@ describe("multi-runner routing", () => {
       FINISH_TURN,
     ]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",

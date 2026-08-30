@@ -23,7 +23,7 @@ export interface AmpCredential {
   sessionToken?: string;
 }
 
-/* What the console sends for one endpoint: an Authorization value and a
+/* What the frontend sends for one endpoint: an Authorization value and a
    tenant, the shape Loki already uses. The four AMP fields apply only when
    kind is "amp". */
 export interface MetricsEndpointInput {

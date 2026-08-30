@@ -97,7 +97,7 @@ export async function registerSessionRoutes(
   });
 
   // The session answers what it is. Returning a bare transcript meant an
-  // unknown id came back as `200 []`, which the console drew as a real but
+  // unknown id came back as `200 []`, which the frontend drew as a real but
   // empty session.
   fastify.get<{ Params: { id: string } }>(
     "/sessions/:id",

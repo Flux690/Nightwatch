@@ -150,7 +150,7 @@ function toFacts(
   };
 }
 
-// Ordering is the store's, not the console's: a waiting session leads the whole
+// Ordering is the store's, not the frontend's: a waiting session leads the whole
 // list, and the id tiebreak stops a row swapping pages between fetches.
 export function listSessionFacts(
   limit: number,

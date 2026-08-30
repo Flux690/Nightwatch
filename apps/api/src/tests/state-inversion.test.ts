@@ -26,11 +26,11 @@ const setScript = (turns: ScriptedTurn[]): void =>
 
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
 import {
-  connectConsoleEvents,
-  type ConsoleEventFrame,
-} from "./console-events-helper.js";
+  connectFrontendEvents,
+  type FrontendEventFrame,
+} from "./frontend-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../session/store.js";
@@ -44,7 +44,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      routes: [registerFrontendEventRoutes, registerSessionRoutes],
     });
     ({ port } = nw);
     SESSION = nw.session;
@@ -56,7 +56,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   });
 
   function hasAssistantMessage(
-    events: ConsoleEventFrame[],
+    events: FrontendEventFrame[],
     sessionId: string,
   ): boolean {
     return events.some(
@@ -95,8 +95,8 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("lists sessions and reads the full transcript with no runner connected", async () => {
     setScript([{ text: "Looks healthy.", toolUses: [] }]);
 
-    // Deliberately register no runner: the console must work during an outage.
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    // Deliberately register no runner: the frontend must work during an outage.
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -145,7 +145,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -185,7 +185,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   // conversation - which is the defect.
   it("classifies an alert-opened session as an investigation with no report written", async () => {
     setScript([{ text: "Looking into it.", toolUses: [] }]);
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const sessionId = randomUUID();
     dispatchAlertSession(sessionId, [

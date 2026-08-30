@@ -36,7 +36,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
-// A field rather than a text prefix: the console parses these results, so a
+// A field rather than a text prefix: the frontend parses these results, so a
 // header line would break every tool card. A plain string takes the prefix.
 function withEvidenceId(
   content: unknown,

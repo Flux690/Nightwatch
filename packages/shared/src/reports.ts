@@ -132,7 +132,7 @@ export interface InvestigationRecord {
   updatedAt: string;
 }
 
-// Declared on the tool so the console looks a renderer up rather than sniffing
+// Declared on the tool so the frontend looks a renderer up rather than sniffing
 // the result: a declaration cannot drift from what the tool returns.
 export type EvidenceKind =
   "metric" | "logs" | "change" | "state" | "diff" | "text";
@@ -140,7 +140,7 @@ export type EvidenceKind =
 // One cited tool call, resolved from the transcript at read time so the report
 // quotes what ran rather than storing a second copy of it.
 export interface ResolvedEvidence {
-  // Two ids, because a claim cites one and the console reveals the other.
+  // Two ids, because a claim cites one and the frontend reveals the other.
   evidenceId: string;
   toolUseId: string;
   toolName: string;

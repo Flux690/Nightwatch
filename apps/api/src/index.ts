@@ -6,7 +6,7 @@ import { initDb } from "./db.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerTokenRoutes } from "./auth/token.js";
 import { registerWsRoutes } from "./fleet/server.js";
-import { registerConsoleEventRoutes } from "./session/events.js";
+import { registerFrontendEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { dispatcher } from "./dispatcher.js";
 import {
@@ -22,7 +22,7 @@ import { registerRunnerRoutes } from "./fleet/routes.js";
 import { registerInstallRoutes } from "./fleet/install.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { registerMetricsRoutes } from "./integrations/metrics/routes.js";
-import { registerConsoleRoutes } from "./console.js";
+import { registerFrontendRoutes } from "./frontend.js";
 import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
@@ -59,20 +59,20 @@ const fastify = Fastify({
     ? { transport: { target: "pino-pretty", options: { colorize: true } } }
     : true,
   trustProxy: true,
-  // Long-lived console SSE streams would otherwise hold close() open forever.
+  // Long-lived frontend SSE streams would otherwise hold close() open forever.
   forceCloseConnections: true,
 });
 
 await fastify.register(FastifyWebSocket);
 
-// Under /api so the console owns every other path: /integrations/metrics
+// Under /api so the frontend owns every other path: /integrations/metrics
 // and /sessions/:id each name both a page and an endpoint.
 await fastify.register(
   async (api) => {
     await registerAuthRoutes(api);
     await registerTokenRoutes(api);
     await registerWsRoutes(api);
-    await registerConsoleEventRoutes(api);
+    await registerFrontendEventRoutes(api);
     await registerAlertRoutes(api);
     await registerConfigRoutes(api);
     await registerSessionRoutes(api);
@@ -88,7 +88,7 @@ await fastify.register(
 fastify.get("/health", async () => ({ status: "ok" }));
 
 // Last, so it can never shadow an API route.
-await registerConsoleRoutes(fastify);
+await registerFrontendRoutes(fastify);
 
 const start = async (): Promise<void> => {
   try {

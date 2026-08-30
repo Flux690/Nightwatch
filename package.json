@@ -1,7 +1,7 @@
 {
   "name": "nightwarden",
   "license": "SEE LICENSE IN LICENSE",
-  "version": "0.3.166",
+  "version": "0.3.167",
   "private": true,
   "engines": {
     "node": ">=24",
@@ -12,7 +12,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "dev": "pnpm --filter @nightwarden/api --filter @nightwarden/console --parallel dev",
+    "dev": "pnpm --filter @nightwarden/api --filter @nightwarden/frontend --parallel dev",
     "dev:docker-runner": "pnpm --filter @nightwarden/docker-runner dev",
     "dev:kubernetes-runner": "pnpm --filter @nightwarden/kubernetes-runner dev",
     "format": "prettier --write .",

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node ../../scripts/build-app.mjs . && rm -rf dist/console && cp -r ../console/dist dist/console",
+    "build": "node ../../scripts/build-app.mjs . && rm -rf dist/frontend && cp -r ../frontend/dist dist/frontend",
     "dev": "tsx watch --clear-screen=false --include ../../packages/shared/src src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -28,7 +28,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@nightwarden/console": "workspace:*",
+    "@nightwarden/frontend": "workspace:*",
     "@nightwarden/shared": "workspace:*",
     "@types/better-sqlite3": "7.6.13",
     "@types/ws": "8.18.1",

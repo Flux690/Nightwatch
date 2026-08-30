@@ -345,7 +345,7 @@ interface AlertSourceRoute {
   Params: { kind: AlertSourceKind };
 }
 
-// Checked against the shared list, so the console and the API cannot disagree
+// Checked against the shared list, so the frontend and the API cannot disagree
 // about which senders exist.
 async function requireKnownAlertSource(
   request: FastifyRequest<{ Params: { kind: string } }>,

@@ -9,7 +9,7 @@ import {
   vi,
 } from "vitest";
 import OpenAI from "openai";
-import type { ConsoleEvent } from "@nightwarden/shared";
+import type { FrontendEvent } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -22,10 +22,10 @@ import {
 import { waitFor } from "./wait.js";
 import { expectInvestigationFailure } from "./setup.js";
 import {
-  connectConsoleEvents,
-  type ConsoleEventsClient,
-} from "./console-events-helper.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
+  connectFrontendEvents,
+  type FrontendEventsClient,
+} from "./frontend-events-helper.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 
@@ -46,15 +46,15 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
   let nw: Harness;
   let port: number;
   let SESSION: string;
-  let client: ConsoleEventsClient<ConsoleEvent>;
+  let client: FrontendEventsClient<FrontendEvent>;
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      routes: [registerFrontendEventRoutes, registerSessionRoutes],
     });
     ({ port } = nw);
     SESSION = nw.session;
-    client = await connectConsoleEvents<ConsoleEvent>(port, SESSION);
+    client = await connectFrontendEvents<FrontendEvent>(port, SESSION);
   });
 
   afterAll(async () => {

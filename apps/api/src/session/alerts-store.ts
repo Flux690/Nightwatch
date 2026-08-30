@@ -186,7 +186,7 @@ export function oldestQueuedGroup(): QueuedGroup | undefined {
   return alerts.length === 0 ? undefined : { groupKey: head.groupKey, alerts };
 }
 
-// What the console's queue band reports: how many alerts are waiting, and how
+// What the frontend's queue band reports: how many alerts are waiting, and how
 // long the one at the front has been waiting.
 export function queueDepth(): {
   waiting: number;

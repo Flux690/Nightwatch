@@ -73,7 +73,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       isTransientLLMError(err) ? "transient" : "permanent",
     );
     // The failure becomes a durable transcript row rendered like any other
-    // message; a synthetic row still unsticks the console if persist fails.
+    // message; a synthetic row still unsticks the frontend if persist fails.
     const text = describeLLMError(err);
     let row: TranscriptRow;
     try {

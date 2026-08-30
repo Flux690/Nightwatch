@@ -17,7 +17,7 @@ import type {
   ProviderOption,
 } from "@nightwarden/shared";
 
-// The console renders this rather than naming providers itself, so adding an
+// The frontend renders this rather than naming providers itself, so adding an
 // adapter is a change here and nowhere in the UI.
 export const PROVIDER_OPTIONS: readonly ProviderOption[] = [
   {

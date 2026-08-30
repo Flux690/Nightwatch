@@ -28,15 +28,15 @@ runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 api["NightWarden API<br/>Node.js · SQLite<br/>Agent Loop · Approvals · Event Bus"]
 
 %% UI
-console["Console<br/>Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
+frontend["Frontend<br/>Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
 
 %% Code
 github["GitHub<br/>Draft Pull Requests"]
 
 monitoring -- POST /api/alerts/ingest --> api
-console -- Ask a question --> api
+frontend -- Ask a question --> api
 api -- WebSocket --> runner
-api -- REST + SSE --> console
+api -- REST + SSE --> frontend
 api -- sandboxed code fixes --> github
 
 classDef infra fill:#1b2430,stroke:#4f9cf9,color:#fff,stroke-width:1.5;
@@ -45,7 +45,7 @@ classDef ui fill:#2b243d,stroke:#c084fc,color:#fff,stroke-width:1.5;
 
 class monitoring,runner,github infra;
 class api api;
-class console ui;
+class frontend ui;
 
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
@@ -112,7 +112,7 @@ When a GitHub repository is connected and the cause is in your code, the same lo
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one from that list and the report takes the main area - the answer, what to do, what happened, what held up and what was ruled out, each claim showing what backs it and naming the calls it rests on - with the transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. The runner fleet view and settings live here too.
+**Frontend** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one from that list and the report takes the main area - the answer, what to do, what happened, what held up and what was ruled out, each claim showing what backs it and naming the calls it rests on - with the transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. The runner fleet view and settings live here too.
 
 **Watching a run end never moves the page under you.** While it works the chat has the whole stage, because a report being written in front of you is not worth reading. When the agent finishes, it posts its closing message and then a card: first that the report is being written, then that it is ready. Nothing changes until you click it. Arriving from the Investigations list is already a deliberate act, so that still opens the record directly.
 
@@ -178,7 +178,7 @@ An alert that recovers while it is waiting is never investigated at all. There
 is nothing to look into, and no investigation is created to explain that.
 
 Two things are refused rather than queued, because you are watching the screen
-when they happen: starting an investigation yourself from the console when all
+when they happen: starting an investigation yourself from the frontend when all
 ten slots are busy, and starting a chat when twenty are already running. You get
 a message immediately instead of a spinner with no end in sight. The chat number
 is a runaway backstop rather than a usage limit; reaching it means something is
@@ -423,7 +423,7 @@ pnpm install
 cp apps/api/.env.example apps/api/.env
 ```
 
-Leave the LLM variables unset and pick a provider in the console after boot, or set `NIGHTWARDEN_LLM_PROVIDER` with the matching `*_MODEL` and `*_API_KEY` to seed that choice. Either way the database owns it from then on: the environment is read once, on an install that has no configuration yet, and never again - so changing a key later means changing it in Settings, not in this file. Everything else has defaults; the full list of variables is in [Configuration](#configuration).
+Leave the LLM variables unset and pick a provider in the frontend after boot, or set `NIGHTWARDEN_LLM_PROVIDER` with the matching `*_MODEL` and `*_API_KEY` to seed that choice. Either way the database owns it from then on: the environment is read once, on an install that has no configuration yet, and never again - so changing a key later means changing it in Settings, not in this file. Everything else has defaults; the full list of variables is in [Configuration](#configuration).
 
 ### 3. Start everything
 
@@ -431,9 +431,9 @@ Leave the LLM variables unset and pick a provider in the console after boot, or 
 pnpm dev
 ```
 
-This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
+This runs the API on port 3000 and the frontend on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics source, or Loki).
+In the frontend go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics source, or Loki).
 
 **Add a runner.** Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Either wizard is three steps and needs no manual config editing:
 
@@ -450,7 +450,7 @@ Each mints its own credential and reports its own deliveries, so rotating one le
 
 **The credential is shown once.** NightWarden stores only a hash of it, so no screen and no endpoint can show it again - copy it when it is generated. Lose it and **Rotate** issues a new one, which stops the old one working the moment it is created. **Disconnect** revokes it outright and refuses further deliveries.
 
-That is the whole setup: an alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header, and recognizes a delivery by the shape of its body (`{ alerts: [...] }`) rather than by any client-controlled header. Anything that produces that envelope is accepted, which is why Mimir, Thanos and VictoriaMetrics need nothing of their own - they all notify through Alertmanager or a fork of it. You can also start an investigation at any time from the console chat, with no alert source at all.
+That is the whole setup: an alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header, and recognizes a delivery by the shape of its body (`{ alerts: [...] }`) rather than by any client-controlled header. Anything that produces that envelope is accepted, which is why Mimir, Thanos and VictoriaMetrics need nothing of their own - they all notify through Alertmanager or a fork of it. You can also start an investigation at any time from the frontend chat, with no alert source at all.
 
 **Connect your metrics.** Five cards under **Metrics** - **Prometheus**, **VictoriaMetrics**, **Grafana Mimir**, **Thanos** and **Amazon Managed Prometheus (AMP)** - each take the base URL of the thing you already run. Grafana Cloud Metrics is hosted Mimir, so it connects through the Mimir card with your instance ID as the username and an access policy token as the password. AMP takes an AWS access key, secret key and region instead of a URL credential - every request is signed with SigV4 rather than carrying a header. NightWarden only ever reads: the agent gains an instant lookup and a range query windowed around the alert, so it can tell whether a metric climbed for hours or spiked at deploy time, with zero runners installed. Both addresses are probed with the exact calls an investigation makes before anything is saved, so a successful connect is itself the proof they are reachable. Keep them off the public internet; NightWarden needs to reach them over your private network.
 
@@ -466,7 +466,7 @@ That is the whole setup: an alert resolves to a service from the Compose labels 
 
 ## Self-hosting
 
-The API and the console ship as one image on a single origin, and SQLite is the system of record - one container on one Linux host with Docker, no database alongside it.
+The API and the frontend ship as one image on a single origin, and SQLite is the system of record - one container on one Linux host with Docker, no database alongside it.
 
 ```bash
 curl -O https://raw.githubusercontent.com/PrabhatMattoo/NightWarden/main/docker-compose.yml
@@ -476,7 +476,7 @@ docker compose up -d
 
 Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings → Provider**: choose Anthropic or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert. Runners and monitoring are wired up afterwards from **Integrations**, exactly as in [Getting started](#getting-started).
 
-`NIGHTWARDEN_PUBLIC_URL` is the only required variable - it is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else is optional and listed under [Configuration](#configuration); the LLM variables seed the database on first boot only, after which the console is the place to change them.
+`NIGHTWARDEN_PUBLIC_URL` is the only required variable - it is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else is optional and listed under [Configuration](#configuration); the LLM variables seed the database on first boot only, after which the frontend is the place to change them.
 
 **The state directory must be a host path mounted at the same path inside and out** - never a named volume. Code sandboxes run as sibling containers started through the mounted Docker socket, and the host's daemon resolves their workspace mounts against the host filesystem: a path that exists only inside the container does not error, it mounts an empty directory and every sandbox comes up with an empty checkout. The compose file derives both sides from one variable so they cannot drift; if you move the path, keep the mapping symmetrical. NightWarden also refuses to boot when its state directory is on the container's writable layer, since the database and secret key would be discarded on the next restart.
 
@@ -500,7 +500,7 @@ Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings �
 
 | Variable                              | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NIGHTWARDEN_LLM_PROVIDER`            | no       | `anthropic` or `openrouter`. There is no default: leave it unset and pick a provider in console Settings instead.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `NIGHTWARDEN_LLM_PROVIDER`            | no       | `anthropic` or `openrouter`. There is no default: leave it unset and pick a provider in frontend Settings instead.                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `ANTHROPIC_API_KEY`                   | no       | Anthropic API key. Seeds the database on first boot only, alongside `NIGHTWARDEN_LLM_PROVIDER=anthropic` and `ANTHROPIC_MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `OPENROUTER_API_KEY`                  | no       | OpenRouter API key. Seeds the database on first boot only, alongside `NIGHTWARDEN_LLM_PROVIDER=openrouter` and `OPENROUTER_MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `OPENROUTER_BASE_URL`                 | no       | Base URL for OpenRouter. Unset means `openrouter.ai/api/v1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -513,9 +513,9 @@ Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings �
 | `NIGHTWARDEN_DIR`                     | no       | Absolute path to the directory holding all durable state: `nightwarden.db`, `secret.key`, the per-session GitHub sandbox `workspaces/`, and the generated egress-proxy config `proxy/`. Defaults to `~/.nightwarden`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts.                                                                                                                                        |
 | `NIGHTWARDEN_SECRET_KEY`              | no       | AES-256-GCM key that signs owner sessions and encrypts every credential stored at rest: provider API keys, integration tokens, and the fleet ingest token. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file in `NIGHTWARDEN_DIR`, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes those credentials unrecoverable, so each reads back as unset. Set this explicitly if you want to manage the value yourself. |
 | `NIGHTWARDEN_LOG_LEVEL`               | no       | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`).                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `NIGHTWARDEN_CONSOLE_DIST`            | no       | Directory holding the built console. The build embeds it beside the API bundle and that is where the API looks, so this is an override for running the bundle from an unusual layout, not something an install sets. With no build there and `NODE_ENV=production`, the API refuses to boot rather than serving an API that 404s every browser.                                                                                                                                                                                          |
-| `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`     | no       | Image the console's Docker-host install command hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-docker-runner:latest`; override it to pin a tag or to serve the image from a private registry.                                                                                                                                                                                                                                                                                                                                 |
-| `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` | no       | Image the console's Kubernetes manifest hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-kubernetes-runner:latest`.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `NIGHTWARDEN_FRONTEND_DIST`           | no       | Directory holding the built frontend. The build embeds it beside the API bundle and that is where the API looks, so this is an override for running the bundle from an unusual layout, not something an install sets. With no build there and `NODE_ENV=production`, the API refuses to boot rather than serving an API that 404s every browser.                                                                                                                                                                                         |
+| `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`     | no       | Image the frontend's Docker-host install command hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-docker-runner:latest`; override it to pin a tag or to serve the image from a private registry.                                                                                                                                                                                                                                                                                                                                |
+| `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` | no       | Image the frontend's Kubernetes manifest hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-kubernetes-runner:latest`.                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `PROMETHEUS_URL`                      | no       | Seeds a Prometheus metrics source on first boot only, so a fresh install comes up configured without opening a browser. Probed before it saves; an address that does not answer is logged and left unconfigured. Prometheus serves its own rules, so the seeded source uses this address for both.                                                                                                                                                                                                                                       |
 | `PROMETHEUS_AUTH_HEADER`              | no       | Verbatim `Authorization` header value for the above, stored encrypted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `LOKI_URL`                            | no       | Seeds the Loki integration on first boot only, on the same terms as `PROMETHEUS_URL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -524,7 +524,7 @@ Open `NIGHTWARDEN_PUBLIC_URL`, create the owner account, then go to **Settings �
 
 ### GitHub integration
 
-Connecting a repository (console → Integrations) lets investigations read the
+Connecting a repository (frontend → Integrations) lets investigations read the
 code, build and test a fix in an isolated checkout, and propose it as a draft
 pull request that a human reviews and merges on GitHub - NightWarden never
 merges. Requirements and properties:
@@ -536,7 +536,7 @@ merges. Requirements and properties:
   the API itself runs in a container it needs the Docker socket mounted.
 - **The token stays out of reach.** The connect page deep-links to a
   fine-grained token with exactly Contents and Pull requests (write) on the one
-  repository and a 90-day expiry; the console shows the remaining days and
+  repository and a 90-day expiry; the frontend shows the remaining days and
   warns as it nears, and organizations that block fine-grained tokens can use
   a classic PAT instead. The token is encrypted at rest, never returned by any
   endpoint, never enters the sandbox container, and never appears in any URL
@@ -571,7 +571,7 @@ merges. Requirements and properties:
   its branch on the remote and continues it) and, when the repo pins
   `packageManager` or has a Node lockfile, installs dependencies up front - a
   pinned pnpm or yarn runs through corepack at its exact pinned version. Each
-  stage (cloning, starting, installing) streams live to the console
+  stage (cloning, starting, installing) streams live to the frontend
   transcript. A failed install is survivable - read, edit, and PR keep
   working - and its output tail reaches the logs and the agent, which is told
   to fix or work around it before building or testing.
@@ -605,13 +605,13 @@ merges. Requirements and properties:
 
 | Variable                     | Required | Description                                                                                               |
 | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `NIGHTWARDEN_TOKEN`          | yes      | Runner credential minted from the console                                                                 |
+| `NIGHTWARDEN_TOKEN`          | yes      | Runner credential minted from the frontend                                                                |
 | `NIGHTWARDEN_WS_URL`         | yes      | API WebSocket endpoint, e.g. `wss://your-api/clients/connect`                                             |
 | `NIGHTWARDEN_HOST_PROC`      | no       | Docker runner only. `/proc` mount path when running inside a container (default: `/proc`)                 |
 | `NIGHTWARDEN_FILE_ALLOWLIST` | no       | Docker runner only. Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool. |
 | `NIGHTWARDEN_LOG_LEVEL`      | no       | Pino log level for the runner process (default: `info`).                                                  |
 
-There is no variable naming the platform. A runner is a Docker runner or a Kubernetes runner because of which image you installed, and the token you installed it with says the same thing; if the two disagree the API refuses the connection and says so. Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`), so there is no Kubernetes-specific env var either. A runner's display name is set when you add it in the console, never on the runner itself. Write tools like `RestartDockerService`/`DockerBash` are always offered and always gated: a write suspends the investigation for human approval, so there is no mode to configure and no env var to set.
+There is no variable naming the platform. A runner is a Docker runner or a Kubernetes runner because of which image you installed, and the token you installed it with says the same thing; if the two disagree the API refuses the connection and says so. Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`), so there is no Kubernetes-specific env var either. A runner's display name is set when you add it in the frontend, never on the runner itself. Write tools like `RestartDockerService`/`DockerBash` are always offered and always gated: a write suspends the investigation for human approval, so there is no mode to configure and no env var to set.
 
 ## Development
 
@@ -636,7 +636,7 @@ These are exactly what CI runs. `.github/workflows/verify.yml` holds the definit
 pnpm build
 ```
 
-`@nightwarden/shared` and `@nightwarden/runner-core` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the console with Vite. The console is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
+`@nightwarden/shared` and `@nightwarden/runner-core` have no build step - they are consumed as TypeScript source, so an edit is live everywhere immediately. The three Node apps bundle with esbuild and the frontend with Vite. The frontend is a `devDependency` of the API, which is what makes pnpm build it first and what lets the API's own build copy it in - so the Dockerfile runs one build command and decides nothing about the artifact's shape. Vite content-hashes its output and brotli-compresses every text asset at build time; the API serves the `.br` beside each file and marks hashed assets immutable, so nothing is compressed per request. Every route is a dynamic import, so the browser fetches a page's code the first time that page is visited and never before: signing in costs the shell, not the report renderer or the markdown pipeline behind it. The images install production dependencies in a stage of their own rather than pruning a full install afterwards, which is why nothing from `devDependencies` reaches a published image.
 
 ### Monorepo layout
 
@@ -663,13 +663,13 @@ apps/
       session/          the session and everything that cascades from it: its row, its
                         alerts and queue, its run state and seat, its transcript rows,
                         then the routes, the SSE bus, the interrupt coordinator and
-                        approval executor, and the projection the console draws
+                        approval executor, and the projection the frontend draws
       verification/     whether an alert's condition has actually cleared: the reconciler's
                         schedule, and sources/ for each way of asking
       index.ts          boot: resolve the key, open the db, register every route
       dispatcher.ts     single entry point for every investigation, and the run pool's promotions
       run-pool.ts       how many runs may be in flight, counted per pool from the session rows
-      console.ts        serves the console the build embedded beside the bundle, with an SPA fallback
+      frontend.ts       serves the frontend the build embedded beside the bundle, with an SPA fallback
       db.ts             the SQLite handle and the whole schema (FKs on, no migrations)
       logger.ts         the process logger
       secrets.ts        resolves the key at boot, then encrypt/decrypt/mask over it
@@ -688,11 +688,11 @@ apps/
         commands/       the command table (registry.ts)
         kubernetes/     @kubernetes/client-node client, workload commands, workload resolution
         manifest/       what this cluster advertises to the API
-  console/              React user UI
+  frontend/              React user UI
     src/
       styles.css        the whole theme: one base colour, one accent, one contrast
                         number, and every surface, edge, control and ink derived from
-                        them (see "The console's theme" below)
+                        them (see "The frontend's theme" below)
       app/              the router, the authenticated layout and the shell it mounts.
                         Every page is loaded lazily, so a route costs nothing until visited
       shared/           what more than one feature needs, and which knows of none of them
@@ -701,7 +701,7 @@ apps/
         lib/            class merging, toast, the one clock, relative time, icon props
         api/            one typed fetch boundary (apiFetch), errors carrying their body
         hooks/          the viewport tier, debouncing
-        events/         the console event-stream (SSE) provider
+        events/         the frontend event-stream (SSE) provider
       features/         grouped by the feature served, not by what kind of file it is
         auth/           login, owner-password setup, the session context
         integrations/   the catalogue every integration page reads, the shared connect
@@ -729,7 +729,7 @@ packages/
     src/
       index.ts          the one public entry: explicit named re-exports, never export *
       ws.ts             runner wire protocol
-      console-events.ts console event envelopes
+      frontend-events.ts frontend event envelopes
       service-identity.ts the two unrelated identity shapes and their key builders
       tools/            tool input/output payload types, by platform: docker.ts, kubernetes.ts,
                         host.ts, common.ts (the LLM schemas live in apps/api/src/agent/tools/)
@@ -746,11 +746,11 @@ packages/
       runner.ts         Platform, the two manifest shapes, and the fleet view
 ```
 
-### The console's theme
+### The frontend's theme
 
-`apps/console/src/styles.css` is the whole of it. Four numbers are the input - a
+`apps/frontend/src/styles.css` is the whole of it. Four numbers are the input - a
 base colour as lightness, chroma and hue, plus one contrast number - and every
-other value in the console is a departure from them, written in `lch()` so the
+other value in the frontend is a departure from them, written in `lch()` so the
 browser does the conversion and devtools show a colour as what it means.
 
 Four rules carry it, and they are worth knowing before changing a value:

@@ -368,7 +368,7 @@ export function seedConfigFromEnv(): void {
   if (!block?.model || !block.apiKeyEncrypted) {
     logger.warn(
       { provider: requested },
-      "NIGHTWARDEN_LLM_PROVIDER is set but that provider has no model and key; finish setup in the console",
+      "NIGHTWARDEN_LLM_PROVIDER is set but that provider has no model and key; finish setup in the frontend",
     );
     return;
   }

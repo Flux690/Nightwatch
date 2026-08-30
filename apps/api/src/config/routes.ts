@@ -12,7 +12,7 @@ import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 
-/* Zod's own message is the issues array as JSON, which the console would show
+/* Zod's own message is the issues array as JSON, which the frontend would show
    a user verbatim. This names the field and says what is wrong with it. */
 function readable(error: z.ZodError): string {
   return error.issues
@@ -158,12 +158,12 @@ export async function registerConfigRoutes(
   );
 
   // Which providers this build can reach, so the picker is data rather than a
-  // list the console maintains. No secrets, but gated with the rest of config.
+  // list the frontend maintains. No secrets, but gated with the rest of config.
   fastify.get("/config/providers", { preHandler: requireSession }, () => ({
     providers: PROVIDER_OPTIONS,
   }));
 
-  // Proxied because the key lives here and must never reach the console.
+  // Proxied because the key lives here and must never reach the frontend.
   // Listing verifies too: models coming back prove the endpoint and the key.
   fastify.post(
     "/config/models",

@@ -1,4 +1,4 @@
-// Console <-> API payloads for the integrations surface. Provider-prefixed so
+// Frontend <-> API payloads for the integrations surface. Provider-prefixed so
 // each integration's types sit beside the others without colliding.
 
 export type GitHubErrorCode =

@@ -6,7 +6,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     // Nothing emits through tsc (esbuild bundles the apps, Vite builds the
-    // console), so a type-only import left unmarked would survive into the
+    // frontend), so a type-only import left unmarked would survive into the
     // bundle as a runtime import of a binding that does not exist.
     "verbatimModuleSyntax": true,
     // A binding nothing reads is usually the residue of a change that half

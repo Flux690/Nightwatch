@@ -46,7 +46,7 @@ const INFRASTRUCTURE = [
   "secrets.ts",
   "paths.ts",
   "public-url.ts",
-  "console.ts",
+  "frontend.ts",
 ];
 
 describe("layering", () => {

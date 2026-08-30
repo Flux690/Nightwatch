@@ -81,9 +81,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
-      '@nightwarden/console':
+      '@nightwarden/frontend':
         specifier: workspace:*
-        version: link:../console
+        version: link:../frontend
       '@nightwarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -109,7 +109,7 @@ importers:
         specifier: 8.21.1
         version: 8.21.1
 
-  apps/console:
+  apps/frontend:
     dependencies:
       '@base-ui/react':
         specifier: 1.6.0

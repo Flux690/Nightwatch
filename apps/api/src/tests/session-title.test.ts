@@ -1,7 +1,7 @@
 import { harness, type Harness } from "./harness.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import OpenAI from "openai";
-import type { ConsoleEvent, NormalizedAlert } from "@nightwarden/shared";
+import type { FrontendEvent, NormalizedAlert } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -12,7 +12,7 @@ import {
 import { createContractFakeProvider } from "./contract-fake-provider.js";
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { subscribeConsole } from "../session/bus.js";
+import { subscribeFrontend } from "../session/bus.js";
 import { createSession, getSession } from "../session/store.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
@@ -75,8 +75,8 @@ describe("session title generation", () => {
     const sessionId = "sess-title-1";
     seedSession(sessionId, "Why is checkout slow this morning?");
 
-    const events: ConsoleEvent[] = [];
-    const unsubscribe = subscribeConsole((e) => events.push(e));
+    const events: FrontendEvent[] = [];
+    const unsubscribe = subscribeFrontend((e) => events.push(e));
     await generateSessionTitle(
       sessionId,
       "Why is checkout slow this morning?",
@@ -116,8 +116,8 @@ describe("session title generation", () => {
 
     const sessionId = "sess-title-retry";
     seedSession(sessionId, "Why is checkout slow this morning?");
-    const events: ConsoleEvent[] = [];
-    const unsubscribe = subscribeConsole((e) => events.push(e));
+    const events: FrontendEvent[] = [];
+    const unsubscribe = subscribeFrontend((e) => events.push(e));
 
     const pending = generateSessionTitle(
       sessionId,
@@ -222,8 +222,8 @@ describe("session title generation", () => {
       createContractFakeProvider([{ toolUses: [], text: "Done." }]),
     );
     scriptTitleOnce("Checkout Latency Spike");
-    const events: ConsoleEvent[] = [];
-    const unsubscribe = subscribeConsole((e) => events.push(e));
+    const events: FrontendEvent[] = [];
+    const unsubscribe = subscribeFrontend((e) => events.push(e));
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",

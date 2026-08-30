@@ -26,7 +26,7 @@ FROM toolchain AS manifests
 # be here even when this image ships none of its code.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
-COPY apps/console/package.json apps/console/
+COPY apps/frontend/package.json apps/frontend/
 COPY apps/runners/docker/package.json apps/runners/docker/
 COPY apps/runners/kubernetes/package.json apps/runners/kubernetes/
 COPY packages/shared/package.json packages/shared/
@@ -35,7 +35,7 @@ COPY packages/runner-core/package.json packages/runner-core/
 
 # The tree the image ships: it never sees a devDependency, so nothing needs
 # pruning - `--prod` decides what to install and cannot uninstall. Filtered to
-# the api, or it also installs the console's React tree that Vite has bundled.
+# the api, or it also installs the frontend's React tree that Vite has bundled.
 FROM manifests AS prod-deps
 
 # The store is a build cache, so a package is fetched once across every stage of
@@ -47,7 +47,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 
 # The full install, used only to produce dist and then discarded. The api's own
-# devDependencies pull in shared and the console, so no runner's are fetched.
+# devDependencies pull in shared and the frontend, so no runner's are fetched.
 FROM manifests AS build
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
@@ -58,9 +58,9 @@ COPY tsconfig.base.json ./
 COPY scripts/ scripts/
 COPY packages/shared/ packages/shared/
 COPY apps/api/ apps/api/
-COPY apps/console/ apps/console/
+COPY apps/frontend/ apps/frontend/
 
-# The console is a devDependency of the api, so this builds it first and the
+# The frontend is a devDependency of the api, so this builds it first and the
 # api's own build embeds it. Nothing about the artifact is decided here.
 RUN pnpm --filter "@nightwarden/api..." build
 

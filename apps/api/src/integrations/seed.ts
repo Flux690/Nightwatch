@@ -35,7 +35,7 @@ async function seedPrometheus(): Promise<void> {
   } catch (err) {
     logger.warn(
       { url, err },
-      "PROMETHEUS_URL did not answer; leaving it unconfigured for the console",
+      "PROMETHEUS_URL did not answer; leaving it unconfigured for the frontend",
     );
     return;
   }
@@ -68,7 +68,7 @@ async function seedLoki(): Promise<void> {
   } catch (err) {
     logger.warn(
       { url, err },
-      "LOKI_URL did not answer; leaving it unconfigured for the console",
+      "LOKI_URL did not answer; leaving it unconfigured for the frontend",
     );
     return;
   }

@@ -13,7 +13,7 @@ import { registerIntegrationRoutes } from "../integrations/routes.js";
 import { registerMetricsRoutes } from "../integrations/metrics/routes.js";
 import { registerInstallRoutes } from "../fleet/install.js";
 import { registerRunnerRoutes } from "../fleet/routes.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerWsRoutes } from "../fleet/server.js";
 import { mountApi } from "./api-server.js";
@@ -81,7 +81,7 @@ describe("every route refuses an anonymous caller", () => {
       registerAuthRoutes,
       registerTokenRoutes,
       registerWsRoutes,
-      registerConsoleEventRoutes,
+      registerFrontendEventRoutes,
       registerAlertRoutes,
       registerConfigRoutes,
       registerSessionRoutes,

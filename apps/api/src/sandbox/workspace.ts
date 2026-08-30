@@ -28,7 +28,7 @@ export interface SandboxLog {
   warn(fields: Record<string, unknown>, message: string): void;
 }
 
-// Provisioning progress for the console: creation is slow (clone, image pull,
+// Provisioning progress for the frontend: creation is slow (clone, image pull,
 // container start, dependency install) and would otherwise look like a hang on
 // the first repo tool.
 type SandboxStage = "cloning" | "starting" | "installing" | "ready" | "failed";

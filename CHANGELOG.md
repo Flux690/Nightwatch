@@ -16,6 +16,10 @@ schema all change freely, and `1.0.0` will be the first public stable release.
 
 ### Changed
 
+- `NIGHTWARDEN_CONSOLE_DIST` is now `NIGHTWARDEN_FRONTEND_DIST`. It is an
+  override for running the bundle from an unusual layout, so an ordinary install
+  never set it.
+
 - **The licence is now the Fair Core License 1.0 (FCL-1.0-ALv2)**, replacing
   AGPL-3.0. Self-hosting NightWarden for your own operations stays free and
   unlimited; what the licence withholds is a Competing Use - offering NightWarden

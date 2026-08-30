@@ -118,7 +118,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     return ((await r.json()) as SessionDetail).transcript;
   }
 
-  // The session id is discovered the way the console discovers it: from the list.
+  // The session id is discovered the way the frontend discovers it: from the list.
   async function waitForAwaitingSession(): Promise<string> {
     return waitFor(async () => {
       const rows = await listSessions();
@@ -144,7 +144,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     const items = await getTranscript(sessionId);
 
-    // One item, so the console has nothing to reconcile. What it needs from
+    // One item, so the frontend has nothing to reconcile. What it needs from
     // the human rides on the state, never a second label beside it.
     const card = items.find((i) => i.kind === "tool_call");
     expect(card).toBeDefined();

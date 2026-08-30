@@ -53,7 +53,7 @@ export async function registerRunnerRoutes(
     return records;
   });
 
-  // Read-only, no token management fields - the console fleet page's single
+  // Read-only, no token management fields - the frontend fleet page's single
   // pane of glass.
   fastify.get("/fleet", { preHandler: requireSession }, (): FleetRunner[] =>
     getFleetView(),

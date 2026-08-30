@@ -108,7 +108,7 @@ function stampOutcomes(
 }
 
 // The seq a turn will be saved under, computed the way persistNewTurns computes
-// it below. Streaming happens first, so the console is told it in advance.
+// it below. Streaming happens first, so the frontend is told it in advance.
 function turnSeq(provider: LLMProvider, seqOffset: number): number {
   return seqOffset + provider.snapshot().length;
 }
@@ -148,7 +148,7 @@ function persistNewTurns(
   } else {
     appendTranscriptRows(newMessages);
   }
-  // A harness row draws nothing, so publishing it would only cost the console a
+  // A harness row draws nothing, so publishing it would only cost the frontend a
   // transcript refetch that changes no pixel.
   for (const message of newMessages) {
     if (message.kind !== "nightwarden") publishMessage(sessionId, message);
@@ -318,7 +318,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const config = loadConfig();
 
   // Transient provider errors are waited out instead of killing the run; each
-  // wait is streamed to the console as live status.
+  // wait is streamed to the frontend as live status.
   const chatWithRetries = (
     provider: LLMProvider,
     toolSchemas: ToolSchema[],
@@ -472,7 +472,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     persistedCount = input.seed.length;
-    // Persist the new user turn immediately so the console shows it the moment
+    // Persist the new user turn immediately so the frontend shows it the moment
     // it's sent, instead of waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
       provider.appendUserMessage(stripHarnessMarker(input.userMessage));

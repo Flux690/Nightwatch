@@ -28,8 +28,8 @@ import { generateRunnerToken } from "../fleet/runners.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
+import { connectFrontendEvents } from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../session/interrupts.js";
@@ -361,7 +361,7 @@ describe("toolset assembly by fleet capabilities", () => {
       );
 
       server = Fastify({ logger: false, forceCloseConnections: true });
-      await mountApi(server, registerConsoleEventRoutes);
+      await mountApi(server, registerFrontendEventRoutes);
       await mountApi(server, registerSessionRoutes);
       await server.listen({ port: 0, host: "127.0.0.1" });
       port = (server.server.address() as AddressInfo).port;
@@ -396,7 +396,7 @@ describe("toolset assembly by fleet capabilities", () => {
         { text: "Done.", toolUses: [] },
       ]);
 
-      const { events, close } = await connectConsoleEvents(port, SESSION);
+      const { events, close } = await connectFrontendEvents(port, SESSION);
 
       const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
@@ -452,7 +452,7 @@ describe("toolset assembly by fleet capabilities", () => {
         { text: "Redis is fine.", toolUses: [] },
       ]);
 
-      const { events, close } = await connectConsoleEvents(port, SESSION);
+      const { events, close } = await connectFrontendEvents(port, SESSION);
 
       const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",

@@ -13,8 +13,8 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { waitFor } from "./wait.js";
-import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import { registerFrontendEventRoutes } from "../session/events.js";
+import { connectFrontendEvents } from "./frontend-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { harness, type Harness } from "./harness.js";
@@ -27,7 +27,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
   beforeAll(async () => {
     nw = await harness({
-      routes: [registerConsoleEventRoutes, registerSessionRoutes],
+      routes: [registerFrontendEventRoutes, registerSessionRoutes],
       runners: [{ name: "esc-host", services: ["web-01"] }],
     });
     ({ port, session: SESSION } = nw);
@@ -46,7 +46,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(refusalScript),
     );
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -87,7 +87,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(finishScript),
     );
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -160,7 +160,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       values: {},
     };
 
-    const { events, close } = await connectConsoleEvents(port, SESSION);
+    const { events, close } = await connectFrontendEvents(port, SESSION);
 
     dispatchAlertSession(sessionId, [alert]);
 

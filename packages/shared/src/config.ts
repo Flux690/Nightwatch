@@ -1,12 +1,12 @@
 // Global agent config: how the one brain reasons (no per-runner dimension). Every
-// value here is API-seeded and safe to send to the console; keys are masked.
+// value here is API-seeded and safe to send to the frontend; keys are masked.
 
 export type LLMProviderName = "anthropic" | "openrouter";
 // "allowlist" routes all sandbox egress through an enforcing proxy that only
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
 
-// Served rather than hardcoded, so a new adapter appears in the console
+// Served rather than hardcoded, so a new adapter appears in the frontend
 // without a UI change.
 export interface ProviderOption {
   name: LLMProviderName;
@@ -31,7 +31,7 @@ export interface ReasoningLevel {
   label: string;
 }
 
-// Normalised from whichever catalog it came from, so the console renders it
+// Normalised from whichever catalog it came from, so the frontend renders it
 // and never branches on the provider name.
 export interface ReasoningDescriptor {
   // "Effort" for Anthropic, "Reasoning" for OpenRouter.

@@ -16,7 +16,7 @@ export interface ServerScopedResult<T> {
 }
 
 // A server-routed command's result, always enveloped even for a single server, so
-// the model and the console each have exactly one shape to read.
+// the model and the frontend each have exactly one shape to read.
 export interface FleetResult<T> {
   byServer: Array<ServerScopedResult<T>>;
   // Set only when the fan-out cap dropped servers, because a reading that covers

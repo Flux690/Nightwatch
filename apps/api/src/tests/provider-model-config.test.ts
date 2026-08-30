@@ -224,7 +224,7 @@ describe("provider/model config seam", () => {
   });
 
   // Whether a catalog can be read without a key is the provider's rule, so each
-  // one answers for itself and the console is told which case it is in.
+  // one answers for itself and the frontend is told which case it is in.
   it("POST /config/models: Anthropic asks for a key rather than being called with none", async () => {
     clearTestLLM();
     const calls = vi.fn();
@@ -277,7 +277,7 @@ describe("provider/model config seam", () => {
     expect(await storedMask()).not.toContain("persist");
   });
 
-  it("GET /config/providers: serves the picker so the console keeps no provider list of its own", async () => {
+  it("GET /config/providers: serves the picker so the frontend keeps no provider list of its own", async () => {
     const res = await nw.server.inject({
       method: "GET",
       url: "/api/config/providers",
