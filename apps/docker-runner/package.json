@@ -1,5 +1,6 @@
 {
   "name": "@nightwarden/docker-runner",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
   "scripts": {

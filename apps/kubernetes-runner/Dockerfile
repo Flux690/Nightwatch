@@ -64,6 +64,8 @@ WORKDIR /app
 COPY --from=prod-deps --chown=node:node /build/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /build/apps/kubernetes-runner/node_modules ./apps/kubernetes-runner/node_modules
 COPY --from=build --chown=node:node /build/apps/kubernetes-runner/dist ./apps/kubernetes-runner/dist
+# Publishing an image is redistribution, which the licence requires carry it.
+COPY --chown=node:node LICENSE NOTICE ./
 
 # The bundle ships a sourcemap; without this a stack trace names a line in the
 # bundle instead of the file it came from.

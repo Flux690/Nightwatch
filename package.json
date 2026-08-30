@@ -1,6 +1,7 @@
 {
   "name": "nightwarden",
-  "version": "0.3.164",
+  "license": "SEE LICENSE IN LICENSE",
+  "version": "0.3.165",
   "private": true,
   "engines": {
     "node": ">=24",

@@ -1,0 +1,16 @@
+NightWarden
+Copyright 2026 Prabhat Mattoo
+
+This product is licensed under the Fair Core License, Version 1.0, ALv2 Future
+License (FCL-1.0-ALv2). See LICENSE.
+
+This product includes third-party software. Each such component remains under
+the licence its own owner granted, and nothing here alters those terms. The
+authoritative list of what is included and under which licence is the dependency
+tree itself:
+
+    pnpm licenses list --prod
+
+Components under the Apache License 2.0 are redistributed under section 4 of
+that licence; where such a component ships its own NOTICE file, that file
+travels with the component in node_modules and its contents apply.

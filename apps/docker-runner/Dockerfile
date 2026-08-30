@@ -76,6 +76,8 @@ WORKDIR /app
 COPY --from=prod-deps /build/node_modules ./node_modules
 COPY --from=prod-deps /build/apps/docker-runner/node_modules ./apps/docker-runner/node_modules
 COPY --from=build /build/apps/docker-runner/dist ./apps/docker-runner/dist
+# Publishing an image is redistribution, which the licence requires carry it.
+COPY LICENSE NOTICE ./
 
 ENV HOST_PROC=/host/proc
 # The bundle ships a sourcemap; without this a stack trace names a line in the

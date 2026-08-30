@@ -82,6 +82,8 @@ WORKDIR /app
 COPY --from=prod-deps /build/node_modules ./node_modules
 COPY --from=prod-deps /build/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /build/apps/api/dist ./apps/api/dist
+# Publishing an image is redistribution, which the licence requires carry it.
+COPY LICENSE NOTICE ./
 
 # 127.0.0.1 would make the API unreachable outside the container's namespace.
 ENV HOST=0.0.0.0

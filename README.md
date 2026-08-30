@@ -1,11 +1,11 @@
 # NightWarden
 
 [![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml)
-![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
+![License: FCL-1.0-ALv2](https://img.shields.io/badge/license-FCL--1.0--ALv2-blue.svg)
 ![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)
 ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
 
-NightWarden is a self-hosted, open-source AI SRE agent for Docker and Kubernetes workloads. It watches your servers and clusters, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
+NightWarden is a self-hosted, source-available AI SRE agent for Docker and Kubernetes workloads. It watches your servers and clusters, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
 
 ## Why NightWarden
 
@@ -777,6 +777,21 @@ primitive may not read application state.
 
 ## License
 
-NightWarden is licensed under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must make your source available to its users.
+**Run NightWarden on your own infrastructure, for your own organisation, free
+and without limits.** What the licence does not allow is making NightWarden
+available to other people as part of a commercial product or service, whether
+that is NightWarden itself or something built on it offering the same or
+substantially similar functionality. A licence covering that use is available on
+request.
 
-For commercial or proprietary use outside the terms of the AGPL, contact the maintainers about a separate license.
+NightWarden is licensed under the [Fair Core License, Version 1.0, ALv2 Future
+License](LICENSE) (FCL-1.0-ALv2), which calls the first a Permitted Purpose and
+the second a Competing Use. Reading, modifying and redistributing the source are
+Permitted Purposes too, as are non-commercial education and research.
+
+Each version becomes Apache-2.0 on the second anniversary of its release, and
+that grant is irrevocable.
+
+This is **source available**, not open source: the Open Source Definition does
+not allow a licence to restrict what software may be used for, so calling it open
+source would be wrong.

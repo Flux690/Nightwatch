@@ -16,6 +16,12 @@ schema all change freely, and `1.0.0` will be the first public stable release.
 
 ### Changed
 
+- **The licence is now the Fair Core License 1.0 (FCL-1.0-ALv2)**, replacing
+  AGPL-3.0. Self-hosting NightWarden for your own operations stays free and
+  unlimited; what the licence withholds is a Competing Use - offering NightWarden
+  to others in a commercial product or service that substitutes for it. Each
+  version becomes Apache-2.0 two years after its release, irrevocably. This is
+  source available, not open source, and the README no longer says otherwise.
 - **Reasoning is always on.** Settings offers only the model's own effort
   ladder; the **Off** option is gone. A model told not to reason writes its tool
   calls as prose instead of calling them, so the run does nothing while looking
