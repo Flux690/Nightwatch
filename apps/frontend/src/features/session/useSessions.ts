@@ -4,6 +4,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type {
+  QueueState,
   SessionKind,
   SessionListPage,
   SessionListRow,
@@ -24,6 +25,9 @@ interface UseSessionsResult {
   // queue neither climbs as the user scrolls nor reads zero on a page that
   // never loaded the list.
   investigationTotal: number;
+  // Null until the first page lands, so the band draws nothing rather than
+  // claiming an empty queue it has not been told about.
+  queue: QueueState | null;
   isLoading: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -64,6 +68,7 @@ export function useSessions(kind: SessionKind): UseSessionsResult {
     // because status is derived from a dispatcher SQL cannot see.
     sessions: dedupe(query.data?.pages.flatMap((page) => page.rows) ?? []),
     investigationTotal: first?.investigationTotal ?? 0,
+    queue: first?.queue ?? null,
     isLoading: query.isLoading,
     hasMore: query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,

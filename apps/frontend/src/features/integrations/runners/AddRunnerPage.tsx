@@ -73,7 +73,7 @@ export function AddRunnerPage({
   });
 
   const connectedRunner = runners?.find(
-    (r) => r.token === mintedToken?.id && r.online && r.hostname !== null,
+    (r) => r.id === mintedToken?.id && r.online && r.hostname !== null,
   );
 
   // Read from the manifest the runner already sent: nothing is dispatched, so

@@ -6,6 +6,7 @@ import type {
   InvestigationStatus,
 } from "@nightwarden/shared";
 import { leadingHypothesis } from "@nightwarden/shared";
+import { queueState } from "../run-pool.js";
 import {
   countInvestigations,
   listSessionFacts,
@@ -89,5 +90,6 @@ export function listSessionPage(
     }),
     nextOffset,
     investigationTotal: countInvestigations(),
+    queue: queueState(),
   };
 }

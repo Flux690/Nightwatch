@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { queueDepth } from "./alerts-store.js";
-import { countSeats } from "./run-state.js";
-import { seatLimit } from "../run-pool.js";
+import { queueState } from "../run-pool.js";
 import { publishFrontendEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
@@ -162,16 +160,10 @@ export function publishReportUpdated(sessionId: string): void {
 // Published from the dispatcher and the ingest path rather than computed by
 // the frontend, so the numbers are the ones the pool actually used.
 export function publishQueueChanged(): void {
-  const { waiting, oldestArrivedAt } = queueDepth();
   const env: FrontendQueueChanged = {
     messageId: randomUUID(),
     type: "QUEUE_CHANGED",
-    payload: {
-      waiting,
-      running: countSeats(true),
-      limit: seatLimit(true),
-      oldestArrivedAt,
-    },
+    payload: queueState(),
   };
   publishFrontendEvent(env);
 }

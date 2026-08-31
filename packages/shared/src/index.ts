@@ -150,6 +150,7 @@ export type {
   InvestigationStatus,
   SessionListRow,
   SessionListPage,
+  QueueState,
   SessionKind,
 } from "./sessions.js";
 export type {

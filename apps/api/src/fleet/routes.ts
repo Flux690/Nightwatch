@@ -25,7 +25,6 @@ export async function registerRunnerRoutes(
       if (!runners || runners.length === 0) {
         records.push({
           id: t.id,
-          token: t.id,
           platform: t.platform,
           serverName: t.serverName,
           hostname: null,
@@ -39,7 +38,6 @@ export async function registerRunnerRoutes(
       for (const r of runners) {
         records.push({
           id: t.id,
-          token: t.id,
           platform: t.platform,
           serverName: t.serverName,
           hostname: r.hostname,

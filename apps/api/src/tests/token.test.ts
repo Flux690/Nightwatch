@@ -479,6 +479,56 @@ describe("Runner token lifecycle (issue 038)", () => {
       const found = tokens.find((t) => t.id === id);
       expect(found!.lastUsedAt).toBeTruthy();
     });
+
+    // A runner whose platform API is down authenticates but never manifests.
+    it("is set when the runner authenticates, before any manifest arrives", async () => {
+      const mint = await nw.server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        payload: { platform: "docker", serverName: "srv-12" },
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      const { token, id } = JSON.parse(mint.body) as {
+        token: string;
+        id: string;
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as { type: string };
+          // No manifest is ever sent: the daemon it would enumerate is down.
+          if (msg.type === "connected") {
+            setTimeout(() => {
+              ws.close();
+              resolve();
+            }, 20);
+          }
+        });
+        ws.on("error", reject);
+      });
+
+      const list = await nw.server.inject({
+        method: "GET",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      const { tokens } = JSON.parse(list.body) as {
+        tokens: Array<{ id: string; lastUsedAt: string | null }>;
+      };
+      expect(tokens.find((t) => t.id === id)!.lastUsedAt).toBeTruthy();
+
+      // So its name is no longer free, and the live runner keeps its token.
+      const second = await nw.server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { platform: "docker", serverName: "srv-12" },
+      });
+      expect(second.statusCode).toBe(409);
+    });
   });
 
   describe("session history after token deletion", () => {

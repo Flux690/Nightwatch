@@ -42,6 +42,10 @@ export async function registerWsRoutes(
 
       const { id: runnerId } = tokenRecord;
 
+      // Minting reclaims a name only from a row that never connected, and a
+      // runner whose platform API is down authenticates but never manifests.
+      touchLastUsed(runnerId);
+
       const conn = registerRunner({
         runnerId,
         platform: tokenRecord.platform,

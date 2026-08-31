@@ -35,6 +35,16 @@ export interface SessionListRow extends SessionMeta {
   awaitingHumanInput: boolean;
 }
 
+// Alerts waiting for a seat and the pool they wait on, never sessions: nothing
+// has investigated them yet.
+export interface QueueState {
+  waiting: number;
+  running: number;
+  limit: number;
+  // ISO timestamp of the longest-waiting alert, null when nothing waits.
+  oldestArrivedAt: string | null;
+}
+
 // What GET /sessions answers. The rows are one page; the counts are claims
 // about every session, which a page cannot answer.
 export interface SessionListPage {
@@ -43,6 +53,8 @@ export interface SessionListPage {
   nextOffset: number | null;
   // Every investigation there is, so a record's place in the queue is true.
   investigationTotal: number;
+  // Seeded here rather than only pushed, or a reload draws no band at all.
+  queue: QueueState;
 }
 
 // Two pages over one table. Without it a page of results can be entirely the

@@ -1,4 +1,4 @@
-import type { TranscriptRow } from "./sessions.js";
+import type { QueueState, TranscriptRow } from "./sessions.js";
 import type { TranscriptItem } from "./transcript.js";
 
 // Common envelope for the API→frontend event stream (SSE). messageId is a per-event UUID
@@ -146,13 +146,7 @@ export interface FrontendReportUpdated extends FrontendEnvelope {
 // rides along because raising it is what the reader can act on.
 export interface FrontendQueueChanged extends FrontendEnvelope {
   type: "QUEUE_CHANGED";
-  payload: {
-    waiting: number;
-    running: number;
-    limit: number;
-    // ISO timestamp of the longest-waiting alert, null when nothing waits.
-    oldestArrivedAt: string | null;
-  };
+  payload: QueueState;
 }
 
 // Discriminated union of all events on the API→frontend SSE stream.

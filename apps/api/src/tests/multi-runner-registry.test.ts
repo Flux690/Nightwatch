@@ -121,17 +121,15 @@ describe("flat runner registry", () => {
 
     const runners = await waitFor(async () => {
       const list = await getRunners();
-      const mine = list.filter(
-        (r) => r.token === tokenAId || r.token === tokenBId,
-      );
+      const mine = list.filter((r) => r.id === tokenAId || r.id === tokenBId);
       return mine.length === 2 && mine.every((r) => r.manifest !== null)
         ? mine
         : undefined;
     });
 
-    const byToken = new Map(runners.map((r) => [r.token, r]));
-    const ra = byToken.get(tokenAId);
-    const rb = byToken.get(tokenBId);
+    const byId = new Map(runners.map((r) => [r.id, r]));
+    const ra = byId.get(tokenAId);
+    const rb = byId.get(tokenBId);
     expect(ra).toBeDefined();
     expect(rb).toBeDefined();
 
@@ -175,8 +173,7 @@ describe("flat runner registry", () => {
     );
     await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) =>
-          (r.token === tokenAId || r.token === tokenBId) && r.manifest !== null,
+        (r) => (r.id === tokenAId || r.id === tokenBId) && r.manifest !== null,
       );
       return live.length === 2 ? true : undefined;
     });
@@ -185,11 +182,11 @@ describe("flat runner registry", () => {
 
     const remaining = await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => (r.token === tokenAId || r.token === tokenBId) && r.online,
+        (r) => (r.id === tokenAId || r.id === tokenBId) && r.online,
       );
       return live.length === 1 ? live : undefined;
     });
-    expect(remaining[0].token).toBe(tokenBId);
+    expect(remaining[0].id).toBe(tokenBId);
 
     b.close();
   });
@@ -207,7 +204,7 @@ describe("flat runner registry", () => {
     );
     await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => r.token === tokenId && r.online && r.manifest !== null,
+        (r) => r.id === tokenId && r.online && r.manifest !== null,
       );
       return live.length === 1 ? true : undefined;
     });
@@ -227,7 +224,7 @@ describe("flat runner registry", () => {
     // the runner stays online through the displacement.
     await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => r.token === tokenId && r.online && r.manifest !== null,
+        (r) => r.id === tokenId && r.online && r.manifest !== null,
       );
       return live.length === 1 ? true : undefined;
     });
@@ -235,7 +232,7 @@ describe("flat runner registry", () => {
     b.close();
     await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => r.token === tokenId && r.online,
+        (r) => r.id === tokenId && r.online,
       );
       return live.length === 0 ? true : undefined;
     });
@@ -264,19 +261,17 @@ describe("flat runner registry", () => {
 
     const runners = await waitFor(async () => {
       const list = await getRunners();
-      const mine = list.filter(
-        (r) => r.token === tokenAId || r.token === tokenBId,
-      );
+      const mine = list.filter((r) => r.id === tokenAId || r.id === tokenBId);
       return mine.length === 2 && mine.every((r) => r.manifest !== null)
         ? mine
         : undefined;
     });
 
-    const byToken = new Map(runners.map((r) => [r.token, r]));
-    expect(byToken.get(tokenAId)?.hostname).toBe("host-a");
-    expect(byToken.get(tokenBId)?.hostname).toBe("host-b");
-    expect(byToken.get(tokenAId)?.online).toBe(true);
-    expect(byToken.get(tokenBId)?.online).toBe(true);
+    const byId = new Map(runners.map((r) => [r.id, r]));
+    expect(byId.get(tokenAId)?.hostname).toBe("host-a");
+    expect(byId.get(tokenBId)?.hostname).toBe("host-b");
+    expect(byId.get(tokenAId)?.online).toBe(true);
+    expect(byId.get(tokenBId)?.online).toBe(true);
 
     a.close();
     b.close();
@@ -295,7 +290,7 @@ describe("flat runner registry", () => {
       );
       await waitFor(async () => {
         const live = (await getRunners()).filter(
-          (r) => r.token === tokenId && r.manifest !== null,
+          (r) => r.id === tokenId && r.manifest !== null,
         );
         return live.length === 1 ? true : undefined;
       });
@@ -351,7 +346,7 @@ describe("flat runner registry", () => {
       );
       await waitFor(async () => {
         const live = (await getRunners()).filter(
-          (r) => r.token === tokenId && r.manifest !== null,
+          (r) => r.id === tokenId && r.manifest !== null,
         );
         return live.length === 1 ? true : undefined;
       });
@@ -386,7 +381,7 @@ describe("flat runner registry", () => {
       // The replacement connection is unaffected by A's close and rejection.
       await waitFor(async () => {
         const live = (await getRunners()).filter(
-          (r) => r.token === tokenId && r.online && r.manifest !== null,
+          (r) => r.id === tokenId && r.online && r.manifest !== null,
         );
         return live.length === 1 ? true : undefined;
       });
@@ -504,7 +499,7 @@ describe("protocol ping/pong liveness", () => {
       await closed;
       await waitFor(async () => {
         const live = (await getRunners()).filter(
-          (r) => r.token === tokenId && r.online,
+          (r) => r.id === tokenId && r.online,
         );
         return live.length === 0 ? true : undefined;
       });
@@ -546,7 +541,7 @@ describe("protocol ping/pong liveness", () => {
       // 150s of fake time elapsed - past the TTL. Only pong-driven refreshes
       // can explain the runner still reading online.
       const live = (await getRunners()).filter(
-        (r) => r.token === tokenId && r.online,
+        (r) => r.id === tokenId && r.online,
       );
       expect(live).toHaveLength(1);
 

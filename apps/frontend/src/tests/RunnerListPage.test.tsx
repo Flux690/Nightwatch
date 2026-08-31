@@ -18,7 +18,6 @@ const NOW = new Date("2024-01-01T12:00:00Z").getTime();
 
 const WEB_RUNNER: RunnerRecord = {
   id: "token-abc123",
-  token: "token-abc123",
   platform: "docker" as const,
   serverName: "web-01",
   hostname: "web-01",
@@ -129,7 +128,7 @@ describe("RunnerListPage", () => {
   });
 
   describe("Remove", () => {
-    it("calls DELETE /api/tokens/:token when Remove is clicked", async () => {
+    it("calls DELETE /api/tokens/:id when Remove is clicked", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup([WEB_RUNNER]);
 
@@ -141,7 +140,7 @@ describe("RunnerListPage", () => {
 
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith(
-          `/api/tokens/${WEB_RUNNER.token}`,
+          `/api/tokens/${WEB_RUNNER.id}`,
           expect.objectContaining({ method: "DELETE" }),
         );
       });

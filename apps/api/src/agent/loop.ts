@@ -229,9 +229,9 @@ export function buildSessionMeta(
 // owns it: it is never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
-// Finish-gate pushback cap: after this many nudges the run writes up anyway
-// rather than looping; the time budget bounds it as well.
-const MAX_NUDGES = 5;
+// Finish-gate pushback cap: after this many the run writes up anyway rather
+// than looping; the time budget bounds it as well.
+const MAX_FINISH_PUSHBACKS = 5;
 
 // Consecutive turns that asked for nothing but unavailable tools. Three is
 // enough to tell a wrong guess from a model with nothing left to try.
@@ -244,6 +244,10 @@ const MAX_REPORT_ATTEMPTS = 5;
 // Past orientation and long before the budget matters. A check, not a repair:
 // nothing has failed, the run has simply read a lot and settled none of it.
 const CALLS_BEFORE_RECORD_CHECK = 8;
+
+// Every check is a durable row the seed replays, so a run that never records
+// is bounded rather than asked for the rest of it.
+const MAX_RECORD_CHECKS = 3;
 
 /* Whether this turn wrote the report, read from the tool's own answer. The
    record cannot say: a follow-up run already holds one, so its presence proves
@@ -534,7 +538,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   };
 
   let turn = 0;
-  let nudges = 0;
+  let finishPushbacks = 0;
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
   let barrenTurns = 0;
@@ -543,7 +547,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
      that settles something early and then reads on is asked again. */
   let callsSinceClaim = 0;
   let claimsSeen = 0;
-  // How many completion requests each gap has survived, so a repeat is loud.
+  // The debt when the check last spoke, so it asks again after another eight
+  // rather than every turn. Only recording clears the debt itself.
+  let checkedAt = 0;
+  let recordChecks = 0;
+  // How many finish-gate pushbacks each gap has survived, so a repeat is loud.
   const gapsSeen = new Map<RecordGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
@@ -749,30 +757,30 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         log.info({ turn }, "chat finished with free-form response");
         return "completed";
       }
-      // Push back up to MAX_NUDGES times, then write up regardless: the status
-      // an unfinished record derives to is already the honest one.
+      // Push back up to MAX_FINISH_PUSHBACKS times, then write up regardless:
+      // the status an unfinished record derives to is already the honest one.
       const gaps = recordGaps(sessionId, callsSinceClaim);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
       // record, so the gate never makes a network call as a run happens to end.
       const recovery = recoveryState(sessionId);
       if (gaps.length > 0) {
-        if (nudges < MAX_NUDGES) {
-          nudges++;
+        if (finishPushbacks < MAX_FINISH_PUSHBACKS) {
+          finishPushbacks++;
           for (const gap of gaps) {
             const seen = (gapsSeen.get(gap.kind) ?? 0) + 1;
             gapsSeen.set(gap.kind, seen);
-            // A gap that outlives its own request is a broken tool or a
+            // A gap that outlives its own pushback is a broken tool or a
             // description the model cannot act on, not a distracted model.
             if (seen > 1) {
               log.warn(
-                { turn, gap: gap.kind, requests: seen },
-                "finish gate: gap survived a completion request",
+                { turn, gap: gap.kind, pushbacks: seen },
+                "finish gate: gap survived a pushback",
               );
             }
           }
           log.info(
-            { turn, nudges, gaps: gaps.map((g) => g.kind), recovery },
-            "finish gate: record incomplete, requesting completion",
+            { turn, finishPushbacks, gaps: gaps.map((g) => g.kind), recovery },
+            "finish gate: record incomplete, pushing back",
           );
           sendHarnessMessage(provider, recordGapsMessage(gaps));
           persist();
@@ -929,6 +937,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     if (claims > claimsSeen) {
       claimsSeen = claims;
       callsSinceClaim = 0;
+      checkedAt = 0;
     }
     /* Calls that answered and could back a claim: a refused one taught the run
        nothing, and recording is not reading. Counted here rather than earlier: a
@@ -941,12 +950,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         result.toolOutcome === undefined &&
         evidenceCalls.has(result.tool_use_id),
     ).length;
-    if (opensInvestigation && callsSinceClaim >= CALLS_BEFORE_RECORD_CHECK) {
+    if (
+      opensInvestigation &&
+      recordChecks < MAX_RECORD_CHECKS &&
+      callsSinceClaim - checkedAt >= CALLS_BEFORE_RECORD_CHECK
+    ) {
       log.info({ turn, callsSinceClaim }, "reads unaccounted for; asking");
       sendHarnessMessage(provider, recordCheck(callsSinceClaim));
-      // Cleared by the asking, so an unanswered question is put again after
-      // another eight rather than every turn from here on.
-      callsSinceClaim = 0;
+      recordChecks++;
+      checkedAt = callsSinceClaim;
     }
     persist();
   }

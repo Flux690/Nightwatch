@@ -28,7 +28,6 @@ const INSTALL_SCRIPT = "#!/bin/sh\necho install-docker";
 
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
-  token: "new-token-uuid",
   platform: "docker" as const,
   serverName: "web-01",
   hostname: null,
@@ -40,7 +39,6 @@ const AWAITING_RUNNER: RunnerRecord = {
 
 const CONNECTED_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
-  token: "new-token-uuid",
   platform: "docker" as const,
   serverName: "web-01",
   hostname: "web-01",

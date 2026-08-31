@@ -1,5 +1,9 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { vi } from "vitest";
+
+// testTimeout does not reach waitFor, which keeps its own 1s default.
+configure({ asyncUtilTimeout: 5_000 });
 
 const { getComputedStyle } = window;
 window.getComputedStyle = (elt) => getComputedStyle(elt);

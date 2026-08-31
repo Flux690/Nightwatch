@@ -33,6 +33,7 @@ import {
 } from "../session/store.js";
 import { appendErrorMessage } from "../session/transcript-store.js";
 import { randomUUID } from "node:crypto";
+import { listSessionPage } from "../session/list.js";
 import { waitFor } from "./wait.js";
 import { seedAlertSession } from "./session-helper.js";
 import { reconcileRecovery } from "../verification/reconciler.js";
@@ -113,7 +114,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
 
   afterEach(async () => {
     // Drain parked runs so a later test never inherits a held seat. A released
-    // finish re-parks while the finish gate nudges, so release repeatedly.
+    // finish re-parks while the finish gate pushes back, so release repeatedly.
     await settle();
     gate.releaseAll();
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -148,7 +149,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     );
   }
 
-  // A released finish re-parks while the finish gate nudges for a record, so
+  // A released finish re-parks while the finish gate pushes back for a record, so
   // one release is not the end of a run - keep releasing until nothing is live.
   async function settle(): Promise<void> {
     for (let i = 0; i < 40 && liveSessions().length > 0; i++) {
@@ -384,6 +385,29 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
       await settle();
       // No session was opened to report on a condition that was already over.
       expect(countInvestigations()).toBe(before + 1);
+    });
+
+    // No seat at all, so what waits cannot depend on an earlier run draining.
+    it("reports the queue on the session list, so a reload still draws it", async () => {
+      useImmediateProvider();
+      updateConfig({ maxConcurrentInvestigations: 0 });
+      const before = countInvestigations();
+
+      await ingest(
+        delivery('{}:{alertname="Waits"}', [{ fingerprint: "band-1" }]),
+      );
+      expect(queueDepth().waiting).toBe(1);
+      expect(countInvestigations()).toBe(before);
+
+      const page = listSessionPage(50, 0, "investigation");
+      expect(page.queue).toMatchObject({ waiting: 1, limit: 0 });
+      expect(page.queue.oldestArrivedAt).not.toBeNull();
+
+      markAlertCleared(
+        "band-1",
+        "2026-07-07T03:00:00.000Z",
+        new Date().toISOString(),
+      );
     });
   });
 });

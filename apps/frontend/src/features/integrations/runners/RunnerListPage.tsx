@@ -264,17 +264,17 @@ export function RunnerListPage({
         <div className="flex flex-col gap-3">
           {sorted.map((runner) => (
             <ServerCard
-              key={runner.token}
+              key={runner.id}
               runner={runner}
               actions={
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={removing === runner.token}
+                  disabled={removing === runner.id}
                   aria-label={`Remove ${runner.serverName}`}
-                  onClick={() => void handleRemove(runner.token)}
+                  onClick={() => void handleRemove(runner.id)}
                 >
-                  {removing === runner.token && <Spinner className="size-3" />}
+                  {removing === runner.id && <Spinner className="size-3" />}
                   Remove
                 </Button>
               }

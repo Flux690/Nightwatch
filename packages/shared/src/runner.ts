@@ -53,7 +53,6 @@ export type RunnerManifest = DockerManifest | KubernetesManifest;
 
 export interface RunnerRecord {
   id: string;
-  token: string;
   platform: Platform;
   serverName: string;
   hostname: string | null;

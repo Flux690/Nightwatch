@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Telescope } from "lucide-react";
-import type { SessionListRow } from "@nightwarden/shared";
+import type { QueueState, SessionListRow } from "@nightwarden/shared";
 
 import { Page, SectionHeading } from "@/shared/ui/Page";
 import { Button } from "@/shared/ui/button";
@@ -85,8 +85,12 @@ function InvestigationRow({
 
 // Waiting alerts are not sessions, so not rows. No colour either: nobody is
 // holding this up, the fleet is at a limit the reader can raise.
-function QueueBand({ queue }: { queue: QueueState }): React.JSX.Element | null {
-  if (queue.waiting === 0) return null;
+function QueueBand({
+  queue,
+}: {
+  queue: QueueState | null;
+}): React.JSX.Element | null {
+  if (queue === null || queue.waiting === 0) return null;
   const alerts = queue.waiting === 1 ? "1 alert" : `${queue.waiting} alerts`;
   return (
     <p className="mb-6 flex items-center gap-2 text-sm">
@@ -125,13 +129,6 @@ function NothingYet(): React.JSX.Element {
   );
 }
 
-interface QueueState {
-  waiting: number;
-  running: number;
-  limit: number;
-  oldestArrivedAt: string | null;
-}
-
 export function InvestigationsPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const {
@@ -141,17 +138,16 @@ export function InvestigationsPage(): React.JSX.Element {
     hasMore,
     isLoadingMore,
     loadMore,
+    queue: fetched,
   } = useSessions("investigation");
-  const [queue, setQueue] = useState<QueueState>({
-    waiting: 0,
-    running: 0,
-    limit: 0,
-    oldestArrivedAt: null,
-  });
+  // Null until an event lands, and the fetch stands in: a reload receives no
+  // event, so without it the band is blank while alerts wait.
+  const [pushed, setPushed] = useState<QueueState | null>(null);
+  const queue = pushed ?? fetched;
 
   useFrontendEvents((env) => {
     if (env.type === "QUEUE_CHANGED") {
-      setQueue(env.payload);
+      setPushed(env.payload);
       return;
     }
     if (env.type === "SESSION_TITLE_UPDATED") {

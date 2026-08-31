@@ -8,7 +8,11 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
-import type { SessionAlert, SessionListRow } from "@nightwarden/shared";
+import type {
+  QueueState,
+  SessionAlert,
+  SessionListRow,
+} from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { routeTree } from "@/app/router";
@@ -96,12 +100,20 @@ function alertOn(alertType: string, clearedAt: string | null): SessionAlert {
   };
 }
 
+const NO_QUEUE: QueueState = {
+  waiting: 0,
+  running: 0,
+  limit: 10,
+  oldestArrivedAt: null,
+};
+
 // The real route tree, not a copy of it: the redirect, the two session route
 // families and the pages they land on are exactly what ships.
 function setup({
   path = "/agent",
   width = 1280,
-}: { path?: string; width?: number } = {}) {
+  queue = NO_QUEUE,
+}: { path?: string; width?: number; queue?: QueueState } = {}) {
   MockEventSource.reset();
   vi.stubGlobal("EventSource", MockEventSource);
   vi.stubGlobal("innerWidth", width);
@@ -196,6 +208,7 @@ function setup({
             rows,
             nextOffset: null,
             investigationTotal: INVESTIGATIONS.length,
+            queue,
           }),
       });
     }
@@ -290,6 +303,24 @@ describe("Shell", () => {
   // Not sessions, so not rows: a row promises a transcript and something to open.
   // The band names the limit, because raising it is what the reader can do.
   describe("the alert queue band", () => {
+    // A reload receives no event, so the band has to come from the list fetch.
+    it("draws itself from the list fetch, before any event arrives", async () => {
+      setup({
+        path: "/investigations",
+        queue: {
+          waiting: 2,
+          running: 10,
+          limit: 10,
+          oldestArrivedAt: new Date(Date.now() - 90_000).toISOString(),
+        },
+      });
+
+      expect(await screen.findByText("2 alerts waiting")).toBeInTheDocument();
+      expect(
+        screen.getByText(/10 of 10 investigations running/),
+      ).toBeInTheDocument();
+    });
+
     it("says nothing while nothing is waiting", async () => {
       setup({ path: "/investigations" });
       await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
@@ -405,14 +436,19 @@ describe("Shell", () => {
       const user = userEvent.setup();
       setup({ width: 900 });
 
+      // The toggle is what says the shell has rendered. An absent sidebar is
+      // also what an empty tree looks like, so waiting on that proves nothing.
+      const toggle = await screen.findByRole("button", {
+        name: /toggle sidebar/i,
+      });
       // Nothing of the sidebar is on screen - not even a rail - so the control
       // that reopens it cannot be inside it.
-      await waitFor(() => expect(sidebarState()).toBeNull());
+      expect(sidebarState()).toBeNull();
       expect(
         screen.queryByRole("link", { name: "Investigations" }),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /toggle sidebar/i }));
+      await user.click(toggle);
 
       expect(
         await screen.findByRole("link", { name: "Investigations" }),

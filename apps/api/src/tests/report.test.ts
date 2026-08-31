@@ -1150,8 +1150,8 @@ describe("the investigation record", () => {
     });
 
     it("asks a run that recorded nothing for the record, then writes up anyway", async () => {
-      // Every turn is a free-form finish; the gate should push back MAX_NUDGES
-      // times before giving up and composing from what there is.
+      // Every turn is a free-form finish; the gate should push back
+      // MAX_FINISH_PUSHBACKS times before giving up and composing from what there is.
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([{ toolUses: [], text: "All done." }]),
       );
@@ -1168,7 +1168,7 @@ describe("the investigation record", () => {
       const requests = recordGapsMessages();
       expect(requests).toHaveLength(5);
       expect(requests[0]).toContain("recorded nothing");
-      // The opening turn plus one per nudge, then every report attempt - the
+      // The opening turn plus one per pushback, then every report attempt - the
       // scripted model never calls the tool, so the run ends with no report.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
@@ -1529,9 +1529,9 @@ describe("the investigation record", () => {
         unregisterRunner(conn);
       });
 
-      /* Below the nudge's threshold, so nothing asks mid-run - but the reads
+      /* Below the check's threshold, so nothing asks mid-run - but the reads
          still stand unaccounted for when the model says it is done. */
-      it("asks at the finish gate for reads the nudge never reached", async () => {
+      it("asks at the finish gate for reads the check never reached", async () => {
         const conn = connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
@@ -1550,7 +1550,7 @@ describe("the investigation record", () => {
 
         await runSession({ sessionId, alerts: [alert("gate-tail")] });
 
-        // Two reads, under the eight the nudge waits for, so only the gate spoke.
+        // Two reads, under the eight the check waits for, so only the gate spoke.
         expect(checks()).toHaveLength(0);
         const asked = recordGapsMessages().filter((m) =>
           m.includes("Nothing on the record accounts for"),
@@ -1585,6 +1585,42 @@ describe("the investigation record", () => {
         await runSession({ sessionId, alerts: [alert("record-check-quiet")] });
 
         expect(checks()).toHaveLength(1);
+        unregisterRunner(conn);
+      });
+
+      // Asking clears the question, never the debt the gate reads.
+      it("holds the debt the check asked about against the finish gate", async () => {
+        const conn = connectRunner();
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            ...recordTurn("disproven", "the disk filled"),
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            readTurn(),
+            { toolUses: [], text: "Done." },
+            ...recordTurn("symptom", "the cache stayed cold"),
+            { toolUses: [], text: "Done." },
+            submitTurn(),
+          ]),
+        );
+        const sessionId = randomUUID();
+        seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+          alert("check-then-gate"),
+        ]);
+
+        await runSession({ sessionId, alerts: [alert("check-then-gate")] });
+
+        // Asked once mid-run, at eight, and not again one read later.
+        expect(checks()).toHaveLength(1);
+        const asked = recordGapsMessages().filter((m) =>
+          m.includes("Nothing on the record accounts for"),
+        );
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toContain("the 8 tool calls you answered");
+        // The claim that answered the gate is what let the run write up.
+        expect(getRecord(sessionId)!.hypotheses).toHaveLength(2);
+        expect(getRecord(sessionId)!.report).not.toBeNull();
         unregisterRunner(conn);
       });
     });

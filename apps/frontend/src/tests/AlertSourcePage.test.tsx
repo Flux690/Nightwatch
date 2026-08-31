@@ -20,7 +20,6 @@ const INGEST_URL = "http://api.test/alerts/ingest";
 function dockerRunner(name: string): RunnerRecord {
   return {
     id: name,
-    token: name,
     platform: "docker" as const,
     serverName: name,
     hostname: `${name}-host`,
