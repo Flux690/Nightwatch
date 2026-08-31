@@ -406,4 +406,6 @@ NightWarden is licensed under the [Fair Core License, Version 1.0, ALv2 Future L
 
 Each version becomes Apache-2.0 on the second anniversary of its release, and that grant is irrevocable.
 
+NightWarden's terms cover NightWarden. Its dependencies stay under the licences their own authors granted: every image carries `LICENSE` and `NOTICE` at its root, and the licence text of everything bundled into the frontend is served at `/THIRD-PARTY-LICENSES.txt`.
+
 This is **source available**, not open source: the Open Source Definition does not allow a licence to restrict what software may be used for, so calling it open source would be wrong.

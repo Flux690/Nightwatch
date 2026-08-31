@@ -6,6 +6,7 @@ import { brotliCompress } from "node:zlib";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import license from "rollup-plugin-license";
 import { defineConfig, type Plugin } from "vite";
 
 const compress = promisify(brotliCompress);
@@ -37,6 +38,24 @@ function precompress(): Plugin {
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), precompress()],
+  build: {
+    rollupOptions: {
+      // Vite inlines these packages into the bundle, so unlike an installed
+      // dependency their licences reach the image only if written out here.
+      plugins: [
+        license({
+          thirdParty: {
+            includePrivate: false,
+            output: {
+              file: fileURLToPath(
+                new URL("./dist/THIRD-PARTY-LICENSES.txt", import.meta.url),
+              ),
+            },
+          },
+        }),
+      ],
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

@@ -13,4 +13,7 @@ tree itself:
 
 Components under the Apache License 2.0 are redistributed under section 4 of
 that licence; where such a component ships its own NOTICE file, that file
-travels with the component in node_modules and its contents apply.
+travels with the component in node_modules and its contents apply. The
+frontend's dependencies are bundled into the browser assets rather than
+installed, so their licences travel instead as THIRD-PARTY-LICENSES.txt beside
+that bundle.
