@@ -4,7 +4,6 @@ import type {
   NormalizedAlert,
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
-import { listMetricsSources } from "../integrations/metrics/sources.js";
 import {
   ADDRESSING_PROTOCOL,
   BASE_PROMPT,
@@ -56,9 +55,7 @@ export function buildChatContext(
   // `server` parameter is drawn from.
   return {
     systemPrompt:
-      systemPromptFor(opts, investigation) +
-      buildFleetSummary(fleetView) +
-      buildMetricsSummary(),
+      systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),
     openingTurn: null,
   };
 }
@@ -106,7 +103,7 @@ export function buildInitialContext(
 <alert>
 ${alertsSection}
 </alert>
-${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}${buildMetricsSummary()}
+${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}
 Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
   // Stripped whole: labels, annotations and group context are the sender's text,
@@ -144,21 +141,6 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
     return `${r.serverName} (${kind}): ${targets}`;
   });
   return `\n<fleet-summary>\nEach line names one server - a Docker host or a Kubernetes cluster - and the target keys it advertises. A target key begins with the name of the server it is on, so a key identifies one service on one machine and nothing else needs to say where it is.\n${lines.join("\n")}\n</fleet-summary>\n`;
-}
-
-// Only when there is a choice to make: several sources make `metricsSource`
-// required, exactly as several servers make `server` worth naming.
-function buildMetricsSummary(): string {
-  const sources = listMetricsSources();
-  if (sources.length < 2) return "";
-  const lines = sources.map((b) => {
-    const rules =
-      b.rules === null
-        ? "no rules endpoint, so it cannot say whether an alerting rule is firing"
-        : "serves alerting rules";
-    return `${b.label}: ${b.capabilities.label}, ${rules}`;
-  });
-  return `\nMore than one metrics source is connected, so every metrics call must name the one you mean in its "metricsSource" argument, written exactly as it appears here.\n${lines.join("\n")}\n`;
 }
 
 // Prometheus puts the expression that fired in the generator link's query string,

@@ -3,7 +3,7 @@ import { initSecrets } from "../secrets.js";
 import { clearTestLLM, connectTestMetrics, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
 import { seedIntegrationsFromEnv } from "../integrations/seed.js";
-import { listMetricsSourceRows } from "../integrations/metrics/store.js";
+import { metricsSourceRow } from "../integrations/metrics/store.js";
 import { getDb } from "../db.js";
 import { getLokiIntegration } from "../integrations/store.js";
 
@@ -167,7 +167,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsSourceRows()[0]).toMatchObject({
+    expect(metricsSourceRow()).toMatchObject({
       kind: "prometheus",
       queryUrl: "http://prom.internal:9090",
       // Prometheus serves its own rules, which is what makes recovery
@@ -179,9 +179,7 @@ describe("first-boot integration seed from the environment", () => {
       orgId: "tenant-a",
     });
     // The accessor hands back plaintext; the column never holds it.
-    expect(listMetricsSourceRows()[0]?.queryAuthorization).toBe(
-      "Bearer prom-secret",
-    );
+    expect(metricsSourceRow()?.queryAuthorization).toBe("Bearer prom-secret");
     const stored = getDb()
       .prepare("SELECT secrets FROM integrations WHERE kind = 'prometheus'")
       .get() as { secrets: string };
@@ -194,7 +192,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsSourceRows()).toHaveLength(0);
+    expect(metricsSourceRow()).toBeNull();
   });
 
   it("never overwrites an integration the user already connected", async () => {
@@ -205,9 +203,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsSourceRows()[0]?.queryUrl).toBe(
-      "http://chosen-by-user:9090",
-    );
+    expect(metricsSourceRow()?.queryUrl).toBe("http://chosen-by-user:9090");
     // Not even probed: the database already owns this one.
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -215,7 +211,7 @@ describe("first-boot integration seed from the environment", () => {
   it("does nothing when the variables are absent", async () => {
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsSourceRows()).toHaveLength(0);
+    expect(metricsSourceRow()).toBeNull();
     expect(getLokiIntegration()).toBeNull();
   });
 });

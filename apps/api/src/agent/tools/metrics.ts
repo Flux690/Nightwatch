@@ -10,8 +10,7 @@ import {
   type MetricsSeries,
 } from "../../integrations/metrics/client.js";
 import {
-  listMetricsSources,
-  soleMetricsSource,
+  getMetricsSource,
   type MetricsSource,
 } from "../../integrations/metrics/sources.js";
 import { alertAnchorFor } from "./alert-anchor.js";
@@ -53,14 +52,6 @@ const TARGET_POINTS_PER_SERIES = 200;
 const MAX_METRIC_NAMES = 100;
 const MAX_ALERT_RULES = 50;
 
-// Consulted only when more than one source is connected, and named after the
-// context block that lists them so the model copies rather than invents.
-const METRICS_SOURCE_PROPERTY = {
-  type: "string",
-  description:
-    "The name of one metrics source, written exactly as the <metrics-sources> block gives it. Supply this only when that list shows more than one; with a single source connected it is the only one there is, and naming it changes nothing.",
-} as const;
-
 function clampedNumber(
   input: Record<string, unknown>,
   key: string,
@@ -86,40 +77,15 @@ function capSeries(data: MetricsQueryData): MetricsQueryResult {
   };
 }
 
-/* Which source this call means. One connected needs no argument; several make
-   the argument required, because guessing which of two Prometheus clusters was
-   meant would answer a question nobody asked. */
-function resolveMetricsSource(
-  input: Record<string, unknown>,
-): MetricsSource | ToolExecuteResult {
-  const all = listMetricsSources();
-  if (all.length === 0) {
-    return {
+// One source or none, so a call names nothing and this only reports absence.
+function resolveMetricsSource(): MetricsSource | ToolExecuteResult {
+  return (
+    getMetricsSource() ?? {
       content:
         "No metrics source is connected. The user can connect one from the Integrations page. Continue without metric evidence.",
       toolOutcome: "permission",
-    };
-  }
-  const named = input["metricsSource"];
-  if (typeof named !== "string" || named.trim() === "") {
-    const sole = soleMetricsSource();
-    if (sole !== null) return sole;
-    return {
-      content: `More than one metrics source is connected, so name the one you mean in "metricsSource": ${all
-        .map((b) => b.label)
-        .join(", ")}.`,
-      toolOutcome: "system",
-    };
-  }
-  const wanted = named.trim().toLowerCase();
-  const match = all.find((b) => b.label.toLowerCase() === wanted);
-  if (match !== undefined) return match;
-  return {
-    content: `No metrics source is named "${named.trim()}". The connected ones are: ${all
-      .map((b) => b.label)
-      .join(", ")}.`,
-    toolOutcome: "system",
-  };
+    }
+  );
 }
 
 // An empty series is not a reading of zero: a metric name that does not exist
@@ -173,7 +139,6 @@ export const METRICS_TOOLS: Tool[] = [
             description:
               "Which moment to evaluate at. 'now', the default, reads the current value. 'alert' reads the value as of the instant the alert that opened this investigation fired; on a session no alert opened, it means the same as 'now'.",
           },
-          metricsSource: METRICS_SOURCE_PROPERTY,
         },
         required: ["query"],
       },
@@ -184,7 +149,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource(input);
+      const source = resolveMetricsSource();
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -242,7 +207,6 @@ export const METRICS_TOOLS: Tool[] = [
             description:
               "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
           },
-          metricsSource: METRICS_SOURCE_PROPERTY,
         },
         required: ["query"],
       },
@@ -253,7 +217,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource(input);
+      const source = resolveMetricsSource();
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -338,7 +302,6 @@ export const METRICS_TOOLS: Tool[] = [
             description:
               "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
           },
-          metricsSource: METRICS_SOURCE_PROPERTY,
         },
         required: [],
       },
@@ -349,7 +312,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource(input);
+      const source = resolveMetricsSource();
       if (!isSource(source)) return source;
       const contains = input["contains"];
       try {
@@ -393,7 +356,6 @@ export const METRICS_TOOLS: Tool[] = [
             description:
               "The exact metric name, as it appears in ListMetricNames or in a series you have already queried.",
           },
-          metricsSource: METRICS_SOURCE_PROPERTY,
         },
         required: ["metric"],
       },
@@ -404,7 +366,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource(input);
+      const source = resolveMetricsSource();
       if (!isSource(source)) return source;
       const metric = input["metric"];
       if (typeof metric !== "string" || metric.trim() === "") {
@@ -452,7 +414,6 @@ export const METRICS_TOOLS: Tool[] = [
             description:
               "Case-insensitive substring the rule name must contain. Omit to list every rule.",
           },
-          metricsSource: METRICS_SOURCE_PROPERTY,
         },
         required: [],
       },
@@ -463,7 +424,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource(input);
+      const source = resolveMetricsSource();
       if (!isSource(source)) return source;
       // A source with no rules endpoint has told us nothing, not that it
       // evaluates none: VictoriaMetrics serves them from vmalert alone.

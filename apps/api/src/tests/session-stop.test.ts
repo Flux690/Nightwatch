@@ -89,7 +89,7 @@ describe("POST /sessions/:id/stop", () => {
   // The stop lands while the turn's read is still running, so the run reaches
   // the write already aborted - the only window this can happen in.
   it("ends a run as stopped when the stop lands on a turn holding a write", async () => {
-    const sourceId = connectTestMetrics({ queryUrl: "http://prom.test" });
+    connectTestMetrics({ queryUrl: "http://prom.test" });
     mockCreateProvider.mockImplementationOnce(() =>
       createContractFakeProvider([
         {
@@ -184,6 +184,6 @@ describe("POST /sessions/:id/stop", () => {
 
     frontend.close();
     vi.unstubAllGlobals();
-    deleteMetricsSource(sourceId);
+    deleteMetricsSource();
   });
 });

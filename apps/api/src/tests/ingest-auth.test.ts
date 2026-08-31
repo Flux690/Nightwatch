@@ -270,7 +270,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(lastReceived()).not.toBeNull();
 
     // Prometheus alone is a sufficient evidence source - the agentless path.
-    const sourceId = connectTestMetrics();
+    connectTestMetrics();
     const promOnly = await server.inject({
       method: "POST",
       url: "/api/alerts/ingest",
@@ -281,7 +281,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect((JSON.parse(promOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
-    deleteMetricsSource(sourceId);
+    deleteMetricsSource();
 
     // Loki alone is likewise sufficient - a logs-first, no-metrics fleet.
     saveLokiIntegration({

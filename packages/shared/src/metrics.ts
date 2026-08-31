@@ -55,16 +55,18 @@ export interface MetricsEndpointStatus {
   hasOrgId: boolean;
 }
 
+// One source or none, so every field but `configured` is null when there is
+// none. No id: nothing addresses a source there is only ever one of.
 export interface MetricsSourceStatus {
-  id: string;
-  kind: MetricsSourceKind;
-  // The product's own name, and what a tool call names in `metricsSource`.
-  label: string;
-  query: MetricsEndpointStatus;
+  configured: boolean;
+  kind: MetricsSourceKind | null;
+  // The product's own name, for the card that reports the connection.
+  label: string | null;
+  query: MetricsEndpointStatus | null;
   // Null when no rules endpoint is configured: without one an investigation
   // cannot ask whether the rule that fired still holds.
   rules: MetricsEndpointStatus | null;
-  validatedAt: string;
+  validatedAt: string | null;
 }
 
 export type MetricsErrorCode =

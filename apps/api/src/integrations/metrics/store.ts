@@ -2,8 +2,6 @@ import type { MetricsSourceKind } from "@nightwarden/shared";
 import {
   allIntegrations,
   deleteIntegrationById,
-  integrationById,
-  integrationOfKind,
   putIntegration,
   type IntegrationRow,
 } from "../store.js";
@@ -57,21 +55,12 @@ function isMetricsRow(row: IntegrationRow): boolean {
   return (METRICS_SOURCE_KINDS as readonly string[]).includes(row.kind);
 }
 
-export function listMetricsSourceRows(): MetricsSourceRow[] {
-  return allIntegrations().filter(isMetricsRow).map(toSource);
-}
-
-export function getMetricsSourceRow(id: string): MetricsSourceRow | null {
-  const row = integrationById(id);
-  return row === null || !isMetricsRow(row) ? null : toSource(row);
-}
-
-// One product is connected once; the connect route is what enforces it.
-export function metricsSourceOfKind(
-  kind: MetricsSourceKind,
-): MetricsSourceRow | null {
-  const row = integrationOfKind(kind);
-  return row === null ? null : toSource(row);
+/* One source, whatever product it is: the kind stays one of five, so this
+   filters the kind set rather than reading a single fixed kind the way Loki
+   does. The connect route is what refuses a second. */
+export function metricsSourceRow(): MetricsSourceRow | null {
+  const row = allIntegrations().find(isMetricsRow);
+  return row === undefined ? null : toSource(row);
 }
 
 export interface MetricsSourceInput {
@@ -85,10 +74,7 @@ export interface MetricsSourceInput {
   rulesOrgId: string | null;
 }
 
-export function saveMetricsSource(
-  input: MetricsSourceInput,
-  id?: string,
-): string {
+export function saveMetricsSource(input: MetricsSourceInput): void {
   const secrets: Record<string, string> = {};
   if (input.queryAuthorization !== null) {
     secrets["query"] = input.queryAuthorization;
@@ -96,7 +82,7 @@ export function saveMetricsSource(
   if (input.rulesAuthorization !== null) {
     secrets["rules"] = input.rulesAuthorization;
   }
-  return putIntegration(
+  putIntegration(
     {
       kind: input.kind,
       name: input.label,
@@ -109,12 +95,12 @@ export function saveMetricsSource(
       } satisfies MetricsConfig,
       secrets,
     },
-    id,
+    // Reconnecting replaces in place, as Loki does, so the row keeps its id.
+    metricsSourceRow()?.id,
   );
 }
 
-export function deleteMetricsSource(id: string): boolean {
-  const row = integrationById(id);
-  if (row === null || !isMetricsRow(row)) return false;
-  return deleteIntegrationById(id);
+export function deleteMetricsSource(): void {
+  const row = metricsSourceRow();
+  if (row !== null) deleteIntegrationById(row.id);
 }

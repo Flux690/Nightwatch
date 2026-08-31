@@ -586,10 +586,8 @@ describe("API-local session store", () => {
         return m.sessionId;
       }
 
-      let sourceId: string;
-
       beforeEach(() => {
-        sourceId = connectTestMetrics({
+        connectTestMetrics({
           queryUrl: "http://prom.test",
           rulesUrl: "http://prom.test",
         });
@@ -597,7 +595,7 @@ describe("API-local session store", () => {
 
       afterEach(() => {
         vi.unstubAllGlobals();
-        deleteMetricsSource(sourceId);
+        deleteMetricsSource();
       });
 
       it("resolves once the rules API no longer holds the rule firing", async () => {

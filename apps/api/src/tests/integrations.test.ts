@@ -447,7 +447,11 @@ describe("metrics source routes", () => {
       url: "/api/integrations/metrics",
     });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual([]);
+    expect(JSON.parse(res.body)).toMatchObject({
+      configured: false,
+      kind: null,
+      query: null,
+    });
   });
 
   it("probes both endpoints before saving, since a rules URL that answers nothing is the failure this exists to prevent", async () => {
@@ -568,27 +572,29 @@ describe("metrics source routes", () => {
 
   /* One connection per product: what you point at is already an aggregate, so
      a second Prometheus is a mistake to refuse rather than a name to invent. */
-  it("names a source after its product and refuses a second of that kind", async () => {
+  // What you point at is already an aggregate, so a second one is a mistake.
+  it("refuses a second metrics source, of its own kind or any other", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
-    const payload = {
-      kind: "prometheus",
-      query: { url: "http://prom-a:9090" },
-    };
     const first = await authed({
       method: "POST",
       url: "/api/integrations/metrics",
-      payload,
+      payload: { kind: "prometheus", query: { url: "http://prom-a:9090" } },
     });
-    const second = await authed({
+    const sameKind = await authed({
       method: "POST",
       url: "/api/integrations/metrics",
-      payload: { ...payload, query: { url: "http://prom-b:9090" } },
+      payload: { kind: "prometheus", query: { url: "http://prom-b:9090" } },
+    });
+    const otherKind = await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload: { kind: "thanos", query: { url: "http://thanos:10902" } },
     });
 
     expect(first.statusCode).toBe(201);
-    expect(JSON.parse(first.body).label).toBe("Prometheus");
-    expect(second.statusCode).toBe(409);
-    expect(JSON.parse(second.body).error).toMatch(/already connected/);
+    expect(sameKind.statusCode).toBe(409);
+    expect(otherKind.statusCode).toBe(409);
+    expect(JSON.parse(otherKind.body).error).toMatch(/already connected/);
   });
 
   it("refuses to save when the probe fails - envelope error maps to 400, unreachable to 502", async () => {
@@ -625,32 +631,35 @@ describe("metrics source routes", () => {
       method: "GET",
       url: "/api/integrations/metrics",
     });
-    expect(JSON.parse(status.body)).toEqual([]);
+    expect(JSON.parse(status.body).configured).toBe(false);
   });
 
-  it("disconnects by id and answers 404 for one that never existed", async () => {
+  // No id in the path, as Loki has none: there is one source or none, so
+  // disconnecting twice is idempotent rather than a 404.
+  it("disconnects the one source, and disconnecting nothing is a no-op", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
-    const created = await authed({
+    await authed({
       method: "POST",
       url: "/api/integrations/metrics",
-      payload: {
-        kind: "thanos",
-        query: { url: "http://thanos:10902" },
-      },
+      payload: { kind: "thanos", query: { url: "http://thanos:10902" } },
     });
-    const { id } = JSON.parse(created.body) as { id: string };
 
     const gone = await authed({
       method: "DELETE",
-      url: `/api/integrations/metrics/${id}`,
+      url: "/api/integrations/metrics",
     });
     expect(gone.statusCode).toBe(204);
 
-    const missing = await authed({
+    const again = await authed({
       method: "DELETE",
-      url: "/api/integrations/metrics/not-a-source",
+      url: "/api/integrations/metrics",
     });
-    expect(missing.statusCode).toBe(404);
+    expect(again.statusCode).toBe(204);
+    const after = await authed({
+      method: "GET",
+      url: "/api/integrations/metrics",
+    });
+    expect(JSON.parse(after.body).configured).toBe(false);
   });
 });
 

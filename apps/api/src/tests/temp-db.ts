@@ -37,8 +37,8 @@ export function clearTestLLM(): void {
 // install every seam downstream of a metrics connection assumes.
 export function connectTestMetrics(
   over: Partial<MetricsSourceInput> = {},
-): string {
-  return saveMetricsSource({
+): void {
+  saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: "http://prom.internal:9090",

@@ -12,6 +12,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **One metrics source, not one per product.** Connecting Prometheus now closes the VictoriaMetrics, Mimir, Thanos and AMP cards until you disconnect it, and the agent no longer names a source on any metrics call. What you point at is already an aggregate, so the second connection was a setting that could only ever disagree with itself. — `0.3.172`
 - **Docker and Kubernetes logs carry a timestamp on every line**, the one the engine recorded, so a log line can be placed against the moment the alert fired. `contains` and `excludes` now match the message alone rather than the timestamp beside it. — `0.3.171`
 - **A runner no longer carries a separate label.** The column was left over from when the wizard's field was a cosmetic display name; nothing has written to it since that field became the server name. — `0.3.169` (`970a117`)
 - **A runner's name is required, and it is the server name.** The add-runner wizard called it "Display name (optional)" and it was never either: it is the first segment of every service address the agent copies, and the column is unique. An empty one used to mint fine and then collide with the next empty one. It now refuses spaces and punctuation beyond dots, dashes and underscores, and the API enforces the same rule from the same place. — `0.3.168` (`078d71e`)

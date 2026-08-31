@@ -11,7 +11,7 @@ import {
 import { markAlertCleared } from "../session/alerts-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { getLokiIntegration } from "../integrations/store.js";
-import { hasMetricsSource } from "../integrations/metrics/sources.js";
+import { getMetricsSource } from "../integrations/metrics/sources.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../fleet/connections.js";
 import {
@@ -61,7 +61,7 @@ export async function registerAlertRoutes(
     // logs) makes an investigation worth starting; misroute protection is downstream.
     if (
       getFleetView().length === 0 &&
-      !hasMetricsSource() &&
+      getMetricsSource() === null &&
       getLokiIntegration() === null
     ) {
       return reply.code(503).send({

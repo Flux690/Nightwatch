@@ -40,7 +40,7 @@ import {
   getGitHubIntegration,
   getLokiIntegration,
 } from "../integrations/store.js";
-import { hasMetricsSource } from "../integrations/metrics/sources.js";
+import { getMetricsSource } from "../integrations/metrics/sources.js";
 import { getSession } from "../session/store.js";
 import {
   appendErrorMessage,
@@ -163,7 +163,7 @@ function currentToolset(investigation: boolean): OfferedToolset {
     connectedPlatforms(),
     {
       github: getGitHubIntegration() !== null,
-      metrics: hasMetricsSource(),
+      metrics: getMetricsSource() !== null,
       loki: getLokiIntegration() !== null,
     },
     investigation,

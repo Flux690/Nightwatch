@@ -48,9 +48,18 @@ function renderPage(kind: MetricsSourceKind) {
   );
 }
 
+const NOT_CONNECTED = {
+  configured: false,
+  kind: null,
+  label: null,
+  query: null,
+  rules: null,
+  validatedAt: null,
+};
+
 function connected(over: Partial<MetricsSourceStatus> = {}) {
   return {
-    id: "b1",
+    configured: true,
     kind: "victoriametrics",
     label: "VictoriaMetrics",
     query: { url: "http://vmselect:8481", hasAuth: false, hasOrgId: false },
@@ -60,8 +69,8 @@ function connected(over: Partial<MetricsSourceStatus> = {}) {
   };
 }
 
-// Captures what the page posts, and answers the list from whatever a case sets.
-function stubApi(list: unknown[]) {
+// Captures what the page posts, and answers the status from what a case sets.
+function stubApi(status: unknown) {
   const posted: Array<Record<string, unknown>> = [];
   const fetchMock = vi
     .fn<(url: string, init?: RequestInit) => Promise<unknown>>()
@@ -72,7 +81,7 @@ function stubApi(list: unknown[]) {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(init?.method === "POST" ? list[0] : list),
+        json: () => Promise.resolve(status),
       });
     });
   vi.stubGlobal("fetch", fetchMock);
@@ -89,7 +98,7 @@ describe("MetricsSourcePage", () => {
      name and the form has nothing to ask about naming. */
   it("posts both endpoints, and asks for no name", async () => {
     const user = userEvent.setup();
-    const posted = stubApi([]);
+    const posted = stubApi(NOT_CONNECTED);
     renderPage("victoriametrics");
 
     await user.type(
@@ -111,7 +120,7 @@ describe("MetricsSourcePage", () => {
   /* A supported configuration that costs something specific, so the page names
      the path that still works rather than reporting a plain "Connected". */
   it("says what a source with no rules endpoint costs", async () => {
-    stubApi([connected({ rules: null })]);
+    stubApi(connected({ rules: null }));
     renderPage("victoriametrics");
 
     const warning = await screen.findByText(/No rules endpoint/);
@@ -121,7 +130,7 @@ describe("MetricsSourcePage", () => {
   });
 
   it("warns that VictoriaMetrics answers nothing for metric metadata", async () => {
-    stubApi([]);
+    stubApi(NOT_CONNECTED);
     renderPage("victoriametrics");
 
     expect(
@@ -132,7 +141,7 @@ describe("MetricsSourcePage", () => {
   // Grafana Cloud hands out an instance id and a token, so Mimir opens on the
   // pair rather than on a header the user would encode themselves.
   it("opens Mimir on the pair Grafana Cloud gives you", async () => {
-    stubApi([]);
+    stubApi(NOT_CONNECTED);
     renderPage("mimir");
 
     expect(await screen.findByLabelText("Username")).toBeInTheDocument();
@@ -142,12 +151,12 @@ describe("MetricsSourcePage", () => {
   /* X-Scope-OrgID is Mimir's alone. VictoriaMetrics carries its tenant in the
      URL path, and Prometheus and Thanos have no such concept at all. */
   it("asks for a tenant on Mimir and nowhere else", async () => {
-    stubApi([]);
+    stubApi(NOT_CONNECTED);
     renderPage("mimir");
     expect(await screen.findByLabelText("Tenant")).toBeInTheDocument();
 
     cleanup();
-    stubApi([]);
+    stubApi(NOT_CONNECTED);
     renderPage("prometheus");
     await screen.findByLabelText("Query URL");
     expect(screen.queryByLabelText("Tenant")).not.toBeInTheDocument();
@@ -157,7 +166,7 @@ describe("MetricsSourcePage", () => {
      basic pair sent beside it, so the form must never send both. */
   it("sends only the credential the chosen method names", async () => {
     const user = userEvent.setup();
-    const posted = stubApi([]);
+    const posted = stubApi(NOT_CONNECTED);
     renderPage("mimir");
 
     await user.type(await screen.findByLabelText("Username"), "123456");

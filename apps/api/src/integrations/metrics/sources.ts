@@ -5,11 +5,7 @@ import type {
   MetricsEndpointInput,
   MetricsEndpointStatus,
 } from "@nightwarden/shared";
-import {
-  getMetricsSourceRow,
-  listMetricsSourceRows,
-  type MetricsSourceRow,
-} from "./store.js";
+import { metricsSourceRow, type MetricsSourceRow } from "./store.js";
 import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
 
@@ -17,7 +13,6 @@ import type { MetricsEndpoint } from "./client.js";
    here, so nowhere else decrypts a credential or decides whether a rules API
    exists. */
 export interface MetricsSource {
-  id: string;
   kind: MetricsSourceKind;
   label: string;
   query: MetricsEndpoint;
@@ -91,7 +86,6 @@ function resolve(row: MetricsSourceRow): MetricsSource {
             name: `${name} rules`,
           };
   return {
-    id: row.id,
     kind: row.kind,
     label: name,
     query,
@@ -100,24 +94,10 @@ function resolve(row: MetricsSourceRow): MetricsSource {
   };
 }
 
-export function listMetricsSources(): MetricsSource[] {
-  return listMetricsSourceRows().map(resolve);
-}
-
-export function getMetricsSource(id: string): MetricsSource | null {
-  const row = getMetricsSourceRow(id);
+// One connected source or none, so nothing addresses it and no call names it.
+export function getMetricsSource(): MetricsSource | null {
+  const row = metricsSourceRow();
   return row === null ? null : resolve(row);
-}
-
-// One connected is the ordinary install and needs no argument; with several
-// the tools require one, as a shared target key does.
-export function soleMetricsSource(): MetricsSource | null {
-  const all = listMetricsSources();
-  return all.length === 1 ? (all[0] ?? null) : null;
-}
-
-export function hasMetricsSource(): boolean {
-  return listMetricsSourceRows().length > 0;
 }
 
 // Encoded here rather than asked for as base64: a Grafana Cloud user is handed
@@ -197,12 +177,24 @@ function endpointStatus(endpoint: MetricsEndpoint): MetricsEndpointStatus {
   };
 }
 
+// Loki's shape: an unconfigured answer is a filled-in "no" rather than a null
+// the caller has to guard.
 export function statusOf(
-  source: MetricsSource,
-  validatedAt: string,
+  source: MetricsSource | null,
+  validatedAt: string | null,
 ): MetricsSourceStatus {
+  if (source === null) {
+    return {
+      configured: false,
+      kind: null,
+      label: null,
+      query: null,
+      rules: null,
+      validatedAt: null,
+    };
+  }
   return {
-    id: source.id,
+    configured: true,
     kind: source.kind,
     label: source.label,
     query: endpointStatus(source.query),

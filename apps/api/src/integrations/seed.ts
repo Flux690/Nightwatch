@@ -1,5 +1,6 @@
 import { getLokiIntegration, saveLokiIntegration } from "./store.js";
-import { listMetricsSourceRows, saveMetricsSource } from "./metrics/store.js";
+import { saveMetricsSource } from "./metrics/store.js";
+import { getMetricsSource } from "./metrics/sources.js";
 import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
@@ -19,7 +20,7 @@ export async function seedIntegrationsFromEnv(): Promise<void> {
 }
 
 async function seedPrometheus(): Promise<void> {
-  if (listMetricsSourceRows().length > 0) return;
+  if (getMetricsSource() !== null) return;
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
   const authHeader = optionalEnv("PROMETHEUS_AUTH_HEADER");

@@ -32,33 +32,45 @@ interface IntegrationRow {
   // crowd out the ones that matter. "muted" is configured but not yet proven.
   status: string | null;
   statusVariant?: "success" | "muted";
+  // Shown but not actionable: the one slot is filled by another product.
+  unavailable?: boolean;
 }
 
 /* A full-width row, not a tile. The whole row is the link, so there is no
    Connect button duplicating the one action it already has. */
 function CatalogRow({ row }: { row: IntegrationRow }): React.JSX.Element {
+  const body = (
+    <>
+      <IntegrationLogo logo={row.logo} />
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm leading-tight font-medium text-foreground">
+          {row.title}
+        </span>
+        <span className="text-sm text-muted-foreground">{row.description}</span>
+      </span>
+      {row.status !== null && (
+        <StatusText tone={row.statusVariant === "muted" ? "muted" : "ok"}>
+          {row.status}
+        </StatusText>
+      )}
+    </>
+  );
+  const shape = "flex items-start gap-3 px-4 py-3";
   return (
     <li className="not-last:border-b not-last:border-border">
-      <Link
-        to={row.to}
-        aria-label={row.title}
-        className="flex items-start gap-3 px-4 py-3 no-underline transition-colors hover:bg-card-hover"
-      >
-        <IntegrationLogo logo={row.logo} />
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-sm leading-tight font-medium text-foreground">
-            {row.title}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            {row.description}
-          </span>
-        </span>
-        {row.status !== null && (
-          <StatusText tone={row.statusVariant === "muted" ? "muted" : "ok"}>
-            {row.status}
-          </StatusText>
-        )}
-      </Link>
+      {row.unavailable === true ? (
+        <div aria-label={row.title} className={`${shape} opacity-55`}>
+          {body}
+        </div>
+      ) : (
+        <Link
+          to={row.to}
+          aria-label={row.title}
+          className={`${shape} no-underline transition-colors hover:bg-card-hover`}
+        >
+          {body}
+        </Link>
+      )}
     </li>
   );
 }
@@ -116,11 +128,10 @@ export function IntegrationsPage(): React.JSX.Element {
   const alertmanager = useAlertSource("alertmanager");
   const grafana = useAlertSource("grafana");
 
-  // One query for every source: the list draws a row per product, and each
-  // says whether that product is connected.
-  const { data: metrics } = useQuery<MetricsSourceStatus[]>({
+  // One source across every product, so one status answers all five rows.
+  const { data: metrics } = useQuery<MetricsSourceStatus>({
     queryKey: ["metrics-sources"],
-    queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
+    queryFn: () => apiFetch<MetricsSourceStatus>("/api/integrations/metrics"),
   });
 
   const { data: loki } = useQuery<LokiIntegrationStatus>({
@@ -157,23 +168,29 @@ export function IntegrationsPage(): React.JSX.Element {
     alertSourceCard("grafana", grafana),
     ...METRICS_SOURCE_KINDS.map((kind): IntegrationRow => {
       const identity = INTEGRATION_CATALOG[kind];
-      const source = (metrics ?? []).find((b) => b.kind === kind);
+      const connected = metrics?.configured === true && metrics.kind === kind;
+      // One source across every product, so connecting one closes the other
+      // four rather than offering an action the API would refuse.
+      const heldByAnother =
+        metrics?.configured === true && metrics.kind !== kind;
       /* A source with no rules endpoint is connected and still cannot confirm
          a recovery, so the row says which rather than a flat "Connected". */
-      const blind = source !== undefined && source.rules === null;
+      const blind = connected && metrics.rules === null;
       return {
         title: identity.label,
         description: identity.description,
         category: "Metrics",
         logo: identity.logo,
         to: `/integrations/metrics/${kind}`,
-        status:
-          source === undefined
-            ? null
-            : blind
-              ? "Connected, no rules endpoint"
-              : "Connected",
-        statusVariant: blind ? "muted" : "success",
+        unavailable: heldByAnother,
+        status: !connected
+          ? heldByAnother
+            ? `${metrics.label} is connected`
+            : null
+          : blind
+            ? "Connected, no rules endpoint"
+            : "Connected",
+        statusVariant: blind || heldByAnother ? "muted" : "success",
       };
     }),
     {

@@ -128,7 +128,7 @@ function setup(
     ingestConfigured?: boolean;
     grafanaConfigured?: boolean;
     lastReceivedAt?: string | null;
-    metrics?: unknown[];
+    metrics?: unknown;
     lokiConfigured?: boolean;
   } = {},
 ) {
@@ -138,7 +138,14 @@ function setup(
     ingestConfigured = false,
     grafanaConfigured = false,
     lastReceivedAt = null,
-    metrics = [],
+    metrics = {
+      configured: false,
+      kind: null,
+      label: null,
+      query: null,
+      rules: null,
+      validatedAt: null,
+    },
     lokiConfigured = false,
   } = opts;
 
@@ -356,16 +363,14 @@ describe("IntegrationsPage", () => {
     it("navigates to each page and reports connected once configured", async () => {
       const user = userEvent.setup();
       const { view } = setup({
-        metrics: [
-          {
-            id: "b1",
-            kind: "prometheus",
-            label: "Prometheus",
-            query: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
-            rules: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
-            validatedAt: "2026-08-01T00:00:00.000Z",
-          },
-        ],
+        metrics: {
+          configured: true,
+          kind: "prometheus",
+          label: "Prometheus",
+          query: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
+          rules: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
+          validatedAt: "2026-08-01T00:00:00.000Z",
+        },
       });
 
       await screen.findByText("Prometheus");

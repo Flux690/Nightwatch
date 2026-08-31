@@ -437,10 +437,10 @@ function ConnectedSource({
        this connection - the same line Loki's connected state shows. */
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <p className="text-sm font-medium">{source.query.url}</p>
+        <p className="text-sm font-medium">{source.query?.url}</p>
         <StatusText tone="ok">Connected</StatusText>
-        {source.query.hasAuth && <MetaText>Auth</MetaText>}
-        {source.query.hasOrgId && <MetaText>Tenant</MetaText>}
+        {source.query?.hasAuth && <MetaText>Auth</MetaText>}
+        {source.query?.hasOrgId && <MetaText>Tenant</MetaText>}
       </div>
       {source.rules === null ? (
         /* Said here rather than discovered at 3am: this is the difference
@@ -477,18 +477,20 @@ export function MetricsSourcePage({
   const identity = INTEGRATION_CATALOG[kind];
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const { data: sources, isLoading } = useQuery<MetricsSourceStatus[]>({
+  const { data: status, isLoading } = useQuery<MetricsSourceStatus>({
     queryKey: ["metrics-sources"],
-    queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
+    queryFn: () => apiFetch<MetricsSourceStatus>("/api/integrations/metrics"),
   });
 
-  // One per product, so this is the connection rather than one of several.
-  const connected = (sources ?? []).find((source) => source.kind === kind);
+  // One source across every product, so a card is connected, free, or blocked
+  // by whichever other product holds the slot.
+  const connected = status?.configured === true && status.kind === kind;
+  const heldByAnother = status?.configured === true && status.kind !== kind;
 
-  const disconnect = useDisconnect<string>({
+  const disconnect = useDisconnect({
     label: identity.label,
     queryKey: ["metrics-sources"],
-    endpoint: (id) => `/api/integrations/metrics/${id}`,
+    endpoint: () => "/api/integrations/metrics",
   });
 
   return (
@@ -509,14 +511,26 @@ export function MetricsSourcePage({
           </div>
         )}
 
-        {connected !== undefined && (
+        {connected && status !== undefined && (
           <ConnectedSource
-            source={connected}
+            source={status}
             onRemove={() => setConfirmRemove(true)}
           />
         )}
 
-        {connected === undefined && !isLoading && <ConnectForm kind={kind} />}
+        {heldByAnother && (
+          <Alert variant="warning">
+            <AlertTitle>Another metrics source is connected</AlertTitle>
+            <AlertDescription>
+              NightWarden queries one metrics source. Disconnect {status?.label}{" "}
+              first to connect {identity.label} instead.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!connected && !heldByAnother && !isLoading && (
+          <ConnectForm kind={kind} />
+        )}
       </div>
 
       <ConfirmDialog
@@ -526,9 +540,7 @@ export function MetricsSourcePage({
         description="Investigations lose metric evidence from this source until it is reconnected."
         confirmLabel="Disconnect"
         destructive
-        onConfirm={() => {
-          if (connected !== undefined) disconnect.mutate(connected.id);
-        }}
+        onConfirm={() => disconnect.mutate()}
       />
     </Page>
   );

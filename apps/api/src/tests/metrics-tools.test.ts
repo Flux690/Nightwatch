@@ -480,45 +480,6 @@ describe("metrics tools through the tool dispatch", () => {
 
     /* One connection per product, so several sources means several products,
        each addressed by the product's own name. */
-    describe("addressing one of several", () => {
-      function connectTwo(): void {
-        connect();
-        connect({
-          kind: "thanos",
-          label: "Thanos",
-          queryUrl: "http://thanos-query:9090",
-        });
-      }
-
-      it("refuses to guess which source was meant, and names them", async () => {
-        connectTwo();
-
-        const result = await executeTool(
-          findTool("QueryMetrics")!,
-          { query: "up" },
-          mintSession(ALERT),
-        );
-
-        expect(result.toolOutcome).toBe("system");
-        expect(result.content).toContain("Prometheus");
-        expect(result.content).toContain("Thanos");
-        expect(mock.requests).toHaveLength(0);
-      });
-
-      it("sends the named one, matched however it was capitalised", async () => {
-        connectTwo();
-        mock.result = [];
-
-        await executeTool(
-          findTool("QueryMetrics")!,
-          { query: "up", metricsSource: "THANOS" },
-          mintSession(ALERT),
-        );
-
-        expect(mock.requests).toHaveLength(1);
-      });
-    });
-
     it("offers every discovery tool a corrective result when nothing is connected", async () => {
       for (const name of [
         "ListMetricNames",

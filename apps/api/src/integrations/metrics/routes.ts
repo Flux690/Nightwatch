@@ -5,9 +5,7 @@ import type { MetricsSourceStatus } from "@nightwarden/shared";
 import { requireSession } from "../../auth/session.js";
 import {
   deleteMetricsSource,
-  getMetricsSourceRow,
-  listMetricsSourceRows,
-  metricsSourceOfKind,
+  metricsSourceRow,
   saveMetricsSource,
 } from "./store.js";
 import { logger } from "../../logger.js";
@@ -15,7 +13,6 @@ import { MetricsApiError, instantQuery, alertingRules } from "./client.js";
 import {
   endpointFrom,
   getMetricsSource,
-  listMetricsSources,
   secretFor,
   statusOf,
 } from "./sources.js";
@@ -42,12 +39,8 @@ const ConnectSchema = z.object({
   rules: EndpointSchema.optional(),
 });
 
-function statusPayload(): MetricsSourceStatus[] {
-  const rows = new Map(listMetricsSourceRows().map((r) => [r.id, r]));
-  return listMetricsSources().flatMap((source) => {
-    const row = rows.get(source.id);
-    return row === undefined ? [] : [statusOf(source, row.validatedAt)];
-  });
+function statusPayload(): MetricsSourceStatus {
+  return statusOf(getMetricsSource(), metricsSourceRow()?.validatedAt ?? null);
 }
 
 // bad_query maps to 400 explicitly: a Prometheus-compatible source reports
@@ -90,12 +83,12 @@ export async function registerMetricsRoutes(
       }
       const { kind, query, rules } = parsed.data;
       const name = METRICS_PRESETS[kind].label;
-      /* One connection per product, because the thing you point at is already
-         an aggregate: Prometheus is scaled by putting Thanos or Mimir in front
-         of it, not by listing every replica here. */
-      if (metricsSourceOfKind(kind) !== null) {
+      // One source, whatever product: what you point at is already an
+      // aggregate, so a second is a mistake rather than a name to invent.
+      const connected = getMetricsSource();
+      if (connected !== null) {
         return reply.code(409).send({
-          error: `${name} is already connected. Disconnect it first.`,
+          error: `${connected.label} is already connected. Disconnect it first.`,
         });
       }
       try {
@@ -103,7 +96,7 @@ export async function registerMetricsRoutes(
         if (rules !== undefined) {
           await alertingRules(endpointFrom(rules, `${name} rules`, kind));
         }
-        const id = saveMetricsSource({
+        saveMetricsSource({
           kind,
           label: name,
           queryUrl: query.url,
@@ -114,27 +107,21 @@ export async function registerMetricsRoutes(
             rules === undefined ? null : secretFor(rules, kind),
           rulesOrgId: rules?.orgId ?? null,
         });
-        logger.info({ kind, id, url: query.url }, "metrics source connected");
-        const saved = getMetricsSource(id);
-        const row = getMetricsSourceRow(id);
-        if (saved === null || row === null) {
-          return reply.code(500).send({ error: "source was not stored" });
-        }
-        return await reply.code(201).send(statusOf(saved, row.validatedAt));
+        logger.info({ kind, url: query.url }, "metrics source connected");
+        return await reply.code(201).send(statusPayload());
       } catch (err) {
         return sendMetricsError(reply, err);
       }
     },
   );
 
-  fastify.delete<{ Params: { id: string } }>(
-    "/integrations/metrics/:id",
+  // No id, as Loki has none: there is one source to disconnect or none.
+  fastify.delete(
+    "/integrations/metrics",
     { preHandler: requireSession },
-    async (request, reply) => {
-      if (!deleteMetricsSource(request.params.id)) {
-        return reply.code(404).send({ error: "No such metrics source" });
-      }
-      logger.info({ id: request.params.id }, "metrics source disconnected");
+    async (_request, reply) => {
+      deleteMetricsSource();
+      logger.info({}, "metrics source disconnected");
       return reply.code(204).send();
     },
   );
