@@ -8,7 +8,7 @@ export interface HostMemoryResult {
   usedPercent: number;
   swapTotalBytes: number;
   swapUsedBytes: number;
-  oomKillerFiredRecently: boolean;
+  oomKillerFired: boolean;
   oomKillerEvents: Array<{ timestamp: string; processName: string }>;
 }
 
@@ -48,7 +48,7 @@ export interface HostDmesgInput {
   filterLevel?: "err" | "warn" | "all";
 }
 export interface HostDmesgResult {
-  lines: Array<{ timestamp: string; level: string; message: string }>;
+  lines: Array<{ timestamp: string; message: string }>;
   oomEventsFound: boolean;
   fsErrorsFound: boolean;
 }

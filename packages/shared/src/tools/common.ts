@@ -2,6 +2,13 @@
 // Anything describing a container or workload lives in its own file.
 export type RiskLevel = "low" | "medium" | "high";
 
+// One line and when the engine says it was written, so a log can be placed
+// against the alert. Empty ts where the engine stamped none.
+export interface LogLine {
+  ts: string;
+  line: string;
+}
+
 // Propagated verbatim, so "not running" is a finding the agent reasons about
 // rather than an exception. Each resolver builds its own.
 export interface NotFoundResult {

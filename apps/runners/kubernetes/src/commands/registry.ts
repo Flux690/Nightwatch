@@ -1,5 +1,6 @@
 import {
   nested,
+  optionalBoolean,
   optionalNumber,
   optionalString,
   optionalStringArray,
@@ -68,6 +69,7 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
         getWorkloadEvents({
           service: service(input),
           sinceMinutes: optionalNumber(input, "sinceMinutes"),
+          warningsOnly: optionalBoolean(input, "warningsOnly"),
         }),
     ],
     [

@@ -12,6 +12,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **Docker and Kubernetes logs carry a timestamp on every line**, the one the engine recorded, so a log line can be placed against the moment the alert fired. `contains` and `excludes` now match the message alone rather than the timestamp beside it. — `0.3.171`
 - **A runner no longer carries a separate label.** The column was left over from when the wizard's field was a cosmetic display name; nothing has written to it since that field became the server name. — `0.3.169` (`970a117`)
 - **A runner's name is required, and it is the server name.** The add-runner wizard called it "Display name (optional)" and it was never either: it is the first segment of every service address the agent copies, and the column is unique. An empty one used to mint fine and then collide with the next empty one. It now refuses spaces and punctuation beyond dots, dashes and underscores, and the API enforces the same rule from the same place. — `0.3.168` (`078d71e`)
 - `NIGHTWARDEN_CONSOLE_DIST` is now `NIGHTWARDEN_FRONTEND_DIST`. It is an override for running the bundle from an unusual layout, so an ordinary install never set it. — `0.3.167` (`942e663`)
@@ -22,6 +23,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Removed
 
+- The **container** field on `GetK8sConfig`, `GetK8sStats`, `GetK8sEvents` and `RestartK8sWorkload`. All four report on the whole workload and none ever read it; it stays on the three tools that do. — `0.3.171`
 - The **Inconclusive** status. A finished run reads **Completed** whatever its record holds, and what it found or ruled out reads on the row beneath it. — `0.3.162` (`d553ea9`)
 
 ### Security
@@ -30,6 +32,9 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Fixed
 
+- The log tools no longer claim to filter down to error and warning lines. They never did: the newest lines are read and only your own `contains` and `excludes` narrow them. An agent told otherwise read a thin result as a quiet service. — `0.3.171`
+- `warningsOnly` on `GetK8sEvents` now reaches the cluster. The runner's dispatch dropped it, so asking for Normal events silently returned Warnings only. — `0.3.171`
+- `filterLevel` on `GetHostDmesg` now selects a severity: `err` returns errors alone and `warn` returns errors and warnings. Both returned the same two levels before. — `0.3.171`
 - An investigation can no longer finish with reads nothing on its record accounts for. The mid-run check that asks about them was clearing the very debt the finish gate reads. — `0.3.170`
 - Reinstalling a runner whose platform API is unreachable no longer deletes its credential. A name was reclaimable until the runner sent a manifest, which such a runner never does, though it authenticates fine. — `0.3.170`
 - The Investigations page draws the alert queue band after a reload. It was only ever filled in by a live event, so a page opened while alerts waited showed nothing. — `0.3.170`

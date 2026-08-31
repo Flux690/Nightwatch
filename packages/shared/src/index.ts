@@ -17,7 +17,12 @@ export {
   kubernetesWorkloadKey,
   parseTargetKey,
 } from "./service-identity.js";
-export type { RiskLevel, NotFoundResult, FleetResult } from "./tools/common.js";
+export type {
+  RiskLevel,
+  LogLine,
+  NotFoundResult,
+  FleetResult,
+} from "./tools/common.js";
 export type {
   DockerContainerInstance,
   DockerServiceListResult,

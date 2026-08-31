@@ -54,7 +54,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sLogs",
       description:
-        "Read a Kubernetes workload's recent logs, gathered from its pods. The result is filtered down to error and warning lines plus any line close to the alert's timestamp, so a quiet workload can return very little.",
+        "Read a Kubernetes workload's recent logs, gathered from its pods. Every line comes back with the timestamp the apiserver recorded against it, so you can line a log up with when the alert fired. Nothing is filtered unless you ask: the newest lines are read, then your own contains and excludes are applied to them.",
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -101,10 +101,7 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: {
-          target: TARGET_PROPERTY,
-          container: CONTAINER_PROPERTY,
-        },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -122,10 +119,7 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         additionalProperties: false,
-        properties: {
-          target: TARGET_PROPERTY,
-          container: CONTAINER_PROPERTY,
-        },
+        properties: { target: TARGET_PROPERTY },
         required: ["target"],
       },
     },
@@ -145,7 +139,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          container: CONTAINER_PROPERTY,
           sinceMinutes: {
             type: "number",
             description:
@@ -240,7 +233,6 @@ export const K8S_TOOLS: Tool[] = [
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          container: CONTAINER_PROPERTY,
           reason: REASON_PROPERTY,
           risk: {
             type: "string",

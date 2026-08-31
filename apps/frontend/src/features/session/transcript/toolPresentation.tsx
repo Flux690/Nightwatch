@@ -60,6 +60,20 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
+/* A runner's log line and the time the engine stamped on it. A stored
+   transcript still holds bare strings from before they were stamped. */
+function logList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): string[] => {
+    if (typeof entry === "string") return [entry];
+    const record = asRecord(entry);
+    const line = record === null ? null : record["line"];
+    if (typeof line !== "string") return [];
+    const ts = record?.["ts"];
+    return [typeof ts === "string" && ts !== "" ? `${ts} ${line}` : line];
+  });
+}
+
 const MONO = "font-mono text-sm leading-relaxed";
 
 // The word carries the distinction and colour only reinforces it. A miss is
@@ -226,7 +240,7 @@ function ToolBody({
 
   if (record !== null) {
     if (isTool(toolName, "GetDockerLogs", "GetK8sLogs")) {
-      return <LogLines lines={stringList(record["lines"])} />;
+      return <LogLines lines={logList(record["lines"])} />;
     }
 
     if (isTool(toolName, "GetDockerEvents", "GetK8sEvents")) {
@@ -260,7 +274,7 @@ function ToolBody({
       if (typeof swap === "number") rows.push(["swap used", formatBytes(swap)]);
       rows.push([
         "oom killer",
-        record["oomKillerFiredRecently"] === true ? "fired recently" : "quiet",
+        record["oomKillerFired"] === true ? "fired" : "quiet",
       ]);
       return <KeyValues rows={rows} />;
     }

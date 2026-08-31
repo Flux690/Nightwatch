@@ -228,7 +228,8 @@ function badInput(message: string): ToolExecuteResult {
 }
 
 // PR body section order (model text, then incident context, files) is host
-// policy; the session reference is plain text since no NIGHTWARDEN_PUBLIC_URL exists yet to link to.
+// policy. The session reference is plain text: a link would have to be built
+// from PUBLIC_URL, which is the operator's address and not GitHub's to reach.
 function composePrBody(
   sessionId: string,
   branch: string,
@@ -321,7 +322,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Edit",
       description:
-        "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read earlier in this session. The result is a diff showing what changed.",
+        "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read, or created it with Write, earlier in this session. The result is a diff showing what changed.",
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -376,7 +377,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Write",
       description:
-        "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
+        "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session, and creating one leaves it editable without that. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -427,11 +428,6 @@ export const REPO_TOOLS: Tool[] = [
             type: "string",
             description:
               "The directory to run in, relative to the repository root. Defaults to the repository root itself.",
-          },
-          description: {
-            type: "string",
-            description:
-              'One short sentence saying what this command does, which the user sees, for example "Install dependencies".',
           },
         },
         required: ["command"],

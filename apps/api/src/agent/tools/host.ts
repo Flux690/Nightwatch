@@ -18,7 +18,7 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostMemory",
       description:
-        "Read a Docker host's memory: total, available and swap, along with whether the kernel's out-of-memory killer has fired recently. Use this when a container died without explanation, since the host running out of memory is a common cause." +
+        "Read a Docker host's memory: total, available and swap, along with any out-of-memory kill the kernel ring buffer still holds. There is no time window on that: an OOM from days ago reports the same as one from a minute ago, so read the timestamps on the events themselves before tying one to this incident." +
         DOCKER_ONLY,
       input_schema: {
         type: "object",
@@ -58,7 +58,7 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostDisk",
       description:
-        "Read a Docker host's filesystem usage for every mount, and its disk read and write rates per device. A full disk stops containers writing logs and databases accepting writes, so check it early when several services fail at once." +
+        "Read a Docker host's filesystem usage per mount, and its disk read and write rates per device. A full disk stops containers writing logs and databases accepting writes, so check it early when several services fail at once. tmpfs and udev mounts are left out, so an in-memory filesystem filling up is not visible here." +
         DOCKER_ONLY,
       input_schema: {
         type: "object",
@@ -78,7 +78,7 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostNetwork",
       description:
-        "Read a Docker host's listening ports, how many TCP connections are in each state, and the total connection count. Use it to tell whether a service is actually listening where you expect, or whether connections are piling up." +
+        "Read a Docker host's listening ports, how many sockets are in each state, and the total socket count. Use it to tell whether a service is actually listening where you expect, or whether connections are piling up. The counts cover TCP and UDP together and include listening sockets, so the total is every socket rather than every established connection." +
         DOCKER_ONLY,
       input_schema: {
         type: "object",
@@ -113,7 +113,7 @@ export const HOST_TOOLS: Tool[] = [
             type: "string",
             enum: ["err", "warn", "all"],
             description:
-              "Which severity to include. Defaults to 'err'. Use 'all' only when the errors alone did not explain what happened.",
+              "How far down the severity ladder to read. 'err', the default, returns errors alone; 'warn' returns errors and warnings; 'all' returns every level. Widen it only when the errors alone did not explain what happened.",
           },
           server: SERVER_PROPERTY,
         },

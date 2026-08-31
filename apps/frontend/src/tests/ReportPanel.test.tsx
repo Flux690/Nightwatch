@@ -402,8 +402,11 @@ describe("ReportPanel", () => {
             input: { target: "prod-1/encodr/payments-worker" },
             result: JSON.stringify({
               lines: [
-                "fatal: cannot allocate 2.2GB buffer",
-                "job 4471 accepted",
+                {
+                  ts: "2026-08-31T02:14:07.000Z",
+                  line: "fatal: cannot allocate 2.2GB buffer",
+                },
+                { ts: "2026-08-31T02:14:08.000Z", line: "job 4471 accepted" },
               ],
               scannedLines: 2,
             }),
@@ -582,7 +585,7 @@ describe("ReportPanel", () => {
                     totalBytes: 16_000_000_000,
                     availableBytes: 800_000_000,
                     usedPercent: 95,
-                    oomKillerFiredRecently: true,
+                    oomKillerFired: true,
                   },
                 },
               ],

@@ -129,8 +129,9 @@ export function isWarning(line: string): boolean {
   return !SEVERE.test(line) && WARNING.test(line);
 }
 
-// The three shapes a logs result comes in: plain strings from a runner, the
-// kernel's levelled records, and Loki's streams of timestamped lines.
+// The shapes a logs result comes in: a runner's timestamped pairs, the kernel's
+// levelled records, and Loki's streams. Plain strings are a runner before it
+// stamped them, and a stored transcript still holds those.
 function logLines(result: Record<string, unknown>): string[] {
   const lines = result["lines"];
   if (Array.isArray(lines)) {
@@ -138,11 +139,15 @@ function logLines(result: Record<string, unknown>): string[] {
       if (typeof line === "string") return [line];
       const record = asRecord(line);
       if (record === null) return [];
+      const text = stringAt(record, "line");
+      if (text !== null) {
+        const at = stringAt(record, "ts");
+        return [at ? `${at} ${text}` : text];
+      }
       const message = stringAt(record, "message");
       if (message === null) return [];
       const at = stringAt(record, "timestamp");
-      const level = stringAt(record, "level");
-      return [[at, level, message].filter(Boolean).join(" ")];
+      return [[at, message].filter(Boolean).join(" ")];
     });
   }
   const streams = result["streams"];

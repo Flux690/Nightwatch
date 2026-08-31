@@ -37,6 +37,7 @@ import {
   sanitize,
   sanitizeLines,
   serverName,
+  toLogLines,
 } from "@nightwarden/runner-core";
 import { getCoreV1Api, getAppsV1Api, getMetrics, getExec } from "./client.js";
 import {
@@ -174,6 +175,7 @@ export async function getWorkloadLogs(
     namespace: resolved.namespace,
     container: resolved.containerName,
     tailLines,
+    timestamps: true,
     previous: fromPreviousContainer,
     ...(input.since !== undefined && {
       sinceSeconds: Math.max(
@@ -185,9 +187,9 @@ export async function getWorkloadLogs(
 
   // Redacted where the raw text enters, so every count below describes what is
   // actually returned rather than what the pod emitted.
-  const scanned = sanitizeLines(log.split("\n").filter(Boolean));
-  const lines = scanned.filter((line) =>
-    matchesFilter(line, input.contains ?? [], input.excludes ?? []),
+  const scanned = toLogLines(sanitizeLines(log.split("\n").filter(Boolean)));
+  const lines = scanned.filter((entry) =>
+    matchesFilter(entry.line, input.contains ?? [], input.excludes ?? []),
   );
   const scanHitTail = scanned.length >= tailLines;
 

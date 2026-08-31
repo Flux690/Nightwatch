@@ -451,6 +451,33 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText(/mem 0.44/)).toBeInTheDocument();
     });
 
+    // A shape it cannot read renders an empty block rather than failing, so
+    // the body is asserted rather than left to the row's summary.
+    it("draws a log line beside the time the engine stamped on it", async () => {
+      wrap({
+        kind: "tool_call",
+        toolUseId: "tu-log",
+        toolName: "GetDockerLogs",
+        input: { target: "web-01/api/api" },
+        state: {
+          phase: "complete",
+          result: {
+            lines: [
+              { ts: "2026-08-31T02:14:07.000Z", line: "OOM killed pid 1234" },
+            ],
+            scannedLines: 200,
+          },
+        },
+      });
+
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: /GetDockerLogs/ }));
+      expect(
+        screen.getByText(/2026-08-31T02:14:07\.000Z OOM killed pid 1234/),
+      ).toBeInTheDocument();
+    });
+
     it("caps a long shell result and reveals the rest on demand", async () => {
       // Twelve lines against a body cap of eight, so the cap is exercised
       // rather than merely configured.

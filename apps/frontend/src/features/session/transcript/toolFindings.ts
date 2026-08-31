@@ -23,6 +23,17 @@ function arr(record: Record<string, unknown>, key: string): unknown[] | null {
   return Array.isArray(value) ? value : null;
 }
 
+/* The message alone, so a leading timestamp cannot eat the clip below. A
+   stored transcript still holds bare strings from before they were stamped. */
+function logMessages(lines: unknown[] | null): string[] | null {
+  if (lines === null) return null;
+  return lines.flatMap((entry): string[] => {
+    if (typeof entry === "string") return [entry];
+    const line = asRecord(entry)?.["line"];
+    return typeof line === "string" ? [line] : [];
+  });
+}
+
 // Binary units, matching what docker stats and free report.
 export function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -87,9 +98,7 @@ type Formatter = (record: Record<string, unknown>) => ToolFinding | null;
 
 const FORMATTERS: Record<string, Formatter> = {
   GetDockerLogs: (r) => {
-    const lines = arr(r, "lines")?.filter(
-      (l): l is string => typeof l === "string",
-    );
+    const lines = logMessages(arr(r, "lines"));
     const scanned = num(r, "scannedLines");
     if (!lines) return null;
     const counted =
@@ -146,7 +155,7 @@ const FORMATTERS: Record<string, Formatter> = {
         {
           server,
           text: `${formatBytes(available)} free of ${formatBytes(total)}`,
-          oom: result["oomKillerFiredRecently"] === true,
+          oom: result["oomKillerFired"] === true,
           freeRatio: total > 0 ? available / total : 1,
         },
       ];

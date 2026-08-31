@@ -77,8 +77,8 @@ export interface LLMProvider {
   seed(history: ProviderMessage[]): void;
   // Current conversation in neutral form, for incremental persistence.
   snapshot(): ProviderMessage[];
-  // `forceTool` is enforced by prefilling the assistant message, so the turn
-  // cannot come back as prose. The report turn depends on that.
+  // `forceTool` is the provider's own tool_choice, so the turn cannot come
+  // back as prose. The report turn depends on that.
   chat(
     tools: ToolSchema[],
     onDelta?: OnDelta,

@@ -5,7 +5,7 @@ import type {
   K8sWorkloadKind,
   KubernetesWorkloadIdentity,
 } from "../service-identity.js";
-import type { RiskLevel } from "./common.js";
+import type { LogLine, RiskLevel } from "./common.js";
 
 export interface K8sWorkloadListInput {
   namespace?: string;
@@ -46,7 +46,7 @@ export interface K8sLogsInput {
 // A matched count means nothing without the size of what was searched: three
 // hits in the newest hundred lines is not three hits in the log.
 export interface K8sLogsResult {
-  lines: string[];
+  lines: LogLine[];
   scannedLines: number;
   // The scan filled its tail, so older lines exist that it never looked at.
   scanHitTail: boolean;

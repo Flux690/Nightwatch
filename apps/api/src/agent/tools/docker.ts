@@ -41,7 +41,7 @@ export const DOCKER_TOOLS: Tool[] = [
     schema: {
       name: "GetDockerLogs",
       description:
-        "Read a Docker service's recent logs, which are its container's stdout and stderr. The result is filtered down to error and warning lines plus any line close to the alert's timestamp, so a quiet service can return very little.",
+        "Read a Docker service's recent logs, which are its container's stdout and stderr. Every line comes back with the timestamp the engine recorded against it, so you can line a log up with when the alert fired. Nothing is filtered unless you ask: the newest lines are read, then your own contains and excludes are applied to them.",
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -72,7 +72,7 @@ export const DOCKER_TOOLS: Tool[] = [
           until: {
             type: "string",
             description:
-              "An ISO 8601 timestamp the window ends at, so you can read a past moment rather than only the newest lines. Use it to look at when something started, taking the time from a metric series. Every line within thirty seconds either side of the moment you asked about is kept regardless of the filter. Defaults to now.",
+              "An ISO 8601 timestamp the window ends at, so you can read a past moment rather than only the newest lines. Use it to look at when something started, taking the time from a metric series or from the timestamp on an earlier log line. Defaults to now.",
           },
           stderrOnly: {
             type: "boolean",

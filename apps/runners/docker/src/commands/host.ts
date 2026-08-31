@@ -52,7 +52,7 @@ export async function getHostMemory(): Promise<HostMemoryResult> {
     usedPercent: total > 0 ? ((total - available) / total) * 100 : 0,
     swapTotalBytes: swapTotal,
     swapUsedBytes: swapTotal - swapFree,
-    oomKillerFiredRecently: oomKillerEvents.length > 0,
+    oomKillerFired: oomKillerEvents.length > 0,
     oomKillerEvents: oomKillerEvents.slice(-10),
   };
 }
@@ -212,7 +212,14 @@ export async function getHostDmesg(
   input: HostDmesgInput,
 ): Promise<HostDmesgResult> {
   const tailLines = input.tailLines ?? 100;
-  const levelArg = input.filterLevel === "all" ? [] : ["--level", "err,warn"];
+  // A ladder rather than a switch: "warn" means errors as well, since a warning
+  // alone rarely explains what an error next to it does.
+  const LEVELS: Record<string, string[]> = {
+    err: ["--level", "err"],
+    warn: ["--level", "err,warn"],
+    all: [],
+  };
+  const levelArg = LEVELS[input.filterLevel ?? "err"] ?? LEVELS["err"]!;
 
   const { stdout } = await exec("dmesg", ["-T", ...levelArg]).catch(async () =>
     exec("dmesg", ["-T"]),
@@ -236,11 +243,7 @@ export async function getHostDmesg(
     )
       fsErrorsFound = true;
 
-    return {
-      timestamp: tsMatch ? tsMatch[1]! : "",
-      level: input.filterLevel ?? "err",
-      message,
-    };
+    return { timestamp: tsMatch ? tsMatch[1]! : "", message };
   });
 
   return { lines, oomEventsFound, fsErrorsFound };

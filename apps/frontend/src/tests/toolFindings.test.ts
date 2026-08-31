@@ -13,8 +13,14 @@ describe("findingFor", () => {
     it("quotes the worst line verbatim and counts what was filtered", () => {
       const finding = findingFor("GetDockerLogs", {
         lines: [
-          "1:C 26 Jul 2026 17:26:31.786 # WARNING Memory overcommit must be enabled!",
-          "1:M 26 Jul 2026 17:39:41.020 # OOM command not allowed when used memory > 'maxmemory'",
+          {
+            ts: "2026-07-26T17:26:31.786Z",
+            line: "1:C # WARNING Memory overcommit must be enabled!",
+          },
+          {
+            ts: "2026-07-26T17:39:41.020Z",
+            line: "1:M # OOM command not allowed when used memory > 'maxmemory'",
+          },
         ],
         scannedLines: 66,
       });
@@ -66,7 +72,7 @@ describe("findingFor", () => {
               totalBytes: 8326942720,
               availableBytes: 7025766400,
               usedPercent: 15.6,
-              oomKillerFiredRecently: false,
+              oomKillerFired: false,
             },
           },
         ]),
@@ -106,7 +112,7 @@ describe("findingFor", () => {
             result: {
               totalBytes: 8326942720,
               availableBytes: 8000000000,
-              oomKillerFiredRecently: true,
+              oomKillerFired: true,
             },
           },
         ]),

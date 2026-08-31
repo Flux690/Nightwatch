@@ -26,6 +26,7 @@ import {
   sanitize,
   sanitizeLines,
   serverName,
+  toLogLines,
 } from "@nightwarden/runner-core";
 import { getDocker, listVisibleContainers, parseDockerMux } from "./client.js";
 import { noContainerResult, resolveService } from "./resolve-service.js";
@@ -111,6 +112,7 @@ export async function getContainerLogs(
     stdout: !input.stderrOnly,
     stderr: true,
     follow: false,
+    timestamps: true,
     tail: tailLines,
     ...(since !== undefined && { since }),
     ...(until !== undefined && { until }),
@@ -119,10 +121,12 @@ export async function getContainerLogs(
   const { stdout, stderr } = parseDockerMux(buf);
   // Redacted where the raw text enters, so the filter and the counts below all
   // describe what is actually returned rather than what the container emitted.
-  const allLines = sanitizeLines((stdout + stderr).split("\n").filter(Boolean));
+  const allLines = toLogLines(
+    sanitizeLines((stdout + stderr).split("\n").filter(Boolean)),
+  );
 
-  const filtered = allLines.filter((line) =>
-    matchesFilter(line, input.contains ?? [], input.excludes ?? []),
+  const filtered = allLines.filter((entry) =>
+    matchesFilter(entry.line, input.contains ?? [], input.excludes ?? []),
   );
   const scanHitTail = allLines.length >= tailLines;
 

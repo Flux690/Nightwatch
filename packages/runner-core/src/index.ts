@@ -18,3 +18,4 @@ export {
 export { serverName, setServerName } from "./identity.js";
 export { logger } from "./logger.js";
 export { matchesFilter } from "./log-filter.js";
+export { toLogLines } from "./log-lines.js";

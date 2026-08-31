@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NotFoundResult } from "@nightwarden/shared";
+import type { K8sLogsResult, NotFoundResult } from "@nightwarden/shared";
 
 // Mock @kubernetes/client-node at the system boundary. vi.mock is hoisted, so
 // all factories reference only vi.hoisted() values.
@@ -43,6 +43,7 @@ import {
   parseCpuMillicores,
   parseMemoryBytes,
 } from "../kubernetes/commands.js";
+import { createDispatchRegistry } from "../commands/registry.js";
 import { setServerName } from "@nightwarden/runner-core";
 
 const K8S_SERVICE = {
@@ -190,11 +191,23 @@ describe("Kubernetes runner command handlers", () => {
     mockAppsApi.readNamespacedDeployment.mockResolvedValue(DEPLOYMENT);
   });
 
+  // The apiserver stamps every line once timestamps are asked for.
+  function stamped(...lines: string[]): string {
+    return lines
+      .map((line, i) => `2026-08-31T02:14:0${i}.000000000Z ${line}\n`)
+      .join("");
+  }
+
+  // Every case below is about the message, which is what the filter reads.
+  function messages(result: unknown): string[] {
+    return (result as K8sLogsResult).lines.map((entry) => entry.line);
+  }
+
   describe("getWorkloadLogs", () => {
     it("fetches logs from the live pod and names where they came from", async () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
       mockCoreApi.readNamespacedPodLog.mockResolvedValue(
-        "ERROR: connection refused\nINFO: starting up\n",
+        stamped("ERROR: connection refused", "INFO: starting up"),
       );
 
       const result = await getWorkloadLogs({ service: K8S_SERVICE });
@@ -206,8 +219,7 @@ describe("Kubernetes runner command handlers", () => {
         fromPreviousContainer: false,
         scannedLines: 2,
       });
-      const lines = (result as { lines: string[] }).lines;
-      expect(lines.some((l) => l.includes("ERROR"))).toBe(true);
+      expect(messages(result).some((l) => l.includes("ERROR"))).toBe(true);
     });
 
     /* The apiserver has no way to filter log content, so the caller's words are
@@ -215,15 +227,19 @@ describe("Kubernetes runner command handlers", () => {
     it("filters on the caller's words and says what it searched", async () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
       mockCoreApi.readNamespacedPodLog.mockResolvedValue(
-        "OOMKilled container api\nINFO: starting up\nGET /health 200\n",
+        stamped(
+          "OOMKilled container api",
+          "INFO: starting up",
+          "GET /health 200",
+        ),
       );
 
       const result = (await getWorkloadLogs({
         service: K8S_SERVICE,
         contains: ["oomkilled"],
-      })) as { lines: string[]; scannedLines: number; note: string };
+      })) as K8sLogsResult;
 
-      expect(result.lines).toEqual(["OOMKilled container api"]);
+      expect(messages(result)).toEqual(["OOMKilled container api"]);
       expect(result.scannedLines).toBe(3);
       expect(result.note).toContain("1 of 3");
       expect(result.note).toContain("not necessarily absent");
@@ -232,16 +248,16 @@ describe("Kubernetes runner command handlers", () => {
     it("drops what the caller excludes before anything else", async () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
       mockCoreApi.readNamespacedPodLog.mockResolvedValue(
-        "ERROR probe failed for healthcheck\nERROR db unreachable\n",
+        stamped("ERROR probe failed for healthcheck", "ERROR db unreachable"),
       );
 
       const result = (await getWorkloadLogs({
         service: K8S_SERVICE,
         contains: ["error"],
         excludes: ["healthcheck"],
-      })) as { lines: string[] };
+      })) as K8sLogsResult;
 
-      expect(result.lines).toEqual(["ERROR db unreachable"]);
+      expect(messages(result)).toEqual(["ERROR db unreachable"]);
     });
 
     it("fails fast naming the containers when a multi-container pod is ambiguous", async () => {
@@ -277,16 +293,16 @@ describe("Kubernetes runner command handlers", () => {
           },
         ],
       });
-      mockCoreApi.readNamespacedPodLog.mockResolvedValue("app log line\n");
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue(
+        stamped("app log line"),
+      );
 
       const result = await getWorkloadLogs({
         service: { ...K8S_SERVICE, container: "api-server" },
       });
 
-      expect(result).toMatchObject({
-        lines: ["app log line"],
-        containerName: "api-server",
-      });
+      expect(result).toMatchObject({ containerName: "api-server" });
+      expect(messages(result)).toEqual(["app log line"]);
       expect(mockCoreApi.readNamespacedPodLog).toHaveBeenCalledWith(
         expect.objectContaining({ container: "api-server" }),
       );
@@ -310,15 +326,17 @@ describe("Kubernetes runner command handlers", () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({
         items: [TERMINATED_POD],
       });
-      mockCoreApi.readNamespacedPodLog.mockResolvedValue("why it crashed\n");
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue(
+        stamped("why it crashed"),
+      );
 
       const result = await getWorkloadLogs({ service: K8S_SERVICE });
 
       expect(result).toMatchObject({
         fromPreviousContainer: true,
         podPhase: "Succeeded",
-        lines: ["why it crashed"],
       });
+      expect(messages(result)).toEqual(["why it crashed"]);
       expect(mockCoreApi.readNamespacedPodLog).toHaveBeenCalledWith(
         expect.objectContaining({ previous: true }),
       );
@@ -867,6 +885,23 @@ describe("Kubernetes runner command handlers", () => {
       });
 
       expect((result as { events: unknown[] }).events).toHaveLength(2);
+    });
+
+    // Through the registry, which is how a command actually arrives: a field
+    // the dispatch drops is one the model can set and nothing honours.
+    it("carries warningsOnly through the dispatch the model reaches it by", async () => {
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({
+        items: [NORMAL_EVENT, POD_EVENT],
+      });
+
+      const events = createDispatchRegistry().get("GetK8sEvents")!;
+      const result = (await events({
+        service: { namespace: "shop", workload: "api" },
+        warningsOnly: false,
+      })) as { events: unknown[]; warningsOnly: boolean };
+
+      expect(result.warningsOnly).toBe(false);
+      expect(result.events).toHaveLength(2);
     });
 
     it("excludes events older than the requested window", async () => {
