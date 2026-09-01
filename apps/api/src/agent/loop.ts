@@ -39,6 +39,7 @@ import { loadConfig } from "../config/store.js";
 import {
   getGitHubIntegration,
   getLokiIntegration,
+  getSentryIntegration,
 } from "../integrations/store.js";
 import { getMetricsSource } from "../integrations/metrics/sources.js";
 import { getSession } from "../session/store.js";
@@ -165,6 +166,7 @@ async function currentToolset(investigation: boolean): Promise<OfferedToolset> {
       github: (await getGitHubIntegration()) !== null,
       metrics: (await getMetricsSource()) !== null,
       loki: (await getLokiIntegration()) !== null,
+      sentry: (await getSentryIntegration()) !== null,
     },
     investigation,
   );

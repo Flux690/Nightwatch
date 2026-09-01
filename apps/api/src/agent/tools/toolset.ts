@@ -13,6 +13,7 @@ import { LOKI_TOOLS } from "./loki.js";
 import { METRICS_TOOLS } from "./metrics.js";
 import { REPO_TOOLS } from "./repo.js";
 import { REPORT_TOOLS } from "./report.js";
+import { SENTRY_TOOLS } from "./sentry.js";
 import type {
   DispatchedToolResult,
   Tool,
@@ -33,6 +34,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...GITHUB_TOOLS,
   ...METRICS_TOOLS,
   ...LOKI_TOOLS,
+  ...SENTRY_TOOLS,
   ...REPORT_TOOLS,
 ];
 
@@ -121,6 +123,7 @@ interface IntegrationConnections {
   github?: boolean;
   metrics?: boolean;
   loki?: boolean;
+  sentry?: boolean;
 }
 
 // What one turn offers: the things that execute, and the one thing only a
@@ -137,7 +140,12 @@ export function effectiveToolset(
   connections: IntegrationConnections = {},
   investigation = true,
 ): OfferedToolset {
-  const { github = true, metrics = true, loki = true } = connections;
+  const {
+    github = true,
+    metrics = true,
+    loki = true,
+    sentry = true,
+  } = connections;
   const has = (platform: Platform): boolean =>
     platforms === undefined || platforms.has(platform);
   return {
@@ -149,6 +157,7 @@ export function effectiveToolset(
       ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
       ...(metrics ? METRICS_TOOLS : []),
       ...(loki ? LOKI_TOOLS : []),
+      ...(sentry ? SENTRY_TOOLS : []),
       // The record is the investigation's, so a chat is offered no way to write
       // one. What a session is was decided before the run started.
       ...(investigation ? REPORT_TOOLS : []),

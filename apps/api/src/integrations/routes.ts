@@ -9,6 +9,9 @@ import {
   deleteLokiIntegration,
   getLokiIntegration,
   saveLokiIntegration,
+  deleteSentryIntegration,
+  getSentryIntegration,
+  saveSentryIntegration,
 } from "./store.js";
 import {
   deleteAlertSource,
@@ -24,6 +27,7 @@ import {
   validateRepoAccess,
 } from "./github.js";
 import { LokiApiError, probeLoki } from "./loki.js";
+import { SentryApiError, probeSentry } from "./sentry.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
@@ -31,6 +35,7 @@ import { publicUrl } from "../public-url.js";
 import type {
   GitHubIntegrationStatus,
   LokiIntegrationStatus,
+  SentryIntegrationStatus,
 } from "@nightwarden/shared";
 
 const ReposBodySchema = z.object({
@@ -42,6 +47,12 @@ const LokiConnectSchema = z.object({
   url: z.string().min(1),
   authHeader: z.string().min(1).optional(),
   orgId: z.string().min(1).optional(),
+});
+
+const SentryConnectSchema = z.object({
+  url: z.string().min(1),
+  orgSlug: z.string().min(1),
+  token: z.string().min(1),
 });
 
 const ConnectBodySchema = z.object({
@@ -113,6 +124,37 @@ async function sendLokiError(
         : err.code === "bad_query"
           ? 400
           : 502;
+    return reply.code(status).send({ error: err.message, code: err.code });
+  }
+  throw err;
+}
+
+async function sentryStatusPayload(): Promise<SentryIntegrationStatus> {
+  const row = await getSentryIntegration();
+  if (!row) {
+    return {
+      configured: false,
+      url: null,
+      orgSlug: null,
+      validatedAt: null,
+    };
+  }
+  return {
+    configured: true,
+    url: row.baseUrl,
+    orgSlug: row.orgSlug,
+    validatedAt: row.validatedAt,
+  };
+}
+
+/* Sentry's own status is carried through rather than flattened to 502: a
+   missing scope and a bad slug are both fixed by the user, in different places. */
+async function sendSentryError(
+  reply: FastifyReply,
+  err: unknown,
+): Promise<FastifyReply> {
+  if (err instanceof SentryApiError) {
+    const status = err.code === "network" ? 502 : err.status;
     return reply.code(status).send({ error: err.message, code: err.code });
   }
   throw err;
@@ -296,6 +338,44 @@ export async function registerIntegrationRoutes(
     async (_request, reply) => {
       await deleteLokiIntegration();
       logger.info("loki integration disconnected");
+      return reply.code(204).send();
+    },
+  );
+
+  fastify.get(
+    "/integrations/sentry",
+    { preHandler: requireSession },
+    async () => await sentryStatusPayload(),
+  );
+
+  // Probed on both scopes before saving: a token carrying only event:read would
+  // otherwise connect cleanly and answer nothing about releases mid-incident.
+  fastify.post(
+    "/integrations/sentry",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const parsed = SentryConnectSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: parsed.error.message });
+      }
+      const { url, orgSlug, token } = parsed.data;
+      try {
+        await probeSentry({ baseUrl: url, orgSlug, token });
+        await saveSentryIntegration({ baseUrl: url, orgSlug, token });
+        logger.info({ url, orgSlug }, "sentry integration configured");
+        return await reply.code(201).send(await sentryStatusPayload());
+      } catch (err) {
+        return await sendSentryError(reply, err);
+      }
+    },
+  );
+
+  fastify.delete(
+    "/integrations/sentry",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      await deleteSentryIntegration();
+      logger.info("sentry integration disconnected");
       return reply.code(204).send();
     },
   );

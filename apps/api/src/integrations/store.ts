@@ -299,3 +299,59 @@ export async function saveLokiIntegration(input: {
 export async function deleteLokiIntegration(): Promise<void> {
   await deleteIntegrationsOfKind(LOKI);
 }
+
+const SENTRY = "sentry";
+
+interface SentryConfig {
+  baseUrl: string;
+  // Every Sentry path is scoped by the organization, so this addresses rather
+  // than filters, and a wrong one 404s every call.
+  orgSlug: string;
+}
+
+export interface SentryIntegration {
+  baseUrl: string;
+  orgSlug: string;
+  token: string;
+  validatedAt: string;
+  createdAt: string;
+}
+
+export async function getSentryIntegration(): Promise<SentryIntegration | null> {
+  const row = await integrationOfKind(SENTRY);
+  // Sentry always has a token: a row without one is malformed, treat as absent.
+  const token = row?.secrets["token"];
+  if (!row || token === undefined) return null;
+  const config = row.config as unknown as SentryConfig;
+  return {
+    baseUrl: config.baseUrl,
+    orgSlug: config.orgSlug,
+    token,
+    validatedAt: row.validatedAt ?? row.createdAt,
+    createdAt: row.createdAt,
+  };
+}
+
+export async function saveSentryIntegration(input: {
+  baseUrl: string;
+  orgSlug: string;
+  token: string;
+}): Promise<void> {
+  const existing = await integrationOfKind(SENTRY);
+  await putIntegration(
+    {
+      kind: SENTRY,
+      name: "Sentry",
+      config: {
+        baseUrl: input.baseUrl,
+        orgSlug: input.orgSlug,
+      } satisfies SentryConfig,
+      secrets: { token: input.token },
+    },
+    existing?.id,
+  );
+}
+
+export async function deleteSentryIntegration(): Promise<void> {
+  await deleteIntegrationsOfKind(SENTRY);
+}

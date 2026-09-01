@@ -59,6 +59,10 @@ const LAZY = {
     () => import("../features/integrations/loki/LokiPage.js"),
     "LokiPage",
   ),
+  SentryPage: lazyRouteComponent(
+    () => import("../features/integrations/sentry/SentryPage.js"),
+    "SentryPage",
+  ),
   SettingsPage: lazyRouteComponent(
     () => import("../features/settings/SettingsPage.js"),
     "SettingsPage",
@@ -224,6 +228,12 @@ const lokiRoute = createRoute({
   component: LAZY.LokiPage,
 });
 
+const sentryRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/sentry",
+  component: LAZY.SentryPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -242,6 +252,7 @@ export const routeTree = rootRoute.addChildren([
     grafanaAlertingRoute,
     ...metricsRoutes,
     lokiRoute,
+    sentryRoute,
     settingsIndexRoute,
     settingsRoute,
   ]),

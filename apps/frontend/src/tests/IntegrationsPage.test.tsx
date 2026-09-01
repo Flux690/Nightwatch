@@ -98,6 +98,11 @@ function renderCatalogRoute(qc: QueryClient) {
     path: "/integrations/loki",
     component: () => <div>Loki destination</div>,
   });
+  const sentryRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/sentry",
+    component: () => <div>Sentry destination</div>,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       integrationsRoute,
@@ -109,6 +114,7 @@ function renderCatalogRoute(qc: QueryClient) {
       alertmanagerRoute,
       metricsRoute,
       lokiRoute,
+      sentryRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
   });
@@ -130,6 +136,7 @@ function setup(
     lastReceivedAt?: string | null;
     metrics?: unknown;
     lokiConfigured?: boolean;
+    sentryConfigured?: boolean;
   } = {},
 ) {
   const {
@@ -147,6 +154,7 @@ function setup(
       validatedAt: null,
     },
     lokiConfigured = false,
+    sentryConfigured = false,
   } = opts;
 
   const fetchMock = vi
@@ -169,7 +177,16 @@ function setup(
                       hasOrgId: false,
                       validatedAt: null,
                     }
-                  : github;
+                  : url === "/api/integrations/sentry"
+                    ? {
+                        configured: sentryConfigured,
+                        url: sentryConfigured
+                          ? "https://sentry.example.com"
+                          : null,
+                        orgSlug: sentryConfigured ? "acme" : null,
+                        validatedAt: null,
+                      }
+                    : github;
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -209,6 +226,7 @@ describe("IntegrationsPage", () => {
         "Alerting",
         "Metrics",
         "Logs",
+        "Error tracking",
         "Fleet",
         "Code",
       ]);
@@ -227,6 +245,7 @@ describe("IntegrationsPage", () => {
         "Alerting",
         "Metrics",
         "Logs",
+        "Error tracking",
         "Fleet",
         "Code",
       ]);

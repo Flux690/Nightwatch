@@ -6,6 +6,7 @@ import type {
   LokiIntegrationStatus,
   MetricsSourceStatus,
   RunnerRecord,
+  SentryIntegrationStatus,
 } from "@nightwarden/shared";
 import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
@@ -18,7 +19,14 @@ import { INTEGRATION_CATALOG } from "./catalog";
 
 // Named for what a connection gives an investigation. A section appears with
 // its first row.
-const CATEGORIES = ["Alerting", "Metrics", "Logs", "Fleet", "Code"] as const;
+const CATEGORIES = [
+  "Alerting",
+  "Metrics",
+  "Logs",
+  "Error tracking",
+  "Fleet",
+  "Code",
+] as const;
 
 type Category = (typeof CATEGORIES)[number];
 
@@ -139,6 +147,12 @@ export function IntegrationsPage(): React.JSX.Element {
     queryFn: () => apiFetch<LokiIntegrationStatus>("/api/integrations/loki"),
   });
 
+  const { data: sentry } = useQuery<SentryIntegrationStatus>({
+    queryKey: ["sentry-integration"],
+    queryFn: () =>
+      apiFetch<SentryIntegrationStatus>("/api/integrations/sentry"),
+  });
+
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
   // Two entries, because the two install and are addressed differently. Each
@@ -200,6 +214,14 @@ export function IntegrationsPage(): React.JSX.Element {
       category: "Logs",
       to: "/integrations/loki",
       status: loki?.configured === true ? "Connected" : null,
+    },
+    {
+      title: INTEGRATION_CATALOG.sentry.label,
+      description: INTEGRATION_CATALOG.sentry.description,
+      logo: INTEGRATION_CATALOG.sentry.logo,
+      category: "Error tracking",
+      to: "/integrations/sentry",
+      status: sentry?.configured === true ? "Connected" : null,
     },
     {
       title: INTEGRATION_CATALOG.github.label,

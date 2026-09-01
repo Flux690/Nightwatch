@@ -43,6 +43,12 @@ const API_TOOL_NAMES = [
   "QueryLogs",
   "QueryLogMetrics",
   "DiscoverLogLabels",
+  // Error tracking
+  "SearchSentryIssues",
+  "GetSentryLatestEvent",
+  "GetSentryIssueTagValues",
+  "GetSentryReleases",
+  "GetSentryReleaseCommits",
   // The connected repository, read and changed inside a sandbox
   "Read",
   "Edit",

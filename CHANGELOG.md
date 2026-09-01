@@ -34,7 +34,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Removed
 
-- **Starting an investigation by hand.** The mode picker beside the message box is gone and `POST /api/chat` refuses `kind: "investigation"`; typing opens a chat, and an alert opens an investigation. An investigation is a session with a falsifiable condition attached, and only an alert carries one - so a manually started investigation could never have its recovery confirmed, and produced a report nothing could ever verify. The investigations list, the record and the report are unchanged, and stopping or resuming a session works exactly as before. — `0.3.175`
+- **Starting an investigation by hand.** The mode picker beside the message box is gone and `POST /api/chat` refuses `kind: "investigation"`; typing opens a chat, and an alert opens an investigation. An investigation is a session with a falsifiable condition attached, and only an alert carries one - so a manually started investigation could never have its recovery confirmed, and produced a report nothing could ever verify. The investigations list, the record and the report are unchanged, and stopping or resuming a session works exactly as before. — `0.3.175` (`e0f52ba`)
 
 - The **container** field on `GetK8sConfig`, `GetK8sStats`, `GetK8sEvents` and `RestartK8sWorkload`. All four report on the whole workload and none ever read it; it stays on the three tools that do. — `0.3.171` (`f49f9c8`)
 - The **Inconclusive** status. A finished run reads **Completed** whatever its record holds, and what it found or ruled out reads on the row beneath it. — `0.3.162` (`d553ea9`)

@@ -230,4 +230,6 @@ export type {
   GitHubErrorBody,
   LokiErrorCode,
   LokiIntegrationStatus,
+  SentryErrorCode,
+  SentryIntegrationStatus,
 } from "./integrations.js";

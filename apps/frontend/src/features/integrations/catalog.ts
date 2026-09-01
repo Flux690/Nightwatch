@@ -10,6 +10,7 @@ export const INTEGRATION_SLUGS = [
   ...ALERT_SOURCE_KINDS,
   ...METRICS_SOURCE_KINDS,
   "loki",
+  "sentry",
   "github",
 ] as const;
 
@@ -82,6 +83,12 @@ export const INTEGRATION_CATALOG: Record<IntegrationSlug, IntegrationIdentity> =
       logo: "/logos/loki.svg",
       description:
         "Read the log lines around an alert and quote them in the report as evidence.",
+    },
+    sentry: {
+      label: "Sentry",
+      logo: "/logos/sentry.svg",
+      description:
+        "Read the exceptions and stack traces around an alert, and the release each one was running.",
     },
     github: {
       label: "GitHub",

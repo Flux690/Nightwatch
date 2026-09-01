@@ -43,3 +43,17 @@ export interface LokiIntegrationStatus {
   hasOrgId: boolean;
   validatedAt: string | null;
 }
+
+/* `forbidden` is separate from `unauthorized` because Sentry answers 403 for a
+   live token missing a scope, which the user fixes on the token rather than by
+   pasting a new one. */
+export type SentryErrorCode =
+  "network" | "unauthorized" | "forbidden" | "not_found" | "bad_response";
+
+export interface SentryIntegrationStatus {
+  configured: boolean;
+  url: string | null;
+  // The organization slug every Sentry path is scoped by; not a secret.
+  orgSlug: string | null;
+  validatedAt: string | null;
+}

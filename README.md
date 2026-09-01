@@ -16,36 +16,44 @@ The important part is what it will not do. NightWarden never changes anything on
 
 ```mermaid
 flowchart LR
+  subgraph stack["YOUR STACK"]
+    direction TB
+    alerting["<b>Alerting</b><br/>Alertmanager<br/>Grafana Alerting"]
+    metrics["<b>Metrics</b><br/>Prometheus<br/>VictoriaMetrics<br/>Mimir · Thanos · AMP"]
+    logs["<b>Logs</b><br/>Loki"]
+    errors["<b>Error tracking</b><br/>Sentry"]
+    code["<b>Code</b><br/>GitHub"]
+  end
 
-%% Infrastructure
-monitoring["Your monitoring<br/>Prometheus · Loki · Alertmanager<br/>(or Grafana Alerting)"]
-runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
+  api["<b>NightWarden API</b><br/>The only place an LLM runs<br/>Agent loop · Approval gate<br/>Evidence record · SQLite"]
+  ui["<b>Frontend</b><br/>Report · Investigations<br/>Chat · Approval cards<br/>Fleet · Settings"]
 
-%% Brain
-api["NightWarden API<br/>Node.js · SQLite<br/>Agent Loop · Approvals · Event Bus"]
+  subgraph fleet["RUNNERS"]
+    direction TB
+    docker["Docker host"]
+    k8s["Kubernetes cluster"]
+  end
 
-%% UI
-frontend["Frontend<br/>Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
+  alerting -- "POST /alerts/ingest" --> api
+  metrics -- "reads on demand" --> api
+  logs -- "reads on demand" --> api
+  errors -- "reads on demand" --> api
+  code -- "reads on demand" --> api
+  api <-- "REST + SSE" --> ui
+  docker -- "WSS, dialled out" --> api
+  k8s -- "WSS, dialled out" --> api
 
-%% Code
-github["GitHub<br/>Draft Pull Requests"]
-
-monitoring -- POST /api/alerts/ingest --> api
-frontend -- Ask a question --> api
-api -- WebSocket --> runner
-api -- REST + SSE --> frontend
-api -- sandboxed code fixes --> github
-
-classDef infra fill:#1b2430,stroke:#4f9cf9,color:#fff,stroke-width:1.5;
-classDef api fill:#1d3027,stroke:#4ade80,color:#fff,stroke-width:1.8;
-classDef ui fill:#2b243d,stroke:#c084fc,color:#fff,stroke-width:1.5;
-
-class monitoring,runner,github infra;
-class api api;
-class frontend ui;
-
-linkStyle default stroke:#888,stroke-width:1.5;
+  classDef box fill:#ffffff,stroke:#d1d9e0,color:#1f2328
+  classDef apiBox fill:#dafbe1,stroke:#2da44e,color:#1f2328
+  classDef uiBox fill:#f5edff,stroke:#8250df,color:#1f2328
+  classDef runBox fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  class alerting,metrics,logs,errors,code box
+  class api apiBox
+  class ui uiBox
+  class docker,k8s runBox
 ```
+
+Your data stays on your machine: one SQLite file, no telemetry, and nothing forwarded on a schedule.
 
 When an alert fires, your Alertmanager or Grafana Alerting posts it to the API's ingest endpoint. One webhook delivery is one alert group, and that grouping is yours: whatever `group_by` you already configured decides which alerts are investigated together, and NightWarden never regroups them on a clock of its own. The API opens a session for the group and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
 
@@ -189,16 +197,18 @@ The agent works only through typed tools. Each one returns a structured result, 
 
 ### The evidence it has
 
-|                              | Needs            | What it answers                                                                    |
-| ---------------------------- | ---------------- | ---------------------------------------------------------------------------------- |
-| **Containers and workloads** | a runner         | State, config, image and digest, restarts, resource stats, events, processes       |
-| **Service logs**             | a runner or Loki | What the service actually printed, windowed and filtered                           |
-| **Metrics**                  | a metrics source | An instant reading, a range around the alert, what rules exist, what metrics exist |
-| **Host vitals**              | a Docker runner  | CPU, memory, disk, network, kernel ring buffer, allowlisted host files             |
-| **Changes**                  | GitHub           | Merged pull requests and commits in a window                                       |
-| **The code**                 | GitHub           | Read, edit, build and test inside a sandbox; open a draft pull request             |
+|                              | Needs            | What it answers                                                                     |
+| ---------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| **Containers and workloads** | a runner         | State, config, image and digest, restarts, resource stats, events, processes        |
+| **Service logs**             | a runner or Loki | What the service actually printed, windowed and filtered                            |
+| **Metrics**                  | a metrics source | An instant reading, a range around the alert, what rules exist, what metrics exist  |
+| **Host vitals**              | a Docker runner  | CPU, memory, disk, network, kernel ring buffer, allowlisted host files              |
+| **Exceptions**               | Sentry           | Stack traces, culprit and level, events and users affected, breakdown by any tag    |
+| **Releases**                 | Sentry           | What shipped, when its deploy finished relative to the alert, and the commits in it |
+| **Changes**                  | GitHub           | Merged pull requests and commits in a window                                        |
+| **The code**                 | GitHub           | Read, edit, build and test inside a sandbox; open a draft pull request              |
 
-A runner is optional. A metrics source and Loki alone are a working install - the agent investigates on metrics and logs, and simply has no container evidence to reach for. It is told which tools it has, so it never proposes one it lacks.
+A runner is optional. A metrics source, Loki or Sentry alone is a working install - the agent investigates on whichever evidence it has, and simply has none of the rest to reach for. It is told which tools it has, so it never proposes one it lacks.
 
 ### Every result has a ceiling
 
@@ -268,7 +278,7 @@ To run from source instead, see [Development](#development).
 
 ## Connect your stack
 
-In the frontend go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics source, or Loki).
+In the frontend go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Error tracking**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat; investigations need an alert source plus at least one evidence source (a runner, a metrics source, Loki, or Sentry).
 
 **Add a runner.** Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Either wizard is three steps and needs no manual config editing:
 
@@ -298,6 +308,10 @@ That is the whole setup: an alert resolves to a service from the Compose labels 
 **Reachable from where.** Both evidence URLs are dialled by the API, from its own machine, so an address that works in your browser is not the test. The two cases that catch people out: containerized, `localhost` means the API's own container, not the host it runs on - use `host.docker.internal:9090` for a service beside it on the same host (the shipped compose file maps that name on Linux, where Docker does not provide it). On a separate host, use an address routable on your private network. A failed probe reports what actually went wrong - a name that would not resolve, a port with nothing listening, a timeout, an expired certificate - rather than a generic failure, so the fix is usually in the message.
 
 **Connect Loki.** The **Loki** card takes the base URL of the Loki you already run (and, only if yours needs them, a verbatim `Authorization` header value and a tenant `X-Scope-OrgID` for multi-tenant Loki - both optional, the header stored encrypted). NightWarden only ever reads: the agent gains three log tools - one for log lines (newest first, filtered in LogQL), one for log-derived metrics (rate/count over logs), and a label-discovery tool it uses to learn which labels select a service's logs, since log labels are not a fixed convention. All three window on the alert. The connection is probed against the labels endpoint before it saves, so a successful connect is itself the proof it is reachable. Loki alone is a sufficient evidence source, so a logs-first fleet with no metrics can still be investigated. Keep Loki off the public internet; NightWarden needs to reach it over your private network.
+
+**Connect Sentry.** The **Sentry** card takes three things: the base URL of the Sentry you run (or `https://sentry.io`), your **organization slug** - the one in the address bar when you browse Sentry, not its display name - and an auth token. Create the token in Sentry under Settings then Developer Settings as an internal integration, which self-hosted supports, and grant it **both `event:read` and `project:read`**: issues and events answer to the first, releases and commits to the second. Both are probed before anything is saved, so a token holding only one is refused at setup with the missing scope named rather than answering half the questions at 3am. The token is stored encrypted and never returned by any endpoint.
+
+NightWarden only ever reads, and never writes back: nothing is resolved, assigned or commented on, because an issue's triage state belongs to whoever owns that workflow. The agent gains five tools - search the issues around the alert, read one issue's latest event in full with its stack trace, break an issue down by a tag such as `server_name` to tell one host from the whole fleet, list releases, and list the commits in a release. Issue search windows on the alert; the release list deliberately does not, because a release that caused a slow failure can predate the alert by days, so every release is stamped with how long before or after the alert its deploy finished and none are filtered out. Where Sentry has a repository integration, the commits carry its own suspect-commit marker and the pull request.
 
 ## Running it
 

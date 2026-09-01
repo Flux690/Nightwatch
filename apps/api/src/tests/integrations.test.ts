@@ -13,7 +13,10 @@ import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
 import { registerMetricsRoutes } from "../integrations/metrics/routes.js";
-import { deleteLokiIntegration } from "../integrations/store.js";
+import {
+  deleteLokiIntegration,
+  deleteSentryIntegration,
+} from "../integrations/store.js";
 import { setAlertSourceReceived } from "../integrations/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
@@ -958,5 +961,159 @@ describe("Loki integration routes", () => {
       url: "/api/integrations/loki",
     });
     expect(JSON.parse(status.body).configured).toBe(false);
+  });
+});
+
+describe("Sentry integration routes", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  beforeAll(async () => {
+    cleanupDb = await useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await mountApi(server, registerIntegrationRoutes);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await deleteSentryIntegration();
+  });
+
+  const URL_ = "/api/integrations/sentry";
+
+  const CONNECT = {
+    url: "https://sentry.internal/",
+    orgSlug: "acme",
+    token: "sntrys_secret",
+  };
+
+  function authed(
+    method: "GET" | "POST" | "DELETE",
+    payload?: Record<string, unknown>,
+  ) {
+    return server.inject({
+      method,
+      url: URL_,
+      ...(payload !== undefined && { payload }),
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+  }
+
+  const connect = (payload: Record<string, unknown> = CONNECT) =>
+    authed("POST", payload);
+  const status = () => authed("GET");
+  // Both probes answer an empty page, which is a token holding both scopes.
+  const probeOk = () => stubFetch(() => jsonResponse([]));
+
+  it("reports not configured before onboarding and requires a session", async () => {
+    const unauthed = await server.inject({ method: "GET", url: URL_ });
+    expect(unauthed.statusCode).toBe(401);
+
+    const res = await status();
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: false,
+      url: null,
+      orgSlug: null,
+      validatedAt: null,
+    });
+  });
+
+  it("probes both scopes before saving, and stores the token encrypted", async () => {
+    const paths: string[] = [];
+    const mock = stubFetch((url, init) => {
+      paths.push(new URL(url).pathname);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer sntrys_secret");
+      return jsonResponse([]);
+    });
+
+    const res = await connect();
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: true,
+      url: "https://sentry.internal/",
+      orgSlug: "acme",
+      validatedAt: expect.any(String),
+    });
+    // Issues answer to event:read and releases to project:read, so a token
+    // holding one and not the other has to fail here rather than at 3am.
+    expect(paths).toEqual([
+      "/api/0/organizations/acme/issues/",
+      "/api/0/organizations/acme/releases/",
+    ]);
+    expect(String(mock.mock.calls[0]?.[0])).not.toContain("sntrys_secret");
+
+    expect(await storedSecret("sentry", "token")).toBe("sntrys_secret");
+    expect(await rawSecrets("sentry")).not.toContain("sntrys_secret");
+    const row = (await getDb()
+      .selectFrom("integrations")
+      .select("config")
+      .where("kind", "=", "sentry")
+      .executeTakeFirst())!;
+    expect(JSON.parse(row.config)).toEqual({
+      baseUrl: "https://sentry.internal/",
+      orgSlug: "acme",
+    });
+  });
+
+  it("names the missing scope when only the releases probe is refused", async () => {
+    stubFetch((url) =>
+      new URL(url).pathname.endsWith("/releases/")
+        ? new Response("forbidden", { status: 403 })
+        : jsonResponse([]),
+    );
+
+    const res = await connect();
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).code).toBe("forbidden");
+    expect(JSON.parse(res.body).error).toContain("project:read");
+    expect(JSON.parse((await status()).body).configured).toBe(false);
+  });
+
+  it("separates a rejected token, a wrong org slug and an unreachable host", async () => {
+    stubFetch(() => new Response("no", { status: 401 }));
+    const rejected = await connect();
+    expect(rejected.statusCode).toBe(401);
+    expect(JSON.parse(rejected.body).code).toBe("unauthorized");
+
+    stubFetch(() => new Response("no", { status: 404 }));
+    const wrongOrg = await connect();
+    expect(wrongOrg.statusCode).toBe(404);
+    expect(JSON.parse(wrongOrg.body).error).toContain("organization slug");
+
+    stubFetch(() => {
+      throw Object.assign(new Error("fetch failed"), {
+        cause: { code: "ECONNREFUSED" },
+      });
+    });
+    const unreachable = await connect();
+    expect(unreachable.statusCode).toBe(502);
+    expect(JSON.parse(unreachable.body).code).toBe("network");
+  });
+
+  it("rejects a body missing the organization slug without calling Sentry", async () => {
+    const mock = probeOk();
+    const res = await connect({ url: "https://sentry.internal", token: "t" });
+    expect(res.statusCode).toBe(400);
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("disconnects: deletes the stored row and reports not configured", async () => {
+    probeOk();
+    await connect();
+
+    const res = await authed("DELETE");
+    expect(res.statusCode).toBe(204);
+    expect(JSON.parse((await status()).body).configured).toBe(false);
   });
 });
