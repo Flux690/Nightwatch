@@ -64,7 +64,7 @@ describe("every route refuses an anonymous caller", () => {
   const routes: Array<{ method: string; url: string }> = [];
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     server.addHook("onRoute", (route) => {

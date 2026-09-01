@@ -20,7 +20,7 @@ import { createScriptRunner } from "./contract-fake-provider.js";
 const scriptRunner = createScriptRunner();
 mockCreateProvider.mockImplementation(() => scriptRunner.create());
 
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import {
   deleteLokiIntegration,
   saveLokiIntegration,
@@ -30,8 +30,8 @@ import {
   getAlertSource,
 } from "../integrations/alert-sources.js";
 
-function lastReceived(): string | null {
-  return getAlertSource("alertmanager")?.lastReceivedAt ?? null;
+async function lastReceived(): Promise<string | null> {
+  return (await getAlertSource("alertmanager"))?.lastReceivedAt ?? null;
 }
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
@@ -86,8 +86,8 @@ describe("POST /alerts/ingest auth", () => {
   let connAuth: RunnerConnection;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    VALID_TOKEN = generateAlertSourceToken("alertmanager");
+    cleanupDb = await useTempDb();
+    VALID_TOKEN = await generateAlertSourceToken("alertmanager");
 
     // Resolution matches the alert's labels against the fleet, so a runner advertising
     // the matching service must be connected for the 200-path tests to mean anything.
@@ -126,13 +126,12 @@ describe("POST /alerts/ingest auth", () => {
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/token/i);
     // A rejected request proves nothing about the pipe - no delivery stamp.
-    expect(lastReceived()).toBeNull();
+    expect(await lastReceived()).toBeNull();
   });
 
   it("rejects runner tokens - a runner credential grants runner things, never ingest", async () => {
-    const runnerToken = generateRunnerToken(
-      "docker",
-      "not-an-alert-source",
+    const runnerToken = (
+      await generateRunnerToken("docker", "not-an-alert-source")
     ).plaintext;
     const res = await server.inject({
       method: "POST",
@@ -141,7 +140,7 @@ describe("POST /alerts/ingest auth", () => {
       payload: ALERTMANAGER_BODY,
     });
     expect(res.statusCode).toBe(401);
-    expect(lastReceived()).toBeNull();
+    expect(await lastReceived()).toBeNull();
   });
 
   it("rejects missing token with 401", async () => {
@@ -166,7 +165,7 @@ describe("POST /alerts/ingest auth", () => {
     expect(body.received).toBe(1);
     // Authenticated, well-formed delivery stamps the pipe as proven - even if
     // this particular alert dedups against an earlier test's routing.
-    expect(lastReceived()).not.toBeNull();
+    expect(await lastReceived()).not.toBeNull();
   });
 
   it("accepts a valid Authorization bearer token and processes the alert", async () => {
@@ -220,8 +219,8 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   let connB: RunnerConnection | undefined;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
-    INGEST_TOKEN = generateAlertSourceToken("alertmanager");
+    cleanupDb = await useTempDb();
+    INGEST_TOKEN = await generateAlertSourceToken("alertmanager");
 
     server = Fastify({ logger: false });
     await mountApi(server, registerAlertRoutes);
@@ -267,10 +266,10 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.error).toMatch(/runner|metrics|loki/i);
     // The webhook DID deliver: the stamp lands before the evidence gate, so the
     // page shows "receiving" even while investigation is blocked.
-    expect(lastReceived()).not.toBeNull();
+    expect(await lastReceived()).not.toBeNull();
 
     // Prometheus alone is a sufficient evidence source - the agentless path.
-    connectTestMetrics();
+    await connectTestMetrics();
     const promOnly = await server.inject({
       method: "POST",
       url: "/api/alerts/ingest",
@@ -281,10 +280,10 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect((JSON.parse(promOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
-    deleteMetricsSource();
+    await deleteMetricsSource();
 
     // Loki alone is likewise sufficient - a logs-first, no-metrics fleet.
-    saveLokiIntegration({
+    await saveLokiIntegration({
       baseUrl: "http://loki.internal:3100",
       orgId: null,
       authorization: null,
@@ -299,7 +298,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect((JSON.parse(lokiOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
-    deleteLokiIntegration();
+    await deleteLokiIntegration();
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {
@@ -426,12 +425,12 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   describe("with no language model configured", () => {
-    afterEach(() => {
-      configureTestLLM();
+    afterEach(async () => {
+      await configureTestLLM();
     });
 
     it("refuses the delivery with 503 and names what is missing, so Alertmanager retries rather than dropping the alert", async () => {
-      clearTestLLM();
+      await clearTestLLM();
 
       const res = await server.inject({
         method: "POST",

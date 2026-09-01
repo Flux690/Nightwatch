@@ -53,8 +53,8 @@ const RebindBodySchema = z.object({
   repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
 });
 
-function statusPayload(): GitHubIntegrationStatus {
-  const row = getGitHubIntegration();
+async function statusPayload(): Promise<GitHubIntegrationStatus> {
+  const row = await getGitHubIntegration();
   if (!row) {
     return {
       configured: false,
@@ -82,8 +82,8 @@ async function sendGitHubError(
   throw err;
 }
 
-function lokiStatusPayload(): LokiIntegrationStatus {
-  const row = getLokiIntegration();
+async function lokiStatusPayload(): Promise<LokiIntegrationStatus> {
+  const row = await getLokiIntegration();
   if (!row) {
     return {
       configured: false,
@@ -126,7 +126,7 @@ export async function registerIntegrationRoutes(
   fastify.get(
     "/integrations/github",
     { preHandler: requireSession },
-    async () => statusPayload(),
+    async () => await statusPayload(),
   );
 
   // Sandbox prerequisites, checked when the user clicks Connect: fail
@@ -134,7 +134,7 @@ export async function registerIntegrationRoutes(
   fastify.post(
     "/integrations/github/preflight",
     { preHandler: requireSession },
-    async () => preflight(),
+    async () => await preflight(),
   );
 
   // During onboarding the token rides the body; afterwards the stored
@@ -147,7 +147,7 @@ export async function registerIntegrationRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const stored = getGitHubIntegration();
+      const stored = await getGitHubIntegration();
       const token = parsed.data.token ?? stored?.token ?? null;
       if (!token) {
         return reply
@@ -161,7 +161,7 @@ export async function registerIntegrationRoutes(
         );
         return { repos, hasMore };
       } catch (err) {
-        return sendGitHubError(reply, err);
+        return await sendGitHubError(reply, err);
       }
     },
   );
@@ -181,14 +181,14 @@ export async function registerIntegrationRoutes(
       const [owner, name] = repo.split("/") as [string, string];
       try {
         const validated = await validateRepoAccess(token, owner, name);
-        saveGitHubIntegration({
+        await saveGitHubIntegration({
           token,
           repoOwner: owner,
           repoName: name,
           tokenExpiresAt: validated.expiresAt,
         });
         logger.info({ repo }, "github integration configured");
-        return await reply.code(201).send(statusPayload());
+        return await reply.code(201).send(await statusPayload());
       } catch (err) {
         if (err instanceof GitHubApiError && err.code === "repo_not_found") {
           const orgApprovalUrl = (await ownerIsOrganization(owner))
@@ -200,7 +200,7 @@ export async function registerIntegrationRoutes(
             ...(orgApprovalUrl !== undefined && { orgApprovalUrl }),
           });
         }
-        return sendGitHubError(reply, err);
+        return await sendGitHubError(reply, err);
       }
     },
   );
@@ -211,7 +211,7 @@ export async function registerIntegrationRoutes(
     "/integrations/github",
     { preHandler: requireSession },
     async (request, reply) => {
-      const stored = getGitHubIntegration();
+      const stored = await getGitHubIntegration();
       if (!stored) {
         return reply.code(400).send({ error: "GitHub is not connected" });
       }
@@ -223,12 +223,12 @@ export async function registerIntegrationRoutes(
       try {
         const token = stored.token;
         await validateRepoAccess(token, owner, name);
-        updateGitHubIntegrationRepo(owner, name);
+        await updateGitHubIntegrationRepo(owner, name);
         logger.info(
           { repo: parsed.data.repo },
           "github integration repository changed",
         );
-        return await reply.code(200).send(statusPayload());
+        return await reply.code(200).send(await statusPayload());
       } catch (err) {
         if (err instanceof GitHubApiError && err.code === "repo_not_found") {
           const orgApprovalUrl = (await ownerIsOrganization(owner))
@@ -240,7 +240,7 @@ export async function registerIntegrationRoutes(
             ...(orgApprovalUrl !== undefined && { orgApprovalUrl }),
           });
         }
-        return sendGitHubError(reply, err);
+        return await sendGitHubError(reply, err);
       }
     },
   );
@@ -252,14 +252,16 @@ export async function registerIntegrationRoutes(
     { preHandler: requireSession },
     async (_request, reply) => {
       await teardownAll("disconnected");
-      deleteGitHubIntegration();
+      await deleteGitHubIntegration();
       logger.info("github integration disconnected");
       return reply.code(204).send();
     },
   );
 
-  fastify.get("/integrations/loki", { preHandler: requireSession }, async () =>
-    lokiStatusPayload(),
+  fastify.get(
+    "/integrations/loki",
+    { preHandler: requireSession },
+    async () => await lokiStatusPayload(),
   );
 
   // Probed before saving, because it exercises auth and the tenant header: a
@@ -275,15 +277,15 @@ export async function registerIntegrationRoutes(
       const { url, authHeader, orgId } = parsed.data;
       try {
         await probeLoki(url, authHeader ?? null, orgId ?? null);
-        saveLokiIntegration({
+        await saveLokiIntegration({
           baseUrl: url,
           orgId: orgId ?? null,
           authorization: authHeader ?? null,
         });
         logger.info({ url }, "loki integration configured");
-        return await reply.code(201).send(lokiStatusPayload());
+        return await reply.code(201).send(await lokiStatusPayload());
       } catch (err) {
-        return sendLokiError(reply, err);
+        return await sendLokiError(reply, err);
       }
     },
   );
@@ -292,7 +294,7 @@ export async function registerIntegrationRoutes(
     "/integrations/loki",
     { preHandler: requireSession },
     async (_request, reply) => {
-      deleteLokiIntegration();
+      await deleteLokiIntegration();
       logger.info("loki integration disconnected");
       return reply.code(204).send();
     },
@@ -306,7 +308,7 @@ export async function registerIntegrationRoutes(
     "/integrations/alerting/:kind",
     { preHandler: knownSender },
     async (request) => {
-      const source = getAlertSource(request.params.kind);
+      const source = await getAlertSource(request.params.kind);
       return {
         configured: source !== null,
         ingestUrl: `${publicUrl(request)}/api/alerts/ingest`,
@@ -323,7 +325,7 @@ export async function registerIntegrationRoutes(
     async (request, reply) =>
       reply
         .code(201)
-        .send({ token: generateAlertSourceToken(request.params.kind) }),
+        .send({ token: await generateAlertSourceToken(request.params.kind) }),
   );
 
   // Deleting the row is the revoke: the credential stops matching on the next
@@ -332,7 +334,7 @@ export async function registerIntegrationRoutes(
     "/integrations/alerting/:kind",
     { preHandler: knownSender },
     async (request, reply) => {
-      deleteAlertSource(request.params.kind);
+      await deleteAlertSource(request.params.kind);
       logger.info({ kind: request.params.kind }, "alert source disconnected");
       return reply.code(204).send();
     },

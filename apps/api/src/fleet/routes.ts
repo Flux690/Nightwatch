@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { listRunnersMeta } from "../fleet/runners.js";
+import { listRunnersMeta } from "../fleet/runners-store.js";
 import { listRunners, getFleetView } from "../fleet/connections.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -10,7 +10,7 @@ export async function registerRunnerRoutes(
 ): Promise<void> {
   // Live runners come from the in-memory registry; offline tokens show as
   // single rows so their install command remains discoverable.
-  fastify.get("/runners", { preHandler: requireSession }, () => {
+  fastify.get("/runners", { preHandler: requireSession }, async () => {
     const live = listRunners();
     const byRunner = new Map<string, typeof live>();
     for (const r of live) {
@@ -20,7 +20,7 @@ export async function registerRunnerRoutes(
     }
 
     const records: RunnerRecord[] = [];
-    for (const t of listRunnersMeta()) {
+    for (const t of await listRunnersMeta()) {
       const runners = byRunner.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({

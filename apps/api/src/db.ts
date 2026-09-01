@@ -1,197 +1,95 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
+import { Kysely, SqliteDialect } from "kysely";
+import { MIGRATIONS } from "./migrations.js";
 import { dbPath } from "./paths.js";
+import type { Database as Schema } from "./schema.js";
 
-// No migrations: a schema change is applied by recreating the database.
-const SCHEMA = `
+export type Db = Kysely<Schema>;
 
-CREATE TABLE IF NOT EXISTS runner (
-  id             TEXT     PRIMARY KEY,
-  token          TEXT     NOT NULL UNIQUE,
-  platform       TEXT     NOT NULL CHECK (platform IN ('docker', 'kubernetes')),
-  server_name    TEXT     NOT NULL UNIQUE,
-  created_at     TEXT     NOT NULL,
-  last_used_at   TEXT
-);
+/* Applied against the raw handle before Kysely sees it, so a migration is one
+   synchronous transaction. SQLite has transactional DDL, so a failure leaves
+   nothing half-applied and its version unrecorded for the next boot to retry. */
+function migrate(handle: Database.Database): void {
+  handle.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version    INTEGER  PRIMARY KEY,
+      name       TEXT     NOT NULL,
+      applied_at TEXT     NOT NULL
+    );
+  `);
+  const rows = handle
+    .prepare(`SELECT version FROM schema_migrations`)
+    .all() as Array<{ version: number }>;
+  const applied = new Set(rows.map((r) => r.version));
 
-CREATE TABLE IF NOT EXISTS config (
-  id                        TEXT      PRIMARY KEY,
-  active_provider           TEXT,
-  max_retries               INTEGER   NOT NULL DEFAULT 3,
-  request_timeout_ms        INTEGER   NOT NULL DEFAULT 120000,
-  max_concurrent_investigations INTEGER NOT NULL DEFAULT 10,
-  check_in_after_ms         INTEGER   NOT NULL DEFAULT 1800000,
-  tool_call_ceiling_ms      INTEGER   NOT NULL DEFAULT 600000,
-  sandbox_idle_timeout_ms   INTEGER   NOT NULL DEFAULT 3600000,
-  sandbox_cpus              INTEGER   NOT NULL DEFAULT 2,
-  sandbox_memory_mb         INTEGER   NOT NULL DEFAULT 4096,
-  sandbox_require_gvisor    INTEGER   NOT NULL DEFAULT 0,
-  sandbox_network           TEXT      NOT NULL DEFAULT 'allowlist',
-  sandbox_allowlist_hosts   TEXT      NOT NULL DEFAULT 'registry.npmjs.org
-registry.yarnpkg.com
-repo.yarnpkg.com',
-  updated_at                TEXT      NOT NULL
-);
+  let previous = 0;
+  for (const migration of MIGRATIONS) {
+    if (migration.version <= previous) {
+      throw new Error(
+        `migrations must ascend and each version appear once: ${migration.version} follows ${previous}`,
+      );
+    }
+    previous = migration.version;
+    if (applied.has(migration.version)) continue;
 
-CREATE TABLE IF NOT EXISTS provider_config (
-  provider            TEXT      PRIMARY KEY,
-  model               TEXT,
-  base_url            TEXT,
-  api_key_encrypted   TEXT,
-  reasoning_level     TEXT,
-  max_output_tokens   INTEGER,
-  max_input_tokens    INTEGER,
-  compaction          INTEGER   NOT NULL DEFAULT 0,
-  reasoning           TEXT,
-  updated_at          TEXT      NOT NULL
-);
+    handle.exec("BEGIN IMMEDIATE");
+    try {
+      handle.exec(migration.sql);
+      handle
+        .prepare(
+          `INSERT INTO schema_migrations (version, name, applied_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(migration.version, migration.name, new Date().toISOString());
+      handle.exec("COMMIT");
+    } catch (err) {
+      handle.exec("ROLLBACK");
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `migration ${migration.version} (${migration.name}) failed: ${reason}`,
+      );
+    }
+  }
+}
 
-CREATE TABLE IF NOT EXISTS user (
-  id              TEXT      PRIMARY KEY,
-  email           TEXT,
-  hash            TEXT,
-  login_version   INTEGER   NOT NULL DEFAULT 0,
-  updated_at      TEXT      NOT NULL
-);
+let _handle: Database.Database | undefined;
+let _db: Db | undefined;
 
--- One row per configured connection, whatever it connects to. Config lives in
--- JSON only that kind's accessor reads, and secrets is one encrypted value
--- whose plaintext is a map - which is what lets one row carry two credentials.
-CREATE TABLE IF NOT EXISTS integrations (
-  id            TEXT   PRIMARY KEY,
-  kind          TEXT   NOT NULL,
-  -- How a tool call addresses one. Derived from the kind, never asked for.
-  name          TEXT   NOT NULL,
-  config        TEXT   NOT NULL,
-  secrets       TEXT,
-  -- Set only for a sender that presents a credential to us. Unique so two can
-  -- never collide; SQLite permits many NULLs, so outbound rows cost nothing.
-  token_hash    TEXT   UNIQUE,
-  validated_at  TEXT,
-  -- When a sender last delivered. Proof of delivery, not of configuration.
-  last_used_at  TEXT,
-  created_at    TEXT   NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_integrations_name
-  ON integrations(name);
-CREATE INDEX IF NOT EXISTS idx_integrations_kind
-  ON integrations(kind);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  session_id           TEXT      PRIMARY KEY,
-  title                TEXT      NOT NULL DEFAULT '',
-  investigation        INTEGER   NOT NULL DEFAULT 0,
-  -- Every value but 'running' is derived from the columns below and rewritten on
-  -- each transition. 'running' is claimed by the conditional UPDATE in
-  -- run-state.ts, which is also the dispatch mutex.
-  status               TEXT      NOT NULL DEFAULT 'completed'
-                                 CHECK (status IN ('action_required', 'running',
-                                   'resolved', 'stopped', 'failed', 'completed')),
-  failed_attempts      INTEGER   NOT NULL DEFAULT 0,
-  failure_kind         TEXT      CHECK (failure_kind IN ('transient', 'permanent')),
-  -- When a person ended the run. Recorded, because otherwise a stopped run is
-  -- indistinguishable from one that concluded nothing.
-  stopped_at           TEXT,
-  -- The gate this session is parked on, all null when it is not parked. Columns
-  -- rather than a table because there is at most one per session and it was only
-  -- ever read by session id. What a person decided is not here: that is durable
-  -- and lives on the transcript, while these three are live control state.
-  awaiting_tool_use_id TEXT,
-  awaiting_kind        TEXT      CHECK (awaiting_kind IN
-                                   ('approval', 'clarification', 'continue')),
-  -- Results of the calls that ran beside the gated one, with nowhere valid to
-  -- sit until it is answered too: the wire needs one message for the whole turn.
-  awaiting_results     TEXT      NOT NULL DEFAULT '[]',
-  -- Stamped before an approved call runs. A claim that outlives the process is
-  -- what says the write may already have happened, so it is never replayed
-  -- silently. Intent recorded before the fact, which no append-only row can do.
-  attempt_started_at   TEXT,
-  -- The record, in the two parts it has always had and one column each: claims
-  -- the agent appends as it works, and the write-up composed once at the end.
-  hypotheses           TEXT      NOT NULL DEFAULT '[]',
-  report               TEXT,
-  -- Stamped whenever either part is written. A column rather than a field
-  -- inside them, so "has the record moved" is a comparison, not a parse.
-  record_updated_at    TEXT,
-  created_at           TEXT      NOT NULL,
-  last_activity_at     TEXT      NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_kind_activity
-  ON sessions(investigation, last_activity_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sessions_seats
-  ON sessions(investigation, status);
-
-CREATE TABLE IF NOT EXISTS alerts (
-  id                 INTEGER   PRIMARY KEY,
-  session_id         TEXT      REFERENCES sessions(session_id) ON DELETE CASCADE,
-  group_key          TEXT      NOT NULL,
-  source_alert_id    TEXT      NOT NULL,
-  -- Searched by recall, so json_each reads only the labels and not the whole
-  -- alert beside them.
-  labels             TEXT      NOT NULL DEFAULT '{}',
-  alert_type         TEXT      NOT NULL DEFAULT 'unknown',
-  fired_at           TEXT      NOT NULL,
-  arrived_at         TEXT      NOT NULL,
-  cleared_at         TEXT,
-  injected           INTEGER   NOT NULL DEFAULT 0,
-  dropped_alerts     INTEGER   NOT NULL DEFAULT 0,
-  group_context      TEXT,
-  alert              TEXT      NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_alerts_session
-  ON alerts(session_id, id);
-CREATE INDEX IF NOT EXISTS idx_alerts_source
-  ON alerts(source_alert_id, fired_at);
-CREATE INDEX IF NOT EXISTS idx_alerts_open
-  ON alerts(session_id) WHERE cleared_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_alerts_queued
-  ON alerts(arrived_at) WHERE session_id IS NULL;
-CREATE INDEX IF NOT EXISTS idx_alerts_group
-  ON alerts(group_key);
-
-CREATE TABLE IF NOT EXISTS session_transcript (
-  session_id     TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-  seq            INTEGER   NOT NULL,
-  kind           TEXT      NOT NULL,
-  content        TEXT      NOT NULL,
-  canonical      TEXT,
-  timestamp      TEXT      NOT NULL,
-  PRIMARY KEY (session_id, seq)
-);
-
-`;
-
-let _db: Database.Database | undefined;
-
-export function getDb(): Database.Database {
+// Migrations run at open rather than only at boot, because a test reaches the
+// database through getDb and would otherwise be handed one with no tables.
+export function getDb(): Db {
   if (!_db) {
     const path = dbPath();
     mkdirSync(dirname(path), { recursive: true });
-    const db = new Database(path);
-    db.pragma("journal_mode = WAL");
+    const handle = new Database(path);
+    handle.pragma("journal_mode = WAL");
     // Off by default in SQLite, so ON DELETE CASCADE fires only once it is on.
-    db.pragma("foreign_keys = ON");
-    db.exec(SCHEMA);
-    _db = db;
+    handle.pragma("foreign_keys = ON");
+    migrate(handle);
+    _handle = handle;
+    _db = new Kysely<Schema>({
+      dialect: new SqliteDialect({ database: handle }),
+    });
   }
   return _db;
 }
 
-// Eager, so a misconfigured data path fails at boot rather than at 3am.
+// Eager, so a misconfigured data path or a broken migration fails at boot
+// rather than at 3am.
 export function initDb(): void {
   getDb();
 }
 
-// The open handle, or nothing. For a caller that must not be the one to create
-// a database: getDb() opens one, which is a side effect an assertion cannot have.
-export function openDb(): Database.Database | undefined {
+// The open database, or nothing. For a caller that must not be the one to
+// create it: getDb() opens one, which is a side effect an assertion cannot have.
+export function openDb(): Db | undefined {
   return _db;
 }
 
 export function resetDb(): void {
-  if (_db) {
-    _db.close();
-    _db = undefined;
-  }
+  _handle?.close();
+  _handle = undefined;
+  _db = undefined;
 }

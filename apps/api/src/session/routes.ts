@@ -10,8 +10,8 @@ import {
   gatedCalls,
   resolveEvidence,
 } from "../agent/report.js";
-import { hasPendingHumanInput } from "./interrupts.js";
-import { getRecord } from "./record.js";
+import { hasPendingHumanInput } from "./gate-store.js";
+import { getRecord } from "./record-store.js";
 import {
   createSession,
   deleteSession,
@@ -89,11 +89,13 @@ export async function registerSessionRoutes(
     if (limit === null || offset === null) {
       return reply.code(400).send({ error: "invalid limit or offset" });
     }
+    // Required: the list is served by one index, and the unfiltered shape it
+    // cannot serve was reachable only by omitting this.
     const { kind } = request.query;
-    if (kind !== undefined && kind !== "investigation" && kind !== "chat") {
+    if (kind !== "investigation" && kind !== "chat") {
       return reply.code(400).send({ error: "invalid kind" });
     }
-    return listSessionPage(limit, offset, kind);
+    return await listSessionPage(limit, offset, kind);
   });
 
   // The session answers what it is. Returning a bare transcript meant an
@@ -103,7 +105,7 @@ export async function registerSessionRoutes(
     "/sessions/:id",
     { preHandler: requireSession },
     async (request, reply) => {
-      const session = getSession(request.params.id);
+      const session = await getSession(request.params.id);
       if (session === undefined) {
         return reply.code(404).send({ error: "unknown session" });
       }
@@ -113,9 +115,9 @@ export async function registerSessionRoutes(
         createdAt: session.createdAt,
         lastActivityAt: session.lastActivityAt,
         investigation: session.investigation,
-        running: dispatcher.isSessionRunning(request.params.id),
+        running: await dispatcher.isSessionRunning(request.params.id),
         alerts: session.alerts,
-        transcript: buildTranscript(request.params.id),
+        transcript: await buildTranscript(request.params.id),
       };
       return response;
     },
@@ -125,7 +127,7 @@ export async function registerSessionRoutes(
     "/sessions/:id/report",
     { preHandler: requireSession },
     async (request, reply) => {
-      const record = getRecord(request.params.id);
+      const record = await getRecord(request.params.id);
       if (record === undefined) {
         return reply.code(404).send({ error: "no report for session" });
       }
@@ -134,9 +136,9 @@ export async function registerSessionRoutes(
       // well a claim is backed.
       const response: SessionReportResponse = {
         record,
-        decisions: gatedCalls(request.params.id),
-        evidence: resolveEvidence(request.params.id, record),
-        conviction: computeConviction(request.params.id, record),
+        decisions: await gatedCalls(request.params.id),
+        evidence: await resolveEvidence(request.params.id, record),
+        conviction: await computeConviction(request.params.id, record),
       };
       return response;
     },
@@ -147,7 +149,7 @@ export async function registerSessionRoutes(
     { preHandler: requireSession },
     async (request, reply) => {
       const sessionId = request.params.id;
-      if (dispatcher.isSessionRunning(sessionId)) {
+      if (await dispatcher.isSessionRunning(sessionId)) {
         return reply
           .code(409)
           .send({ error: "session is running: stop it before deleting" });
@@ -155,11 +157,11 @@ export async function registerSessionRoutes(
       // Awaited, because a truthful 204 beats a fast one. Left behind, the idle
       // sweep would push work for a session the user asked to remove.
       await teardown(sessionId, "deleted");
-      deleteSession(sessionId);
+      await deleteSession(sessionId);
       // The one way a seat frees without a run ending, so nothing else would
       // notice and a waiting alert would sit until the next delivery.
-      publishQueueChanged();
-      dispatcher.promoteQueued();
+      await publishQueueChanged();
+      await dispatcher.promoteQueued();
       return reply.code(204).send();
     },
   );
@@ -171,7 +173,7 @@ export async function registerSessionRoutes(
     { preHandler: requireSession },
     async (request, reply) => {
       const sessionId = request.params.id;
-      const session = getSession(sessionId);
+      const session = await getSession(sessionId);
       if (session === undefined) {
         return reply.code(404).send({ error: "unknown session" });
       }
@@ -180,14 +182,14 @@ export async function registerSessionRoutes(
           .code(409)
           .send({ error: "a chat keeps no record to write up" });
       }
-      if (hasPendingHumanInput(sessionId)) {
+      if (await hasPendingHumanInput(sessionId)) {
         return reply
           .code(409)
           .send({ error: "session is busy: awaiting approval" });
       }
-      const started = dispatcher.dispatch({
+      const started = await dispatcher.dispatch({
         sessionId,
-        seed: buildSeed(sessionId),
+        seed: await buildSeed(sessionId),
         harnessMessage: REPORT_RETRY_REQUEST,
       });
       if (!started) {
@@ -241,7 +243,7 @@ export async function registerSessionRoutes(
       if (kind !== "chat" && kind !== "investigation") {
         return reply.code(400).send({ error: "invalid kind" });
       }
-      const readiness = checkLLMReadiness();
+      const readiness = await checkLLMReadiness();
       if (!readiness.ready) {
         return reply
           .code(503)
@@ -252,18 +254,25 @@ export async function registerSessionRoutes(
       const investigation = kind === "investigation";
       // Refused rather than queued, because someone is watching and would get
       // a spinner with no end. A resume already holds its seat.
-      if (!hasSeat(investigation)) {
+      if (!(await hasSeat(investigation))) {
         return reply.code(503).send({
           error: investigation
-            ? `All ${seatLimit(true)} investigation slots are busy. Wait for one to finish, or raise the limit in Settings.`
-            : `You've reached the limit of ${seatLimit(false)} simultaneous conversations. Wait for one to finish before starting another.`,
+            ? `All ${await seatLimit(true)} investigation slots are busy. Wait for one to finish, or raise the limit in Settings.`
+            : `You've reached the limit of ${await seatLimit(false)} simultaneous conversations. Wait for one to finish before starting another.`,
         });
       }
       const sessionId = randomUUID();
       // The row exists before its id is handed out, so a 202 never names a
       // session the next request cannot fetch. The run's own call is idempotent.
-      createSession(buildSessionMeta(sessionId, null, message), investigation);
-      dispatcher.dispatch({ sessionId, userMessage: message, investigation });
+      await createSession(
+        buildSessionMeta(sessionId, null, message),
+        investigation,
+      );
+      await dispatcher.dispatch({
+        sessionId,
+        userMessage: message,
+        investigation,
+      });
       logger.info({ sessionId, kind }, "session started");
       return reply.code(202).send({ sessionId });
     },
@@ -281,20 +290,22 @@ export async function registerSessionRoutes(
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
       }
-      if (!sessionExists(sessionId)) {
+      if (!(await sessionExists(sessionId))) {
         return reply.code(404).send({ error: "unknown session" });
       }
       // Parked on a human rather than racing: the answer comes from the respond
       // route, so this is refused before anything tries to claim the session.
-      if (hasPendingHumanInput(sessionId)) {
+      if (await hasPendingHumanInput(sessionId)) {
         return reply
           .code(409)
           .send({ error: "session is busy: awaiting approval" });
       }
-      const seed = buildSeed(sessionId);
+      const seed = await buildSeed(sessionId);
       // The claim inside dispatch decides it, not a check up here: the loser is
       // told rather than colliding on the transcript's primary key.
-      if (!dispatcher.dispatch({ sessionId, seed, userMessage: message })) {
+      if (
+        !(await dispatcher.dispatch({ sessionId, seed, userMessage: message }))
+      ) {
         return reply
           .code(409)
           .send({ error: "session is busy: a run is already in flight" });

@@ -199,29 +199,29 @@ function installGitHubMock(): void {
 let cleanupDb: () => void;
 let toolUseCounter = 0;
 
-function runOpr(
+async function runOpr(
   input: Record<string, unknown>,
   sessionId = SESSION_ID,
   toolUseId = `opr-${++toolUseCounter}`,
 ): Promise<DispatchedToolResult> {
   const entry = findTool("OpenPullRequest");
   if (!entry) throw new Error("OpenPullRequest missing from registry");
-  return executeTool(entry, input, {
+  return await executeTool(entry, input, {
     toolCallCeilingMs: 15_000,
     sessionId,
     toolUseId,
   });
 }
 
-beforeAll(() => {
-  cleanupDb = useTempDb();
+beforeAll(async () => {
+  cleanupDb = await useTempDb();
   // Network detachment is covered in sandbox-workspace tests; keep this
   // PR-focused test on the open path so the mock needs no network machinery.
-  updateConfig({ sandboxNetwork: "open" });
+  await updateConfig({ sandboxNetwork: "open" });
   installGitMock();
   installDockerMock();
   installGitHubMock();
-  saveGitHubIntegration({
+  await saveGitHubIntegration({
     token: "github_pat_fixture",
     repoOwner: "acme",
     repoName: "api",

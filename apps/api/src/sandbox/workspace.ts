@@ -73,7 +73,7 @@ export interface WorkspaceOptions {
   };
   // Supplied by the host, which has the transcript: without them the next edit
   // is refused for a file the model's own context says it read.
-  readPaths?(): string[];
+  readPaths?(): Promise<string[]>;
   onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
 }
@@ -277,7 +277,7 @@ async function provisionEntry(
     sessionId,
     dir,
     branch: options.branch,
-    readPaths: new Set<string>(options.readPaths?.() ?? []),
+    readPaths: new Set<string>((await options.readPaths?.()) ?? []),
     options,
     async exec(command, opts) {
       const result = await execInContainer(containerId, command, opts);
@@ -414,7 +414,9 @@ export async function teardown(
 }
 
 export async function teardownAll(reason: TeardownReason): Promise<void> {
-  await Promise.all([...sessions.keys()].map((id) => teardown(id, reason)));
+  await Promise.all(
+    [...sessions.keys()].map(async (id) => await teardown(id, reason)),
+  );
 }
 
 /* The same rule from the other side: nothing is dropped, so nothing needs

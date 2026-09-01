@@ -711,9 +711,6 @@ describe("Shell", () => {
       expect(
         screen.queryByRole("region", { name: "Failed" }),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole("region", { name: "Inconclusive" }),
-      ).not.toBeInTheDocument();
     });
 
     it("puts the title, the finding, the severity word and the age on one row", async () => {

@@ -34,7 +34,7 @@ import {
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../session/store.js";
-import { getRecord } from "../session/record.js";
+import { getRecord } from "../session/record-store.js";
 import { buildInitialContext } from "../agent/context.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
@@ -112,9 +112,10 @@ describe("state inversion: persistence and reads are API-local", () => {
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
-    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
-    });
+    const listRes = await fetch(
+      `http://127.0.0.1:${port}/api/sessions?kind=chat`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
     expect(listRes.status).toBe(200);
     const { rows } = (await listRes.json()) as SessionListPage;
     expect(rows.some((s) => s.sessionId === sessionId)).toBe(true);
@@ -159,7 +160,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
-    const stored = getSession(String(sessionId));
+    const stored = await getSession(String(sessionId));
     // No originating alert is the chat-vs-alert distinction now (trigger is gone).
     expect(stored?.alerts).toEqual([]);
 
@@ -188,7 +189,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     const { events, close } = await connectFrontendEvents(port, SESSION);
 
     const sessionId = randomUUID();
-    dispatchAlertSession(sessionId, [
+    await dispatchAlertSession(sessionId, [
       {
         sourceAlertId: `si-${randomUUID()}`,
         labels: {},
@@ -201,9 +202,9 @@ describe("state inversion: persistence and reads are API-local", () => {
     ]);
     // The row carries the flag from the moment it exists - checked here, before
     // the run has produced a report to infer anything from.
-    const created = await waitFor(() => getSession(sessionId));
+    const created = await waitFor(async () => await getSession(sessionId));
     expect(created.investigation).toBe(true);
-    expect(getRecord(sessionId)).toBeUndefined();
+    expect(await getRecord(sessionId)).toBeUndefined();
 
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
@@ -216,9 +217,10 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(session.investigation).toBe(true);
     expect(session.alerts[0]?.alert.alertType).toBe("ContainerDown");
 
-    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
-    });
+    const listRes = await fetch(
+      `http://127.0.0.1:${port}/api/sessions?kind=investigation`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
     const { rows } = (await listRes.json()) as SessionListPage;
     expect(rows.find((r) => r.sessionId === sessionId)?.investigation).toBe(
       true,
@@ -227,7 +229,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
   describe("the session list pages rather than stopping", () => {
     async function listPage(query: string): Promise<Response> {
-      return fetch(`http://127.0.0.1:${port}/api/sessions${query}`, {
+      return fetch(`http://127.0.0.1:${port}/api/sessions?kind=chat&${query}`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
     }
@@ -235,21 +237,21 @@ describe("state inversion: persistence and reads are API-local", () => {
     it("serves a second page whose rows the first page did not carry", async () => {
       // Two sessions exist by now, which is enough to prove the offset moves.
       const first = (await (
-        await listPage("?limit=1")
+        await listPage("limit=1")
       ).json()) as SessionListPage;
       expect(first.rows).toHaveLength(1);
       expect(first.nextOffset).toBe(1);
 
       const second = (await (
-        await listPage(`?limit=1&offset=${first.nextOffset}`)
+        await listPage(`limit=1&offset=${first.nextOffset}`)
       ).json()) as SessionListPage;
       expect(second.rows[0].sessionId).not.toBe(first.rows[0].sessionId);
     });
 
     it("rejects a limit that is not a page size", async () => {
-      expect((await listPage("?limit=abc")).status).toBe(400);
-      expect((await listPage("?limit=0")).status).toBe(400);
-      expect((await listPage("?offset=-1")).status).toBe(400);
+      expect((await listPage("limit=abc")).status).toBe(400);
+      expect((await listPage("limit=0")).status).toBe(400);
+      expect((await listPage("offset=-1")).status).toBe(400);
     });
   });
 });
@@ -257,8 +259,8 @@ describe("state inversion: persistence and reads are API-local", () => {
 describe("state inversion: opening alert context stays alert-scoped", () => {
   let cleanupDb: () => void;
 
-  beforeAll(() => {
-    cleanupDb = useTempDb();
+  beforeAll(async () => {
+    cleanupDb = await useTempDb();
   });
 
   afterAll(() => {

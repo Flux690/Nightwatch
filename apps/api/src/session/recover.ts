@@ -3,12 +3,12 @@ import { evidenceIdsIn } from "../agent/evidence-id.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
-import { hasPendingHumanInput } from "./interrupts.js";
+import { hasPendingHumanInput } from "./gate-store.js";
 import {
   abandonedSessionIds,
   markDone,
   runningSessionIds,
-} from "./run-state.js";
+} from "./status-store.js";
 import { getSession } from "./store.js";
 import {
   appendErrorMessage,
@@ -70,7 +70,7 @@ async function answerPendingCalls(
   if (!calls.every((call) => replayable(call.name))) return false;
 
   // A replay answers calls the transcript already holds, so it adds no numbers.
-  const evidenceIds = evidenceIdsIn(getTranscriptRows(sessionId));
+  const evidenceIds = evidenceIdsIn(await getTranscriptRows(sessionId));
   const parts: MessagePart[] = [];
   const texts: string[] = [];
   for (const call of calls) {
@@ -80,7 +80,7 @@ async function answerPendingCalls(
     const { content, toolOutcome } = await executeTool(tool, call.input, {
       sessionId,
       toolUseId: call.toolUseId,
-      toolCallCeilingMs: loadConfig().toolCallCeilingMs,
+      toolCallCeilingMs: (await loadConfig()).toolCallCeilingMs,
       ...(evidenceId !== undefined && { evidenceId }),
     });
     parts.push({
@@ -93,10 +93,10 @@ async function answerPendingCalls(
     texts.push(content);
   }
 
-  appendTranscriptRows([
+  await appendTranscriptRows([
     {
       sessionId,
-      seq: getNextSeq(sessionId),
+      seq: await getNextSeq(sessionId),
       kind: "user",
       content: texts.join("\n"),
       parts,
@@ -108,25 +108,32 @@ async function answerPendingCalls(
 
 // Recent enough that the evidence it gathered still describes the incident, and
 // still holding a condition nobody has seen recover.
-function worthResuming(sessionId: string): boolean {
-  const session = getSession(sessionId);
+async function worthResuming(sessionId: string): Promise<boolean> {
+  const session = await getSession(sessionId);
   if (session === undefined) return false;
   if (!session.alerts.some((entry) => entry.clearedAt === null)) return false;
-  const rows = getTranscriptRows(sessionId);
+  const rows = await getTranscriptRows(sessionId);
   const last = rows[rows.length - 1]?.timestamp ?? session.createdAt;
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
 // 'action_required' with no gate row died between approving a call and claiming
 // the resume: the write already ran, its result is gone, and it holds a seat.
-function strandedSessions(): Array<{ sessionId: string; killed: boolean }> {
-  const killed = runningSessionIds().map((sessionId: string) => ({
+async function strandedSessions(): Promise<
+  Array<{ sessionId: string; killed: boolean }>
+> {
+  const killed = (await runningSessionIds()).map((sessionId: string) => ({
     sessionId,
     killed: true,
   }));
-  const abandoned = abandonedSessionIds()
-    .filter((sessionId: string) => !hasPendingHumanInput(sessionId))
-    .map((sessionId: string) => ({ sessionId, killed: false }));
+  // Sequential rather than Array.filter: an async predicate returns a promise,
+  // which is always truthy, so a parked session would survive the filter.
+  const abandoned: Array<{ sessionId: string; killed: boolean }> = [];
+  for (const sessionId of await abandonedSessionIds()) {
+    if (!(await hasPendingHumanInput(sessionId))) {
+      abandoned.push({ sessionId, killed: false });
+    }
+  }
   return [...killed, ...abandoned];
 }
 
@@ -137,28 +144,31 @@ export async function recoverDeadRuns(): Promise<{
   resumed: number;
 }> {
   const result = { failed: 0, resumed: 0 };
-  for (const { sessionId, killed } of strandedSessions()) {
+  for (const { sessionId, killed } of await strandedSessions()) {
     // markDone rather than releaseRun: an abandoned suspension is not running,
     // which is exactly why releaseRun would decline to touch it.
-    markDone(sessionId);
+    await markDone(sessionId);
     try {
       if (!killed) {
-        appendErrorMessage(sessionId, ABANDONED);
+        await appendErrorMessage(sessionId, ABANDONED);
         result.failed++;
         continue;
       }
-      const pending = unansweredCalls(getTranscriptRows(sessionId));
+      const pending = unansweredCalls(await getTranscriptRows(sessionId));
       if (pending.length > 0) {
         await answerPendingCalls(sessionId, pending);
       }
       // Written only when nobody is picking this up: an error row is what
       // tells buildSeed an exchange died, so it would unwind the repair.
-      if (worthResuming(sessionId)) {
-        dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
+      if (await worthResuming(sessionId)) {
+        await dispatcher.dispatch({
+          sessionId,
+          seed: await buildSeed(sessionId),
+        });
         result.resumed++;
         continue;
       }
-      appendErrorMessage(sessionId, INTERRUPTED);
+      await appendErrorMessage(sessionId, INTERRUPTED);
       result.failed++;
     } catch (err) {
       // One session's recovery must never stop the boot: the rest of the fleet

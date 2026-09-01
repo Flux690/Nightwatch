@@ -57,42 +57,45 @@ type ProviderRow = {
   reasoning: string | null;
 };
 
-const SELECT_CONFIG = `
-  SELECT active_provider    AS activeProvider,
-         max_retries        AS maxRetries,
-         request_timeout_ms AS requestTimeoutMs,
-         max_concurrent_investigations AS maxConcurrentInvestigations,
-         check_in_after_ms  AS checkInAfterMs,
-         tool_call_ceiling_ms AS toolCallCeilingMs,
-         sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
-         sandbox_cpus            AS sandboxCpus,
-         sandbox_memory_mb       AS sandboxMemoryMb,
-         sandbox_require_gvisor  AS sandboxRequireGvisor,
-         sandbox_network         AS sandboxNetwork,
-         sandbox_allowlist_hosts AS sandboxAllowlistHosts
-  FROM config WHERE id = ?
-`;
-
-const SELECT_PROVIDER = `
-  SELECT provider, model,
-         base_url              AS baseUrl,
-         api_key_encrypted     AS apiKeyEncrypted,
-         reasoning_level       AS reasoningLevel,
-         max_output_tokens     AS maxOutputTokens,
-         max_input_tokens      AS maxInputTokens,
-         compaction,
-         reasoning
-  FROM provider_config WHERE provider = ?
-`;
-
-function readConfigRow(): ConfigRow | undefined {
-  // better-sqlite3 returns untyped rows; the column aliases match ConfigRow.
-  return getDb().prepare(SELECT_CONFIG).get(CONFIG_ID) as ConfigRow | undefined;
+function readConfigRow(): Promise<ConfigRow | undefined> {
+  return getDb()
+    .selectFrom("config")
+    .select([
+      "active_provider as activeProvider",
+      "max_retries as maxRetries",
+      "request_timeout_ms as requestTimeoutMs",
+      "max_concurrent_investigations as maxConcurrentInvestigations",
+      "check_in_after_ms as checkInAfterMs",
+      "tool_call_ceiling_ms as toolCallCeilingMs",
+      "sandbox_idle_timeout_ms as sandboxIdleTimeoutMs",
+      "sandbox_cpus as sandboxCpus",
+      "sandbox_memory_mb as sandboxMemoryMb",
+      "sandbox_require_gvisor as sandboxRequireGvisor",
+      "sandbox_network as sandboxNetwork",
+      "sandbox_allowlist_hosts as sandboxAllowlistHosts",
+    ])
+    .where("id", "=", CONFIG_ID)
+    .executeTakeFirst();
 }
 
-function readProviderRow(provider: LLMProviderName): ProviderRow | undefined {
-  return getDb().prepare(SELECT_PROVIDER).get(provider) as
-    ProviderRow | undefined;
+function readProviderRow(
+  provider: LLMProviderName,
+): Promise<ProviderRow | undefined> {
+  return getDb()
+    .selectFrom("provider_config")
+    .select([
+      "provider",
+      "model",
+      "base_url as baseUrl",
+      "api_key_encrypted as apiKeyEncrypted",
+      "reasoning_level as reasoningLevel",
+      "max_output_tokens as maxOutputTokens",
+      "max_input_tokens as maxInputTokens",
+      "compaction",
+      "reasoning",
+    ])
+    .where("provider", "=", provider)
+    .executeTakeFirst();
 }
 
 // Stored newline-joined (the Settings textarea shape); empty lines dropped.
@@ -146,18 +149,18 @@ function toSettings(row: ProviderRow | undefined): ProviderSettings {
   };
 }
 
-function loadProviders(): ProviderSettingsMap {
+async function loadProviders(): Promise<ProviderSettingsMap> {
   return {
-    anthropic: toSettings(readProviderRow("anthropic")),
-    openrouter: toSettings(readProviderRow("openrouter")),
+    anthropic: toSettings(await readProviderRow("anthropic")),
+    openrouter: toSettings(await readProviderRow("openrouter")),
   };
 }
 
 // Operational defaults are engineering choices and stay; which provider is active
 // is the user's to pick, so it starts null and the run gate refuses until set.
-export function loadConfig(): AgentConfig {
-  const row = readConfigRow();
-  const providers = loadProviders();
+export async function loadConfig(): Promise<AgentConfig> {
+  const row = await readConfigRow();
+  const providers = await loadProviders();
   if (!row) {
     return {
       provider: null,
@@ -194,8 +197,10 @@ export function loadConfig(): AgentConfig {
 }
 
 // The decrypted key for one provider, or undefined when it has none stored.
-export function loadApiKey(provider: LLMProviderName): string | undefined {
-  const row = readProviderRow(provider);
+export async function loadApiKey(
+  provider: LLMProviderName,
+): Promise<string | undefined> {
+  const row = await readProviderRow(provider);
   if (!row?.apiKeyEncrypted) return undefined;
   try {
     return decrypt(row.apiKeyEncrypted);
@@ -204,60 +209,34 @@ export function loadApiKey(provider: LLMProviderName): string | undefined {
   }
 }
 
-const UPSERT_CONFIG = `
-  INSERT INTO config (
-    id, active_provider, max_retries,
-    request_timeout_ms, max_concurrent_investigations,
-    check_in_after_ms, tool_call_ceiling_ms,
-    sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
-    sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts, updated_at
-  ) VALUES (
-    @id, @activeProvider, @maxRetries,
-    @requestTimeoutMs, @maxConcurrentInvestigations,
-    @checkInAfterMs, @toolCallCeilingMs,
-    @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
-    @sandboxRequireGvisor, @sandboxNetwork, @sandboxAllowlistHosts, @updatedAt
-  )
-  ON CONFLICT(id) DO UPDATE SET
-    active_provider = excluded.active_provider,
-    max_retries = excluded.max_retries,
-    request_timeout_ms = excluded.request_timeout_ms,
-    max_concurrent_investigations = excluded.max_concurrent_investigations,
-    check_in_after_ms = excluded.check_in_after_ms,
-    tool_call_ceiling_ms = excluded.tool_call_ceiling_ms,
-    sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
-    sandbox_cpus = excluded.sandbox_cpus,
-    sandbox_memory_mb = excluded.sandbox_memory_mb,
-    sandbox_require_gvisor = excluded.sandbox_require_gvisor,
-    sandbox_network = excluded.sandbox_network,
-    sandbox_allowlist_hosts = excluded.sandbox_allowlist_hosts,
-    updated_at = excluded.updated_at
-`;
-
 // Global settings only; the per-provider blocks are written by updateProvider so
 // a change to one provider can never disturb the other.
 type GlobalConfigPatch = Partial<Omit<AgentConfig, "providers">>;
 
-export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
-  const next: AgentConfig = { ...loadConfig(), ...patch };
-  getDb()
-    .prepare(UPSERT_CONFIG)
-    .run({
-      id: CONFIG_ID,
-      activeProvider: next.provider,
-      maxRetries: next.maxRetries,
-      requestTimeoutMs: next.requestTimeoutMs,
-      maxConcurrentInvestigations: next.maxConcurrentInvestigations,
-      checkInAfterMs: next.checkInAfterMs,
-      toolCallCeilingMs: next.toolCallCeilingMs,
-      sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,
-      sandboxCpus: next.sandboxCpus,
-      sandboxMemoryMb: next.sandboxMemoryMb,
-      sandboxRequireGvisor: next.sandboxRequireGvisor ? 1 : 0,
-      sandboxNetwork: next.sandboxNetwork,
-      sandboxAllowlistHosts: next.sandboxAllowlistHosts.join("\n"),
-      updatedAt: new Date().toISOString(),
-    });
+export async function updateConfig(
+  patch: GlobalConfigPatch,
+): Promise<AgentConfig> {
+  const next: AgentConfig = { ...(await loadConfig()), ...patch };
+  const values = {
+    active_provider: next.provider,
+    max_retries: next.maxRetries,
+    request_timeout_ms: next.requestTimeoutMs,
+    max_concurrent_investigations: next.maxConcurrentInvestigations,
+    check_in_after_ms: next.checkInAfterMs,
+    tool_call_ceiling_ms: next.toolCallCeilingMs,
+    sandbox_idle_timeout_ms: next.sandboxIdleTimeoutMs,
+    sandbox_cpus: next.sandboxCpus,
+    sandbox_memory_mb: next.sandboxMemoryMb,
+    sandbox_require_gvisor: next.sandboxRequireGvisor ? 1 : 0,
+    sandbox_network: next.sandboxNetwork,
+    sandbox_allowlist_hosts: next.sandboxAllowlistHosts.join("\n"),
+    updated_at: new Date().toISOString(),
+  };
+  await getDb()
+    .insertInto("config")
+    .values({ id: CONFIG_ID, ...values })
+    .onConflict((oc) => oc.column("id").doUpdateSet(values))
+    .execute();
   return next;
 }
 
@@ -273,82 +252,62 @@ export interface ProviderPatch {
   apiKey?: string;
 }
 
-const UPSERT_PROVIDER = `
-  INSERT INTO provider_config (
-    provider, model, base_url, api_key_encrypted,
-    reasoning_level, max_output_tokens, max_input_tokens, compaction,
-    reasoning, updated_at
-  ) VALUES (
-    @provider, @model, @baseUrl, @apiKeyEncrypted,
-    @reasoningLevel, @maxOutputTokens, @maxInputTokens, @compaction,
-    @reasoning, @updatedAt
-  )
-  ON CONFLICT(provider) DO UPDATE SET
-    model = excluded.model,
-    base_url = excluded.base_url,
-    api_key_encrypted = excluded.api_key_encrypted,
-    reasoning_level = excluded.reasoning_level,
-    max_output_tokens = excluded.max_output_tokens,
-    max_input_tokens = excluded.max_input_tokens,
-    compaction = excluded.compaction,
-    reasoning = excluded.reasoning,
-    updated_at = excluded.updated_at
-`;
-
 // Fields absent from the patch keep their stored value; the key is only replaced
 // when a new one is supplied, so saving a model never clears the credential.
-export function updateProvider(
+export async function updateProvider(
   provider: LLMProviderName,
   patch: ProviderPatch,
-): AgentConfig {
-  const existing = readProviderRow(provider);
-  getDb()
-    .prepare(UPSERT_PROVIDER)
-    .run({
-      provider,
-      model:
-        patch.model !== undefined ? patch.model : (existing?.model ?? null),
-      baseUrl:
-        patch.baseUrl !== undefined
-          ? (patch.baseUrl ?? null)
-          : (existing?.baseUrl ?? null),
-      apiKeyEncrypted:
-        patch.apiKey !== undefined
-          ? encrypt(patch.apiKey)
-          : (existing?.apiKeyEncrypted ?? null),
-      reasoningLevel:
-        patch.reasoningLevel !== undefined
-          ? patch.reasoningLevel
-          : (existing?.reasoningLevel ?? null),
-      maxOutputTokens:
-        patch.maxOutputTokens !== undefined
-          ? patch.maxOutputTokens
-          : (existing?.maxOutputTokens ?? null),
-      maxInputTokens:
-        patch.maxInputTokens !== undefined
-          ? patch.maxInputTokens
-          : (existing?.maxInputTokens ?? null),
-      compaction:
-        patch.compaction !== undefined
-          ? patch.compaction
-            ? 1
-            : 0
-          : (existing?.compaction ?? 0),
-      reasoning:
-        patch.reasoning !== undefined
-          ? patch.reasoning && JSON.stringify(patch.reasoning)
-          : (existing?.reasoning ?? null),
-      updatedAt: new Date().toISOString(),
-    });
-  return loadConfig();
+): Promise<AgentConfig> {
+  const existing = await readProviderRow(provider);
+  const values = {
+    provider,
+    model: patch.model !== undefined ? patch.model : (existing?.model ?? null),
+    base_url:
+      patch.baseUrl !== undefined
+        ? (patch.baseUrl ?? null)
+        : (existing?.baseUrl ?? null),
+    api_key_encrypted:
+      patch.apiKey !== undefined
+        ? encrypt(patch.apiKey)
+        : (existing?.apiKeyEncrypted ?? null),
+    reasoning_level:
+      patch.reasoningLevel !== undefined
+        ? patch.reasoningLevel
+        : (existing?.reasoningLevel ?? null),
+    max_output_tokens:
+      patch.maxOutputTokens !== undefined
+        ? patch.maxOutputTokens
+        : (existing?.maxOutputTokens ?? null),
+    max_input_tokens:
+      patch.maxInputTokens !== undefined
+        ? patch.maxInputTokens
+        : (existing?.maxInputTokens ?? null),
+    compaction:
+      patch.compaction !== undefined
+        ? patch.compaction
+          ? 1
+          : 0
+        : (existing?.compaction ?? 0),
+    reasoning:
+      patch.reasoning !== undefined
+        ? patch.reasoning && JSON.stringify(patch.reasoning)
+        : (existing?.reasoning ?? null),
+    updated_at: new Date().toISOString(),
+  };
+  await getDb()
+    .insertInto("provider_config")
+    .values(values)
+    .onConflict((oc) => oc.column("provider").doUpdateSet(values))
+    .execute();
+  return await loadConfig();
 }
 
 // Env is a first-boot seed, never a live source, so the database stays the one
 // runtime source of truth. Each provider reads only its own prefix, and
 // NIGHTWARDEN_LLM_PROVIDER alone decides which becomes active.
-export function seedConfigFromEnv(): void {
+export async function seedConfigFromEnv(): Promise<void> {
   for (const provider of PROVIDER_NAMES) {
-    seedProviderFromEnv(provider);
+    await seedProviderFromEnv(provider);
   }
 
   const requested = process.env["NIGHTWARDEN_LLM_PROVIDER"];
@@ -360,11 +319,11 @@ export function seedConfigFromEnv(): void {
     );
     return;
   }
-  if (loadConfig().provider !== null) return;
+  if ((await loadConfig()).provider !== null) return;
 
   // Activating a block that cannot run would produce an install that looks
   // configured and fails at the first alert, so require the model and key first.
-  const block = readProviderRow(requested);
+  const block = await readProviderRow(requested);
   if (!block?.model || !block.apiKeyEncrypted) {
     logger.warn(
       { provider: requested },
@@ -372,17 +331,17 @@ export function seedConfigFromEnv(): void {
     );
     return;
   }
-  updateConfig({ provider: requested });
+  await updateConfig({ provider: requested });
   logger.info(
     { provider: requested },
     "active LLM provider seeded from environment",
   );
 }
 
-function seedProviderFromEnv(provider: LLMProviderName): void {
+async function seedProviderFromEnv(provider: LLMProviderName): Promise<void> {
   // Only an untouched block is seeded: once a user has saved anything for a
   // provider, the database owns it and a stale compose file cannot overwrite it.
-  const existing = readProviderRow(provider);
+  const existing = await readProviderRow(provider);
   if (existing?.model || existing?.apiKeyEncrypted) return;
 
   const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
@@ -402,7 +361,7 @@ function seedProviderFromEnv(provider: LLMProviderName): void {
     return;
   }
 
-  updateProvider(provider, {
+  await updateProvider(provider, {
     model,
     apiKey,
     ...(baseUrl !== undefined && baseUrl !== "" && { baseUrl }),

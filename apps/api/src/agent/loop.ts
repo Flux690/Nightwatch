@@ -18,7 +18,7 @@ import { highestEvidenceNumber, withEvidenceIds } from "./evidence-id.js";
 import { isCitable } from "./evidence-source.js";
 import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
-import { getRecord } from "../session/record.js";
+import { getRecord } from "../session/record-store.js";
 import { recoveryState } from "../verification/recovery.js";
 import {
   effectiveToolset,
@@ -44,7 +44,7 @@ import { getMetricsSource } from "../integrations/metrics/sources.js";
 import { getSession } from "../session/store.js";
 import {
   appendErrorMessage,
-  appendRowsAndInterrupt,
+  appendRowsAndPark,
   appendTranscriptRows,
   getNextSeq,
   getTranscriptRows,
@@ -79,7 +79,7 @@ import type {
   ToolResult,
   ToolSchema,
 } from "../llm/types.js";
-import type { PendingHumanInput } from "../session/interrupts.js";
+import type { PendingHumanInput } from "../session/gate-store.js";
 
 /* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider snapshot
    always comes back without them. The run knew both before the row existed; this
@@ -113,7 +113,7 @@ function turnSeq(provider: LLMProvider, seqOffset: number): number {
   return seqOffset + provider.snapshot().length;
 }
 
-function persistNewTurns(
+async function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
   fromCount: number,
@@ -121,7 +121,7 @@ function persistNewTurns(
   harnessTurns: ReadonlySet<number>,
   toolOutcomes: ReadonlyMap<string, ResultAnnotation>,
   interrupt?: PendingHumanInput,
-): number {
+): Promise<number> {
   const snap = provider.snapshot();
   const built: TranscriptRow[] = [];
   for (let i = fromCount; i < snap.length; i++) {
@@ -130,7 +130,7 @@ function persistNewTurns(
     built.push({
       sessionId,
       seq: seqOffset + i,
-      kind: harnessTurns.has(i) ? "nightwarden" : m.role,
+      kind: harnessTurns.has(i) ? "harness" : m.role,
       content: m.content,
       parts: stampOutcomes(m.parts, toolOutcomes),
       ...(m.native && { native: m.native }),
@@ -141,30 +141,30 @@ function persistNewTurns(
   // snapshot carries no handle, so the count continues from what is stored.
   const newMessages = withEvidenceIds(
     built,
-    highestEvidenceNumber(getTranscriptRows(sessionId)) + 1,
+    highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1,
   );
   if (interrupt) {
-    appendRowsAndInterrupt(newMessages, interrupt);
+    await appendRowsAndPark(newMessages, interrupt);
   } else {
-    appendTranscriptRows(newMessages);
+    await appendTranscriptRows(newMessages);
   }
   // A harness row draws nothing, so publishing it would only cost the frontend a
   // transcript refetch that changes no pixel.
   for (const message of newMessages) {
-    if (message.kind !== "nightwarden") publishMessage(sessionId, message);
+    if (message.kind !== "harness") publishMessage(sessionId, message);
   }
   return snap.length;
 }
 
 // What the fleet and the connected integrations currently allow. Read together,
 // because the prompt describing them is built from the same call.
-function currentToolset(investigation: boolean): OfferedToolset {
+async function currentToolset(investigation: boolean): Promise<OfferedToolset> {
   return effectiveToolset(
     connectedPlatforms(),
     {
-      github: getGitHubIntegration() !== null,
-      metrics: getMetricsSource() !== null,
-      loki: getLokiIntegration() !== null,
+      github: (await getGitHubIntegration()) !== null,
+      metrics: (await getMetricsSource()) !== null,
+      loki: (await getLokiIntegration()) !== null,
     },
     investigation,
   );
@@ -289,7 +289,7 @@ export interface RunSessionInput {
 export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const { sessionId, signal } = input;
 
-  const stored = getSession(sessionId);
+  const stored = await getSession(sessionId);
   // A resume carries none, so the session's own record answers instead.
   const allAlerts =
     input.alerts ?? (stored?.alerts ?? []).map((entry) => entry.alert);
@@ -312,18 +312,18 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   // Backstop, not the primary gate: the routes that start a run refuse first.
   // Reaching here unconfigured means a caller bypassed them, so fail loudly.
-  const readiness = checkLLMReadiness();
+  const readiness = await checkLLMReadiness();
   if (!readiness.ready) {
     throw new Error(notConfiguredMessage(readiness.missing));
   }
   // llm is the active provider's block flattened for the SDK; config carries the
   // loop and sandbox budgets, which are provider-independent.
   const { config: llm, apiKey } = readiness;
-  const config = loadConfig();
+  const config = await loadConfig();
 
   // Transient provider errors are waited out instead of killing the run; each
   // wait is streamed to the frontend as live status.
-  const chatWithRetries = (
+  const chatWithRetries = async (
     provider: LLMProvider,
     toolSchemas: ToolSchema[],
     turn: number,
@@ -332,9 +332,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     chatSignal: AbortSignal | undefined = signal,
     forceTool?: ToolName,
   ): Promise<ChatResponse> =>
-    withLLMRetries(
-      () =>
-        provider.chat(
+    await withLLMRetries(
+      async () =>
+        await provider.chat(
           toolSchemas,
           (d) => publishTextMessageContent(sessionId, turn, d),
           chatSignal,
@@ -404,7 +404,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     const provider = createProvider(systemPrompt, llm, apiKey);
 
     let persistedCount = 0;
-    const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
+    const seqOffset = (await getNextSeq(sessionId)) - (input.seed?.length ?? 0);
     if (input.seed && input.seed.length > 0) {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
@@ -415,7 +415,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
-    persistNewTurns(
+    await persistNewTurns(
       provider,
       sessionId,
       persistedCount,
@@ -440,10 +440,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   );
 
   const fleetView = getFleetView();
-  const integration = getGitHubIntegration();
+  const integration = await getGitHubIntegration();
   // Assembled once, before the prompt that describes it, so the prose and the
   // tools it describes are derived from one value and cannot disagree.
-  let offered = currentToolset(opensInvestigation);
+  let offered = await currentToolset(opensInvestigation);
   const promptOptions: PromptOptions = {
     budgetMinutes: Math.max(1, Math.round(config.checkInAfterMs / 60_000)),
     repo:
@@ -471,7 +471,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const provider = createProvider(systemPrompt, llm, apiKey);
 
   let persistedCount = 0;
-  const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
+  const seqOffset = (await getNextSeq(sessionId)) - (input.seed?.length ?? 0);
 
   if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
@@ -480,7 +480,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // it's sent, instead of waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
       provider.appendUserMessage(stripHarnessMarker(input.userMessage));
-      persistedCount = persistNewTurns(
+      persistedCount = await persistNewTurns(
         provider,
         sessionId,
         persistedCount,
@@ -490,7 +490,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       );
     } else if (input.harnessMessage) {
       sendHarnessMessage(provider, input.harnessMessage);
-      persistedCount = persistNewTurns(
+      persistedCount = await persistNewTurns(
         provider,
         sessionId,
         persistedCount,
@@ -512,7 +512,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     if (input.userMessage === undefined && openingTurn !== null) {
       harnessTurns.add(0);
     }
-    persistedCount = persistNewTurns(
+    persistedCount = await persistNewTurns(
       provider,
       sessionId,
       persistedCount,
@@ -526,8 +526,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     void generateSessionTitle(sessionId, titleSource, llm, apiKey);
   }
 
-  const persist = (): void => {
-    persistedCount = persistNewTurns(
+  const persist = async (): Promise<void> => {
+    persistedCount = await persistNewTurns(
       provider,
       sessionId,
       persistedCount,
@@ -570,9 +570,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   ): Promise<RunOutcome> => {
     // Said out loud rather than only to the server log: an investigation with no
     // write-up looked exactly like one whose model chose not to write much.
-    const notWritten = (why: string): RunOutcome => {
+    const notWritten = async (why: string): Promise<RunOutcome> => {
       log.warn({ turn }, "report turn failed; the record stands without one");
-      appendErrorMessage(sessionId, `${why} Your findings below are complete.`);
+      await appendErrorMessage(
+        sessionId,
+        `${why} Your findings below are complete.`,
+      );
       publishReportCard(sessionId, "failed");
       return "completed";
     };
@@ -584,17 +587,17 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         provider,
         problem === null
           ? reportRequest(
-              getRecord(sessionId)?.hypotheses ?? [],
-              gatedCalls(sessionId),
+              (await getRecord(sessionId))?.hypotheses ?? [],
+              await gatedCalls(sessionId),
               unrecovered,
               /* What a previous run already wrote, so a follow-up revises it
                  rather than rewriting it from a context that may since have been
                  compacted. Null on the first run, which has nothing to revise. */
-              getRecord(sessionId)?.report ?? null,
+              (await getRecord(sessionId))?.report ?? null,
             )
           : reportRetry(problem),
       );
-      persist();
+      await persist();
 
       let written: ChatResponse;
       try {
@@ -610,7 +613,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       } catch (err) {
         if (signal?.aborted) {
           log.info("run stopped by user while writing the report");
-          persist();
+          await persist();
           // The card is mid-spinner on their screen, and the turn it was
           // spinning for is gone. It ends offering the one thing left to do.
           publishReportCard(sessionId, "failed");
@@ -619,14 +622,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         // The budget ran out with the record already complete. Ending without
         // the write-up is honest; pushing past the user's ceiling is not.
         if (outOfTime.aborted) {
-          persist();
-          return notWritten(
+          await persist();
+          return await notWritten(
             "The time budget ran out before the report could be written.",
           );
         }
         throw err;
       }
-      persist();
+      await persist();
       if (signal?.aborted) {
         log.info("run stopped by user while writing the report");
         publishReportCard(sessionId, "failed");
@@ -636,12 +639,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       // A reply cut off mid-call carries half-written arguments, so the refusal
       // below would name a schema fault and hide the real cause.
       if (written.stopReason === "max_tokens") {
-        return notWritten(
+        return await notWritten(
           `The report was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`,
         );
       }
       if (written.stopReason === "refusal") {
-        return notWritten("The model declined to write the report.");
+        return await notWritten("The model declined to write the report.");
       }
 
       const { toolResults } = await processToolUses({
@@ -659,7 +662,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       });
       noteOutcomes(toolResults);
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
-      persist();
+      await persist();
 
       problem = reportRefusal(toolResults);
       if (problem === null) {
@@ -669,7 +672,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       log.warn({ turn, attempt, problem }, "report turn refused");
     }
-    return notWritten(
+    return await notWritten(
       `The model did not write the report after ${MAX_REPORT_ATTEMPTS} attempts. ${problem ?? ""}`.trim(),
     );
   };
@@ -679,13 +682,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
     // Re-read per turn, but never silently: a change the model is not told about
     // looks to it like the rules moved, and the prompt is never revised.
-    const nowOffered = currentToolset(opensInvestigation);
+    const nowOffered = await currentToolset(opensInvestigation);
     const change = toolsetChange(offered, nowOffered);
     if (change !== null) {
       log.info({ turn, change }, "offered toolset changed mid-run");
       offered = nowOffered;
       sendHarnessMessage(provider, change);
-      persist();
+      await persist();
     }
     const toolSchemas = offeredSchemas(offered);
 
@@ -701,21 +704,21 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");
-        persist();
+        await persist();
         return "stopped";
       }
       // The budget cut the turn short. That is the check-in below, not a
       // failure, so it leaves the loop rather than killing the run.
       if (outOfTime.aborted) {
         log.info({ turn }, "time budget reached mid-turn");
-        persist();
+        await persist();
         break;
       }
       throw err;
     }
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user");
-      persist();
+      await persist();
       return "stopped";
     }
     log.info(
@@ -727,13 +730,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
       "LLM responded",
     );
-    persist();
+    await persist();
 
     if (response.stopReason === "refusal") {
       log.warn({ turn }, "model refused to continue");
       // Said in the transcript, not only the log: without an error row the
-      // session derives to inconclusive and the refusal is invisible.
-      appendErrorMessage(
+      // session derives to completed and the refusal is invisible.
+      await appendErrorMessage(
         sessionId,
         "The model declined to continue this investigation. Nothing further was read, and anything already recorded stands.",
       );
@@ -745,7 +748,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // as a conclusion.
     if (response.stopReason === "max_tokens") {
       log.warn({ turn, model: llm.model }, "turn truncated at max_tokens");
-      appendErrorMessage(
+      await appendErrorMessage(
         sessionId,
         `The model's reply was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so this turn is incomplete. Send a message to continue, or pick a model with a larger limit in Settings.`,
       );
@@ -759,10 +762,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Push back up to MAX_FINISH_PUSHBACKS times, then write up regardless:
       // the status an unfinished record derives to is already the honest one.
-      const gaps = recordGaps(sessionId, callsSinceClaim);
+      const gaps = await recordGaps(sessionId, callsSinceClaim);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
       // record, so the gate never makes a network call as a run happens to end.
-      const recovery = recoveryState(sessionId);
+      const recovery = await recoveryState(sessionId);
       if (gaps.length > 0) {
         if (finishPushbacks < MAX_FINISH_PUSHBACKS) {
           finishPushbacks++;
@@ -783,7 +786,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             "finish gate: record incomplete, pushing back",
           );
           sendHarnessMessage(provider, recordGapsMessage(gaps));
-          persist();
+          await persist();
           continue;
         }
         log.warn(
@@ -793,16 +796,16 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
-      const approvedWrites = approvedWriteCount(sessionId);
+      const approvedWrites = await approvedWriteCount(sessionId);
       /* Rewriting is lossy by design - the request says anything left out is
          lost - so a write-up that still covers the record is kept. Recovery is
          deliberately not a reason: a cleared alert already reads as Resolved. */
-      const record = getRecord(sessionId);
+      const record = await getRecord(sessionId);
       if (record !== undefined && !reportIsBehind(record, approvedWrites)) {
         log.info({ turn }, "write-up still covers the record; keeping it");
         return "completed";
       }
-      return writeReport(
+      return await writeReport(
         approvedWrites > 0 && recovery === "unconfirmed",
         turn,
       );
@@ -840,8 +843,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         "run asked only for unavailable tools; ending it",
       );
       provider.appendToolResults(toolResults);
-      persist();
-      appendErrorMessage(
+      await persist();
+      await appendErrorMessage(
         sessionId,
         `The last ${barrenTurns} turns asked only for tools this investigation does not have, so the run was ended rather than spend its budget repeating them. What was available: ${offeredSchemas(
           offered,
@@ -858,7 +861,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // reached already aborted; suspending here parks an interrupt on a dead run.
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user before the gate");
-      persist();
+      await persist();
       return "stopped";
     }
 
@@ -873,7 +876,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         completedResults: toolResults,
         claimedAt: null,
       };
-      persistedCount = persistNewTurns(
+      persistedCount = await persistNewTurns(
         provider,
         sessionId,
         persistedCount,
@@ -933,7 +936,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
     // A claim recorded this turn settles what came before it, so the debt clears
     // before this turn's own reads are counted against it.
-    const claims = (getRecord(sessionId)?.hypotheses ?? []).length;
+    const claims = ((await getRecord(sessionId))?.hypotheses ?? []).length;
     if (claims > claimsSeen) {
       claimsSeen = claims;
       callsSinceClaim = 0;
@@ -960,7 +963,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       recordChecks++;
       checkedAt = callsSinceClaim;
     }
-    persist();
+    await persist();
   }
 
   // No underlying tool call, so the synthetic toolUseId only keys the
@@ -973,7 +976,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     completedResults: [],
     claimedAt: null,
   };
-  persistedCount = persistNewTurns(
+  persistedCount = await persistNewTurns(
     provider,
     sessionId,
     persistedCount,

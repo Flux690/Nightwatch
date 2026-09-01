@@ -27,9 +27,9 @@ function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
 
 // Maps our four kinds onto the provider's two roles. An error row and the dead
 // exchange it terminates drop back to the last clean assistant turn.
-export function buildSeed(sessionId: string): ProviderMessage[] {
+export async function buildSeed(sessionId: string): Promise<ProviderMessage[]> {
   const rows: TranscriptRow[] = [];
-  for (const message of getTranscriptRows(sessionId)) {
+  for (const message of await getTranscriptRows(sessionId)) {
     if (message.kind !== "error") {
       rows.push(message);
       continue;

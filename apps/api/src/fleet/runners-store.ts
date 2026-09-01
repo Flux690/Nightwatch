@@ -28,33 +28,35 @@ export function hashToken(plaintext: string): string {
 
 // The plaintext is returned once and only its hash stored. Neither platform nor
 // serverName defaults: a runner not knowing what or where it is at mint is the bug.
-export function generateRunnerToken(
+export async function generateRunnerToken(
   platform: Platform,
   serverName: string,
-): { plaintext: string } & RunnerMeta {
+): Promise<{ plaintext: string } & RunnerMeta> {
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  const db = getDb();
 
-  const mint = db.transaction(() => {
-    // A row with this server_name that never connected is an orphan from an
-    // aborted setup - free it. A connected row is real, left for the UNIQUE 409.
-    db.prepare(
-      `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
-    ).run(serverName);
-    db.prepare(
-      `INSERT INTO runner (id, token, platform, server_name, created_at)
-       VALUES (@id, @tokenHash, @platform, @serverName, @createdAt)`,
-    ).run({
-      id,
-      tokenHash: hashToken(plaintext),
-      platform,
-      serverName,
-      createdAt,
+  await getDb()
+    .transaction()
+    .execute(async (trx) => {
+      // A row with this server_name that never connected is an orphan from an
+      // aborted setup - free it. A connected row is real, left for the UNIQUE 409.
+      await trx
+        .deleteFrom("runner")
+        .where("server_name", "=", serverName)
+        .where("last_used_at", "is", null)
+        .execute();
+      await trx
+        .insertInto("runner")
+        .values({
+          id,
+          token: hashToken(plaintext),
+          platform,
+          server_name: serverName,
+          created_at: createdAt,
+        })
+        .execute();
     });
-  });
-  mint();
 
   return {
     plaintext,
@@ -66,14 +68,14 @@ export function generateRunnerToken(
   };
 }
 
-const SELECT_ROW = `
-  id,
-  token             AS tokenHash,
-  platform,
-  server_name       AS serverName,
-  created_at        AS createdAt,
-  last_used_at      AS lastUsedAt
-`;
+const SELECT_ROW = [
+  "id",
+  "token as tokenHash",
+  "platform",
+  "server_name as serverName",
+  "created_at as createdAt",
+  "last_used_at as lastUsedAt",
+] as const;
 
 function text(raw: Record<string, unknown>, column: string): string {
   const value = raw[column];
@@ -108,30 +110,41 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
   };
 }
 
-export function findRunnerByToken(plaintext: string): RunnerRow | undefined {
-  const raw = getDb()
-    .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE token = ?`)
-    .get(hashToken(plaintext)) as Record<string, unknown> | undefined;
+export async function findRunnerByToken(
+  plaintext: string,
+): Promise<RunnerRow | undefined> {
+  const raw = await getDb()
+    .selectFrom("runner")
+    .select(SELECT_ROW)
+    .where("token", "=", hashToken(plaintext))
+    .executeTakeFirst();
   return raw ? mapRow(raw) : undefined;
 }
 
 // Touch last_used_at on every authenticated use (WS connect, ingest, chat).
-export function touchLastUsed(id: string): void {
-  getDb()
-    .prepare(`UPDATE runner SET last_used_at = ? WHERE id = ?`)
-    .run(new Date().toISOString(), id);
+export async function touchLastUsed(id: string): Promise<void> {
+  await getDb()
+    .updateTable("runner")
+    .set({ last_used_at: new Date().toISOString() })
+    .where("id", "=", id)
+    .execute();
 }
 
-export function deleteRunner(id: string): boolean {
-  const result = getDb().prepare(`DELETE FROM runner WHERE id = ?`).run(id);
-  return result.changes > 0;
+export async function deleteRunner(id: string): Promise<boolean> {
+  const res = await getDb()
+    .deleteFrom("runner")
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return Number(res.numDeletedRows) > 0;
 }
 
 // Public list: no hash, no plaintext, newest first.
-export function listRunnersMeta(): RunnerMeta[] {
-  const rows = getDb()
-    .prepare(`SELECT ${SELECT_ROW} FROM runner ORDER BY created_at DESC`)
-    .all() as Array<Record<string, unknown>>;
+export async function listRunnersMeta(): Promise<RunnerMeta[]> {
+  const rows = await getDb()
+    .selectFrom("runner")
+    .select(SELECT_ROW)
+    .orderBy("created_at", "desc")
+    .execute();
   return rows.map((r) => {
     const { tokenHash: _tokenHash, ...meta } = mapRow(r);
     return meta;

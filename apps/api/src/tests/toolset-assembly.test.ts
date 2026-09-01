@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -32,7 +32,7 @@ import { registerFrontendEventRoutes } from "../session/events.js";
 import { connectFrontendEvents } from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -68,8 +68,8 @@ describe("toolset assembly by fleet capabilities", () => {
        that reads the connected metrics sources. Without this the suite would
        open the real ~/.nightwarden database. */
     let cleanupDb: () => void;
-    beforeAll(() => {
-      cleanupDb = useTempDb();
+    beforeAll(async () => {
+      cleanupDb = await useTempDb();
     });
     afterAll(() => cleanupDb());
 
@@ -328,9 +328,10 @@ describe("toolset assembly by fleet capabilities", () => {
     const executedCommands: string[] = [];
 
     beforeAll(async () => {
-      cleanupDb = useTempDb();
+      cleanupDb = await useTempDb();
       SESSION = await mintTestSession();
-      K8S_TOKEN = generateRunnerToken("kubernetes", "toolset-k8s-001").id;
+      K8S_TOKEN = (await generateRunnerToken("kubernetes", "toolset-k8s-001"))
+        .id;
 
       connK8s = registerRunner({
         runnerId: K8S_TOKEN,
@@ -419,7 +420,7 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(interrupt.payload["kind"]).toBe("approval");
       expect(interrupt.payload["toolName"]).toBe("RestartK8sWorkload");
       expect(executedCommands).not.toContain("RestartK8sWorkload");
-      expect(hasPendingHumanInput(sessionId)).toBe(true);
+      expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
       close();
 
@@ -434,7 +435,7 @@ describe("toolset assembly by fleet capabilities", () => {
           body: JSON.stringify({ decision: "reject" }),
         },
       );
-      await waitFor(() => !hasPendingHumanInput(sessionId));
+      await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
     });
 
     // A chat stays a chat. Nothing the model can call opens an investigation,
@@ -487,7 +488,9 @@ describe("toolset assembly by fleet capabilities", () => {
       // And across runs: a follow-up on the same chat is still a chat.
       mockCreateProvider.mockClear();
       setScript([{ text: "Nothing has changed.", toolUses: [] }]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const followUp = await fetch(
         `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
@@ -501,7 +504,9 @@ describe("toolset assembly by fleet capabilities", () => {
         },
       );
       expect(followUp.status).toBe(202);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const resumed = mockCreateProvider.mock.results[0]
         ?.value as ContractFakeProvider;
@@ -516,8 +521,8 @@ describe("toolset assembly by fleet capabilities", () => {
      Told nothing, the model reads that as the rules having moved. */
   describe("a toolset that changes mid-run", () => {
     let cleanupDb: () => void;
-    beforeAll(() => {
-      cleanupDb = useTempDb();
+    beforeAll(async () => {
+      cleanupDb = await useTempDb();
     });
     afterAll(() => cleanupDb());
 
@@ -530,8 +535,8 @@ describe("toolset assembly by fleet capabilities", () => {
       /* Connected as the first turn's results land, which is between the two
          reads of the toolset - where a user connecting Loki in another tab
          would land. */
-      provider.appendToolResults.mockImplementation((results) => {
-        saveLokiIntegration({
+      provider.appendToolResults.mockImplementation(async (results) => {
+        await saveLokiIntegration({
           baseUrl: "http://loki.internal:3100",
           orgId: null,
           authorization: null,
@@ -548,7 +553,7 @@ describe("toolset assembly by fleet capabilities", () => {
       ]);
 
       const sessionId = randomUUID();
-      seedChatSession(sessionId, "what is running?");
+      await seedChatSession(sessionId, "what is running?");
       await runSession({ sessionId, userMessage: "what is running?" });
 
       const told = provider.appendUserMessage.mock.calls
@@ -561,7 +566,7 @@ describe("toolset assembly by fleet capabilities", () => {
       const second = (provider.chat.mock.calls[1]?.[0] ?? []) as ToolSchema[];
       expect(second.map((s) => s.name)).toContain("QueryLogs");
 
-      deleteLokiIntegration();
+      await deleteLokiIntegration();
     });
   });
 });

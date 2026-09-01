@@ -1,16 +1,11 @@
 import type { Hypothesis, InvestigationRecord } from "@nightwarden/shared";
-import { getDb } from "../db.js";
-
-// The record's persistence seam. Three columns on the session: born with it,
-// deleted with it, and only ever read alongside it.
+import { getDb, type Db } from "../db.js";
 
 interface RecordRow {
   hypotheses: string;
   report: string | null;
   updatedAt: string | null;
 }
-
-const RECORD_COLUMNS = `hypotheses, report, record_updated_at AS updatedAt`;
 
 // The one place the two columns become a record, so the session list's own
 // query assembles it the same way. Nothing recorded reads as absent, not empty.
@@ -31,10 +26,15 @@ export function assembleRecord(
   };
 }
 
-export function getRecord(sessionId: string): InvestigationRecord | undefined {
-  const row = getDb()
-    .prepare(`SELECT ${RECORD_COLUMNS} FROM sessions WHERE session_id = ?`)
-    .get(sessionId) as RecordRow | undefined;
+export async function getRecord(
+  sessionId: string,
+  db: Db = getDb(),
+): Promise<InvestigationRecord | undefined> {
+  const row = await db
+    .selectFrom("sessions")
+    .select(["hypotheses", "report", "record_updated_at as updatedAt"])
+    .where("session_id", "=", sessionId)
+    .executeTakeFirst();
   return assembleRecord(row);
 }
 
@@ -42,19 +42,20 @@ function emptyRecord(): InvestigationRecord {
   return { hypotheses: [], report: null, updatedAt: new Date(0).toISOString() };
 }
 
-function write(sessionId: string, record: InvestigationRecord): void {
-  getDb()
-    .prepare(
-      `UPDATE sessions
-       SET hypotheses = @hypotheses, report = @report, record_updated_at = @updatedAt
-       WHERE session_id = @id`,
-    )
-    .run({
-      id: sessionId,
+async function write(
+  db: Db,
+  sessionId: string,
+  record: InvestigationRecord,
+): Promise<void> {
+  await db
+    .updateTable("sessions")
+    .set({
       hypotheses: JSON.stringify(record.hypotheses),
       report: record.report === null ? null : JSON.stringify(record.report),
-      updatedAt: new Date().toISOString(),
-    });
+      record_updated_at: new Date().toISOString(),
+    })
+    .where("session_id", "=", sessionId)
+    .execute();
 }
 
 // One recorded act, read-modify-write in a transaction so two calls in the same
@@ -66,12 +67,16 @@ export function appendHypothesis<T>(
     next: InvestigationRecord;
     value: T;
   },
-): T {
-  return getDb().transaction((): T => {
-    const { next, value } = apply(getRecord(sessionId) ?? emptyRecord());
-    write(sessionId, next);
-    return value;
-  })();
+): Promise<T> {
+  return getDb()
+    .transaction()
+    .execute(async (trx) => {
+      const { next, value } = apply(
+        (await getRecord(sessionId, trx)) ?? emptyRecord(),
+      );
+      await write(trx, sessionId, next);
+      return value;
+    });
 }
 
 // The same, for an act that may refuse: `apply` returns null to leave the row
@@ -79,11 +84,13 @@ export function appendHypothesis<T>(
 export function amendRecord(
   sessionId: string,
   apply: (record: InvestigationRecord) => InvestigationRecord | null,
-): boolean {
-  return getDb().transaction((): boolean => {
-    const next = apply(getRecord(sessionId) ?? emptyRecord());
-    if (next === null) return false;
-    write(sessionId, next);
-    return true;
-  })();
+): Promise<boolean> {
+  return getDb()
+    .transaction()
+    .execute(async (trx) => {
+      const next = apply((await getRecord(sessionId, trx)) ?? emptyRecord());
+      if (next === null) return false;
+      await write(trx, sessionId, next);
+      return true;
+    });
 }

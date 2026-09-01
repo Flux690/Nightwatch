@@ -98,7 +98,7 @@ function dispatch(
 
 // A service-routed command finds its one owner and returns that server's result
 // unwrapped: the model asked about one service and gets one answer.
-export function sendCommand(
+export async function sendCommand(
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
@@ -109,7 +109,7 @@ export function sendCommand(
   const { target: _target, server: _server, container, ...rest } = commandInput;
   const service =
     container !== undefined ? { ...identity, container } : identity;
-  return dispatch(conn, commandName, { ...rest, service }, timeoutMs);
+  return await dispatch(conn, commandName, { ...rest, service }, timeoutMs);
 }
 
 // In parallel, so a fan-out costs one timeout rather than N. Always enveloped,
@@ -130,7 +130,10 @@ export async function sendFleetCommand(
   const { server: _server, ...payloadInput } = commandInput;
 
   const settled = await Promise.allSettled(
-    conns.map((conn) => dispatch(conn, commandName, payloadInput, timeoutMs)),
+    conns.map(
+      async (conn) =>
+        await dispatch(conn, commandName, payloadInput, timeoutMs),
+    ),
   );
 
   let succeeded = 0;

@@ -4,7 +4,7 @@ import {
   generateRunnerToken,
   deleteRunner,
   listRunnersMeta,
-} from "../fleet/runners.js";
+} from "../fleet/runners-store.js";
 import { closeRunnerConnections } from "../fleet/connections.js";
 import { requireSession } from "./session.js";
 
@@ -38,7 +38,7 @@ export async function registerTokenRoutes(
     const serverName = rawServerName.trim();
 
     try {
-      const generated = generateRunnerToken(platform, serverName);
+      const generated = await generateRunnerToken(platform, serverName);
       return reply.code(201).send({
         id: generated.id,
         token: generated.plaintext,
@@ -59,7 +59,7 @@ export async function registerTokenRoutes(
 
   // List all tokens (active and revoked). No plaintext is ever returned.
   fastify.get("/tokens", { preHandler: requireSession }, async () => ({
-    tokens: listRunnersMeta(),
+    tokens: await listRunnersMeta(),
   }));
 
   // Delete a runner token by id. Closes any live runner sockets authenticated
@@ -68,7 +68,7 @@ export async function registerTokenRoutes(
     "/tokens/:id",
     { preHandler: requireSession },
     async (request, reply) => {
-      const deleted = deleteRunner(request.params.id);
+      const deleted = await deleteRunner(request.params.id);
       if (!deleted) {
         return reply.code(404).send({ error: "token not found" });
       }

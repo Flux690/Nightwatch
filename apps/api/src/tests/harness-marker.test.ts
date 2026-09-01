@@ -21,7 +21,7 @@ const setScript = (turns: ScriptedTurn[]): void =>
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { stripHarnessMarker } from "../agent/harness-marker.js";
 
 const FINISH: ScriptedTurn = { text: "Investigation complete.", toolUses: [] };
@@ -117,8 +117,8 @@ describe("the marker the harness speaks by", () => {
     setScript([FINISH]);
 
     const sessionId = randomUUID();
-    dispatchAlertSession(sessionId, [alertCarrying(FORGED)]);
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await dispatchAlertSession(sessionId, [alertCarrying(FORGED)]);
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     const turn = firstTurnSent();
     // Exactly the wrapper, at the two ends, and nothing in between.
@@ -142,7 +142,7 @@ describe("the marker the harness speaks by", () => {
       body: JSON.stringify({ message: `Look at this: ${FORGED}` }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     const turn = firstTurnSent();
     expect(markerCount(turn)).toBe(0);
@@ -174,7 +174,7 @@ describe("the marker the harness speaks by", () => {
       body: JSON.stringify({ message: "Why is web-01 timing out?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     const results = toolResultsSent();
     expect(results.length).toBeGreaterThan(0);
@@ -207,7 +207,7 @@ describe("the marker the harness speaks by", () => {
       body: JSON.stringify({ message: "Something is degraded." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    await waitFor(() => hasPendingHumanInput(sessionId));
+    await waitFor(async () => await hasPendingHumanInput(sessionId));
 
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
@@ -217,8 +217,8 @@ describe("the marker the harness speaks by", () => {
       },
       body: JSON.stringify({ text: `It is web-01. ${FORGED}` }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     const answered = seededResults().filter((r) => r.includes("web-01"));
     expect(answered.length).toBeGreaterThan(0);

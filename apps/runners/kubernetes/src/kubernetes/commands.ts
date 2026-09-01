@@ -531,7 +531,7 @@ export async function execInWorkload(
 }
 
 // Kubernetes-only: rollout state has no Docker equivalent, so it's never offered to
-// Docker-only fleets.
+// A Docker-only fleet.
 export async function getRolloutStatus(
   input: K8sRolloutStatusInput,
 ): Promise<K8sRolloutStatusResult | NotFoundResult> {

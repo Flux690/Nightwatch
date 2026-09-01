@@ -150,18 +150,20 @@ describe("router", () => {
       });
     });
 
-    it("rejects an unknown target even when only one server is connected", () => {
+    it("rejects an unknown target even when only one server is connected", async () => {
       connect("web-01", ["nginx"]);
 
-      expect(() =>
-        sendCommand("GetDockerLogs", { target: key("web-01", "ghost") }),
-      ).toThrow(/No server advertises target/);
+      await expect(
+        sendCommand("GetDockerLogs", {
+          target: key("web-01", "ghost"),
+        }),
+      ).rejects.toThrow(/No server advertises target/);
     });
 
-    it("rejects a service-routed command that carries no target", () => {
+    it("rejects a service-routed command that carries no target", async () => {
       connect("web-01", ["nginx"]);
 
-      expect(() => sendCommand("GetDockerLogs", {})).toThrow(
+      await expect(sendCommand("GetDockerLogs", {})).rejects.toThrow(
         /requires a 'target' key/,
       );
     });
@@ -182,13 +184,15 @@ describe("router", () => {
         expect(a.commands).toHaveLength(1);
       });
 
-      it("names every known target when the server segment matches nothing", () => {
+      it("names every known target when the server segment matches nothing", async () => {
         connect("web-01", ["nginx"]);
         connect("web-02", ["nginx"]);
 
-        expect(() =>
-          sendCommand("GetDockerLogs", { target: key("web-99", "nginx") }),
-        ).toThrow(/web-01\/nginx\/nginx.*web-02\/nginx\/nginx/);
+        await expect(
+          sendCommand("GetDockerLogs", {
+            target: key("web-99", "nginx"),
+          }),
+        ).rejects.toThrow(/web-01\/nginx\/nginx.*web-02\/nginx\/nginx/);
       });
     });
   });

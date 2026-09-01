@@ -10,15 +10,15 @@ type LLMReadiness =
 
 type LLMRequirement = "provider" | "model" | "API key";
 
-export function checkLLMReadiness(): LLMReadiness {
-  const config = loadConfig();
+export async function checkLLMReadiness(): Promise<LLMReadiness> {
+  const config = await loadConfig();
   const provider = config.provider;
   if (provider === null) {
     return { ready: false, missing: ["provider", "model", "API key"] };
   }
 
   const settings = config.providers[provider];
-  const apiKey = loadApiKey(provider);
+  const apiKey = await loadApiKey(provider);
   const model = settings.model;
   const noKey = apiKey === undefined || apiKey === "";
 

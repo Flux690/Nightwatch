@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getLoginVersion } from "./user.js";
+import { getLoginVersion } from "./user-store.js";
 import { signingSecret } from "../secrets.js";
 
 const AUTH_COOKIE = "nw_auth";
@@ -52,7 +52,7 @@ async function verifySessionCookie(
     const { payload } = await jwtVerify(value, signingKey(), {
       algorithms: ["HS256"],
     });
-    const loginVersion = getLoginVersion();
+    const loginVersion = await getLoginVersion();
     if (payload["loginVersion"] !== loginVersion) return null;
     return { loginVersion, exp: payload.exp ?? 0 };
   } catch {

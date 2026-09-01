@@ -120,10 +120,12 @@ describe("GetRecentChanges through the tool dispatch", () => {
   let tool: Tool;
   let sessionSeq = 0;
 
-  function mintSession(alert: NormalizedAlert | null): ToolDispatchContext {
+  async function mintSession(
+    alert: NormalizedAlert | null,
+  ): Promise<ToolDispatchContext> {
     sessionSeq++;
     const sessionId = `gh-changes-${sessionSeq}`;
-    seedAlertSession(
+    await seedAlertSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alert ? [alert] : [],
     );
@@ -134,8 +136,8 @@ describe("GetRecentChanges through the tool dispatch", () => {
     };
   }
 
-  function connectGitHub(): void {
-    saveGitHubIntegration({
+  async function connectGitHub(): Promise<void> {
+    await saveGitHubIntegration({
       token: "ghp_test_token",
       repoOwner: "acme",
       repoName: "shop",
@@ -143,8 +145,8 @@ describe("GetRecentChanges through the tool dispatch", () => {
     });
   }
 
-  beforeEach(() => {
-    cleanupDb = useTempDb();
+  beforeEach(async () => {
+    cleanupDb = await useTempDb();
     const found = findTool("GetRecentChanges");
     if (found === undefined) throw new Error("GetRecentChanges not registered");
     tool = found;
@@ -156,7 +158,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("anchors the window on the alert's firedAt and reports the merged PR with link and files", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.pulls = [
       mergedPr(42, "2026-07-16T11:30:00Z"),
@@ -169,7 +171,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.filesByPr = { 42: ["src/redis.ts", "src/config.ts"] };
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -194,7 +196,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
   /* A week-long window on a busy repo returns hundreds of commits, and pull
      requests carry file lists on top; the same budget bounds both. */
   it("drops whole changes past the budget and counts what it left out", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.commits = Array.from({ length: 400 }, (_, i) =>
       commit(
@@ -205,7 +207,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     );
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.commits.length).toBeLessThan(400);
@@ -216,12 +218,12 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("a chat session with no alert anchors the window to now", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     installFetchMock(mock);
 
     const before = Date.now();
-    const toolOutcome = await executeTool(tool, {}, mintSession(null));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(null));
     const after = Date.now();
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -231,11 +233,11 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("caps the windowHours input at 7 days", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     installFetchMock(mock);
 
-    await executeTool(tool, { windowHours: 10_000 }, mintSession(ALERT));
+    await executeTool(tool, { windowHours: 10_000 }, await mintSession(ALERT));
 
     const commitsUrl = mock.requests.find((u) => u.includes("/commits?"));
     const since = new URL(commitsUrl!).searchParams.get("since");
@@ -244,7 +246,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("excludes merge commits and squash-merge commits from the direct-commit list", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.pulls = [mergedPr(42, "2026-07-16T11:30:00Z")];
     mock.commits = [
@@ -256,14 +258,14 @@ describe("GetRecentChanges through the tool dispatch", () => {
     ];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.commits.map((c) => c.sha)).toEqual(["plain-1"]);
   });
 
   it("fetches files for at most 15 PRs and marks the rest filesOmitted", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.pulls = Array.from({ length: 16 }, (_, i) =>
       mergedPr(i + 1, "2026-07-16T11:30:00Z"),
@@ -271,7 +273,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     for (let n = 1; n <= 16; n++) mock.filesByPr[n] = [`file-${n}.ts`];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.pullRequests).toHaveLength(16);
@@ -283,13 +285,13 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("degrades to commits-only with a note when the token cannot list pull requests", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.pullsStatus = 403;
     mock.commits = [commit("c1", "fix: something", "2026-07-16T11:31:00Z")];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -299,12 +301,12 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("treats an empty repository (409 on commits) as no commits, not a failure", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.commitsStatus = 409;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -312,12 +314,12 @@ describe("GetRecentChanges through the tool dispatch", () => {
   });
 
   it("a GitHub failure returns a corrective error result, never a thrown error", async () => {
-    connectGitHub();
+    await connectGitHub();
     const mock = makeMock();
     mock.repoStatus = 500;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     expect(toolOutcome.toolOutcome).toBe("retryable");
     expect(toolOutcome.content).toContain(
@@ -329,7 +331,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const mock = makeMock();
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
 
     expect(toolOutcome.toolOutcome).toBe("permission");
     expect(toolOutcome.content).toContain("not configured");

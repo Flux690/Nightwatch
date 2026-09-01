@@ -3,7 +3,7 @@ import { cn } from "@/shared/lib/utils";
 
 // Depth rather than an outline, one rung above the bubbles, so it is found by
 // sitting higher than the column rather than by another border.
-export function InterruptCard({
+export function GateCard({
   className,
   ...props
 }: React.ComponentProps<typeof Card>): React.JSX.Element {

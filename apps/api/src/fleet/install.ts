@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Platform } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { findRunnerByToken } from "../fleet/runners.js";
+import { findRunnerByToken } from "../fleet/runners-store.js";
 import { publicWsUrl } from "../public-url.js";
 import { dockerInstallScript } from "./install-docker.js";
 import { kubernetesInstallManifest } from "./install-kubernetes.js";
@@ -41,7 +41,7 @@ export async function registerInstallRoutes(
         });
       }
 
-      const record = findRunnerByToken(token);
+      const record = await findRunnerByToken(token);
       if (!record) {
         return reply.code(404).send({ error: "token not found" });
       }

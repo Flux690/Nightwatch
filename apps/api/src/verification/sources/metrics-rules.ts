@@ -9,12 +9,14 @@ import type { ConditionState, VerificationSource } from "../source.js";
 export const metricsRulesSource: VerificationSource = {
   name: "metrics-rules",
 
-  claims(alert) {
-    return alert.alertType !== "unknown" && getMetricsSource()?.rules != null;
+  async claims(alert) {
+    return (
+      alert.alertType !== "unknown" && (await getMetricsSource())?.rules != null
+    );
   },
 
   async checkCondition(alert): Promise<ConditionState> {
-    const rules = getMetricsSource()?.rules;
+    const rules = (await getMetricsSource())?.rules;
     if (rules == null) return "unknown";
     try {
       const instances = await firingInstancesOf(rules, alert.alertType);

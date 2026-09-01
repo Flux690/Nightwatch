@@ -21,7 +21,7 @@ import { connectFrontendEvents } from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerFrontendEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { deleteMetricsSource } from "../integrations/metrics/store.js";
 import { listSessionPage } from "../session/list.js";
 
@@ -71,7 +71,7 @@ describe("POST /sessions/:id/stop", () => {
       body: JSON.stringify({ message: "Long running." }),
     });
     const { sessionId } = (await chatRes.json()) as { sessionId: string };
-    await waitFor(() => dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => await dispatcher.isSessionRunning(sessionId));
 
     const stopRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/stop`,
@@ -83,13 +83,13 @@ describe("POST /sessions/:id/stop", () => {
     expect(stopRes.status).toBe(200);
 
     gateController.releaseAll();
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
   });
 
   // The stop lands while the turn's read is still running, so the run reaches
   // the write already aborted - the only window this can happen in.
   it("ends a run as stopped when the stop lands on a turn holding a write", async () => {
-    connectTestMetrics({ queryUrl: "http://prom.test" });
+    await connectTestMetrics({ queryUrl: "http://prom.test" });
     mockCreateProvider.mockImplementationOnce(() =>
       createContractFakeProvider([
         {
@@ -164,9 +164,9 @@ describe("POST /sessions/:id/stop", () => {
       ),
     );
 
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
     // Nothing to approve: the user stopped the run before the write ran.
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
     expect(
       frontend.events.some(
         (e) =>
@@ -175,15 +175,15 @@ describe("POST /sessions/:id/stop", () => {
       ),
     ).toBe(false);
 
-    // Without the stop recorded this falls through to Inconclusive, which names
-    // a conclusion the run reached rather than a decision the user made.
-    const row = listSessionPage(50, 0).rows.find(
+    // Without the stop recorded this falls through to Completed, which names a
+    // run that ran out of ideas rather than a decision the user made.
+    const row = (await listSessionPage(50, 0, "investigation")).rows.find(
       (r) => r.sessionId === sessionId,
     );
     expect(row?.status).toBe("stopped");
 
     frontend.close();
     vi.unstubAllGlobals();
-    deleteMetricsSource();
+    await deleteMetricsSource();
   });
 });

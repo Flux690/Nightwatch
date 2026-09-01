@@ -70,7 +70,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
     close();
 
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
     expect(lastAssistant?.content).toBe("I cannot help with that.");
     expect(
@@ -113,7 +113,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
     close();
 
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
     expect(lastAssistant?.content).toBe("Root cause found. I am done.");
     expect(
@@ -162,7 +162,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
     const { events, close } = await connectFrontendEvents(port, SESSION);
 
-    dispatchAlertSession(sessionId, [alert]);
+    await dispatchAlertSession(sessionId, [alert]);
 
     await waitFor(() =>
       events.find(
@@ -202,7 +202,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
     close();
 
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     expect(
       messages.some((m) => m.content.startsWith("Escalated to human:")),
     ).toBe(false);

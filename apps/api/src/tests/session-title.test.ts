@@ -50,8 +50,12 @@ function scriptTitleOnce(text: string): void {
   );
 }
 
-function seedSession(sessionId: string, title: string): void {
-  createSession({ sessionId, title, createdAt: new Date().toISOString() });
+async function seedSession(sessionId: string, title: string): Promise<void> {
+  await createSession({
+    sessionId,
+    title,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 describe("session title generation", () => {
@@ -73,7 +77,7 @@ describe("session title generation", () => {
   it("writes the refined title to the row and publishes SESSION_TITLE_UPDATED", async () => {
     scriptTitleOnce('"Checkout Latency Spike".');
     const sessionId = "sess-title-1";
-    seedSession(sessionId, "Why is checkout slow this morning?");
+    await seedSession(sessionId, "Why is checkout slow this morning?");
 
     const events: FrontendEvent[] = [];
     const unsubscribe = subscribeFrontend((e) => events.push(e));
@@ -84,7 +88,7 @@ describe("session title generation", () => {
     );
     unsubscribe();
 
-    expect(getSession(sessionId)?.title).toBe("Checkout Latency Spike");
+    expect((await getSession(sessionId))?.title).toBe("Checkout Latency Spike");
     const titleEvent = events.find((e) => e.type === "SESSION_TITLE_UPDATED");
     expect(titleEvent?.payload).toMatchObject({
       sessionId,
@@ -102,7 +106,7 @@ describe("session title generation", () => {
     let attempts = 0;
     mockCreateTitleProvider.mockImplementationOnce(() => ({
       ...provider,
-      chat: (...args: Parameters<typeof provider.chat>) => {
+      chat: async (...args: Parameters<typeof provider.chat>) => {
         attempts++;
         if (attempts === 1) {
           return Promise.reject(
@@ -110,12 +114,12 @@ describe("session title generation", () => {
           );
         }
         const [schemas, onDelta, signal] = args;
-        return provider.chat(schemas, onDelta, signal);
+        return await provider.chat(schemas, onDelta, signal);
       },
     }));
 
     const sessionId = "sess-title-retry";
-    seedSession(sessionId, "Why is checkout slow this morning?");
+    await seedSession(sessionId, "Why is checkout slow this morning?");
     const events: FrontendEvent[] = [];
     const unsubscribe = subscribeFrontend((e) => events.push(e));
 
@@ -130,7 +134,7 @@ describe("session title generation", () => {
     vi.useRealTimers();
 
     expect(attempts).toBe(2);
-    expect(getSession(sessionId)?.title).toBe("Checkout Latency Spike");
+    expect((await getSession(sessionId))?.title).toBe("Checkout Latency Spike");
     // The stream is the investigation's; a title retry is logged, never sent.
     expect(events.some((e) => e.type === "RUN_RETRYING")).toBe(false);
   });
@@ -141,7 +145,7 @@ describe("session title generation", () => {
     ]);
     mockCreateTitleProvider.mockImplementationOnce(() => provider);
     const sessionId = "sess-title-framing";
-    seedSession(sessionId, "temp");
+    await seedSession(sessionId, "temp");
 
     await generateSessionTitle(
       sessionId,
@@ -157,41 +161,41 @@ describe("session title generation", () => {
     const call = mockCreateTitleProvider.mock.calls.at(-1);
     expect(call?.[1]).toMatchObject({ maxOutputTokens: 1024 });
     expect(call?.[3]).toEqual({ minimalReasoning: true });
-    expect(getSession(sessionId)?.title).toBe("Greeting");
+    expect((await getSession(sessionId))?.title).toBe("Greeting");
   });
 
   it("strips trailing punctuation, including after the word cap", async () => {
     scriptTitleOnce("Identity Inquiry,");
     const sessionId = "sess-title-comma";
-    seedSession(sessionId, "temp");
+    await seedSession(sessionId, "temp");
     await generateSessionTitle(sessionId, "who are you?", configuredConfig());
-    expect(getSession(sessionId)?.title).toBe("Identity Inquiry");
+    expect((await getSession(sessionId))?.title).toBe("Identity Inquiry");
 
     scriptTitleOnce("One Two Three Four, Five");
     const sessionId2 = "sess-title-comma-2";
-    seedSession(sessionId2, "temp");
+    await seedSession(sessionId2, "temp");
     await generateSessionTitle(sessionId2, "some question", configuredConfig());
-    expect(getSession(sessionId2)?.title).toBe("One Two Three Four");
+    expect((await getSession(sessionId2))?.title).toBe("One Two Three Four");
   });
 
   it("caps the refined title at four words", async () => {
     scriptTitleOnce("Redis Ran Out Of Memory Again");
     const sessionId = "sess-title-2";
-    seedSession(sessionId, "temp");
+    await seedSession(sessionId, "temp");
 
     await generateSessionTitle(sessionId, "redis is oom", configuredConfig());
 
-    expect(getSession(sessionId)?.title).toBe("Redis Ran Out Of");
+    expect((await getSession(sessionId))?.title).toBe("Redis Ran Out Of");
   });
 
   it("leaves the title untouched when the model returns nothing usable", async () => {
     scriptTitleOnce("   ");
     const sessionId = "sess-title-3";
-    seedSession(sessionId, "original temp title");
+    await seedSession(sessionId, "original temp title");
 
     await generateSessionTitle(sessionId, "some question", configuredConfig());
 
-    expect(getSession(sessionId)?.title).toBe("original temp title");
+    expect((await getSession(sessionId))?.title).toBe("original temp title");
   });
 
   it("builds an alert title source capped to the first ten alerts", () => {
@@ -238,7 +242,8 @@ describe("session title generation", () => {
 
     // Fire-and-forget: wait on the row, not on the run finishing.
     await waitFor(
-      () => getSession(sessionId)?.title === "Checkout Latency Spike",
+      async () =>
+        (await getSession(sessionId))?.title === "Checkout Latency Spike",
     );
     unsubscribe();
     const titleEvent = events.find((e) => e.type === "SESSION_TITLE_UPDATED");

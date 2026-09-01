@@ -11,9 +11,9 @@ import type {
 import {
   getPendingHumanInputBySessionId,
   hasPendingHumanInput,
-} from "./interrupts.js";
-import { getRecord } from "./record.js";
-import { isRunning } from "./run-state.js";
+} from "./gate-store.js";
+import { getRecord } from "./record-store.js";
+import { isRunning } from "./status-store.js";
 import { getSession } from "./store.js";
 import { getTranscriptRows } from "./transcript-store.js";
 
@@ -73,18 +73,19 @@ function priorRunsOf(
 
 // Read from the report column, since the write-up is not a turn. A session
 // parked on a human has not reached that turn, so it gets no card.
-function reportCard(sessionId: string): TranscriptItem | null {
-  const session = getSession(sessionId);
+async function reportCard(sessionId: string): Promise<TranscriptItem | null> {
+  const session = await getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
-  if (getRecord(sessionId)?.report != null) {
+  if ((await getRecord(sessionId))?.report != null) {
     // A run in flight writes this again over the same column, so without the
     // building state a follow-up reads as finished the moment it starts.
-    return isRunning(sessionId)
+    return (await isRunning(sessionId))
       ? { kind: "report_card", id: "report", state: { phase: "building" } }
       : { kind: "report_card", id: "report", state: { phase: "ready" } };
   }
-  if (isRunning(sessionId) || hasPendingHumanInput(sessionId)) return null;
-  const hypotheses = getRecord(sessionId)?.hypotheses ?? [];
+  if ((await isRunning(sessionId)) || (await hasPendingHumanInput(sessionId)))
+    return null;
+  const hypotheses = (await getRecord(sessionId))?.hypotheses ?? [];
   return hypotheses.length === 0
     ? null
     : { kind: "report_card", id: "report", state: { phase: "failed" } };
@@ -115,11 +116,13 @@ function toolCallState(
 
 // Everything the frontend needs about a call is decided here, so the browser
 // never reconciles two sources against each other.
-export function buildTranscript(sessionId: string): TranscriptItem[] {
-  const messages: TranscriptRow[] = getTranscriptRows(sessionId);
+export async function buildTranscript(
+  sessionId: string,
+): Promise<TranscriptItem[]> {
+  const messages: TranscriptRow[] = await getTranscriptRows(sessionId);
   // Which call is waiting, and of what kind. What that call was comes from the
   // transcript rows below, which hold it already.
-  const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
+  const pending = (await getPendingHumanInputBySessionId(sessionId)) ?? null;
 
   // Not reconstructed from the tool's name: that cannot tell a call a person
   // released from one the harness refused without drawing a card.
@@ -150,7 +153,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
 
   // The ones that opened the session are excluded, read from the row rather
   // than from compared clocks: that fact is known when they are written.
-  const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
+  const arrivals = ((await getSession(sessionId))?.alerts ?? []).filter(
     (entry) => entry.injected,
   );
   let nextArrival = 0;
@@ -180,7 +183,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     // The harness talking to the model, not to the user. Stored so a resume
     // replays faithfully; never drawn, so the transcript reads as one
     // conversation between two parties.
-    if (msg.kind === "nightwarden") continue;
+    if (msg.kind === "harness") continue;
 
     if (msg.kind === "error") {
       if (msg.content) {
@@ -287,7 +290,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   }
 
   // Last, because writing up is the last thing a run does.
-  const report = reportCard(sessionId);
+  const report = await reportCard(sessionId);
   if (report !== null) items.push(report);
 
   return items;

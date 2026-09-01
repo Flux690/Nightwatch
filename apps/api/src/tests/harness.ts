@@ -7,7 +7,7 @@ import {
   type Platform,
   type RunnerCommandMessage,
 } from "@nightwarden/shared";
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -109,14 +109,14 @@ function manifestFor(
 }
 
 export async function harness(options: HarnessOptions = {}): Promise<Harness> {
-  const cleanupDb = useTempDb();
+  const cleanupDb = await useTempDb();
   const session = await mintTestSession();
 
-  const runners: HarnessRunner[] = (options.runners ?? []).map(
-    (spec, index) => {
+  const runners: HarnessRunner[] = await Promise.all(
+    (options.runners ?? []).map(async (spec, index) => {
       const platform = spec.platform ?? "docker";
       const name = spec.name ?? `test-runner-${index + 1}`;
-      const id = generateRunnerToken(platform, name).id;
+      const id = (await generateRunnerToken(platform, name)).id;
       const commands: Command[] = [];
       const connection = registerRunner({
         runnerId: id,
@@ -141,7 +141,7 @@ export async function harness(options: HarnessOptions = {}): Promise<Harness> {
       });
       setRunnerManifest(id, manifestFor({ ...spec, platform, name }));
       return { id, name, connection, commands };
-    },
+    }),
   );
 
   // trustProxy as index.ts sets it, so x-forwarded-proto behaves as in production.

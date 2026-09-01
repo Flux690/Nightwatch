@@ -31,7 +31,7 @@ export async function registerAlertRoutes(
       });
     }
 
-    const sourceKind = findAlertSourceKindByToken(plaintext);
+    const sourceKind = await findAlertSourceKindByToken(plaintext);
     if (sourceKind === null) {
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
@@ -46,11 +46,11 @@ export async function registerAlertRoutes(
 
     // Delivery is proven by an authenticated, well-formed webhook - stamped on
     // the matched source, before the evidence gate, even when everything dedups.
-    setAlertSourceReceived(sourceKind, new Date().toISOString());
+    await setAlertSourceReceived(sourceKind, new Date().toISOString());
 
     // 503 rather than a drop, so Alertmanager retries once the user finishes
     // setup instead of losing the alert.
-    const readiness = checkLLMReadiness();
+    const readiness = await checkLLMReadiness();
     if (!readiness.ready) {
       return reply
         .code(503)
@@ -61,8 +61,8 @@ export async function registerAlertRoutes(
     // logs) makes an investigation worth starting; misroute protection is downstream.
     if (
       getFleetView().length === 0 &&
-      getMetricsSource() === null &&
-      getLokiIntegration() === null
+      (await getMetricsSource()) === null &&
+      (await getLokiIntegration()) === null
     ) {
       return reply.code(503).send({
         error:
@@ -74,7 +74,7 @@ export async function registerAlertRoutes(
     // alert and fires another leaves both facts on the sessions they belong to.
     const clearedAt = new Date().toISOString();
     for (const { sourceAlertId, firedAt } of parsed.cleared) {
-      for (const sessionId of markAlertCleared(
+      for (const sessionId of await markAlertCleared(
         sourceAlertId,
         firedAt,
         clearedAt,
@@ -83,7 +83,7 @@ export async function registerAlertRoutes(
       }
     }
 
-    const { enqueued, skipped } = routeDelivery(
+    const { enqueued, skipped } = await routeDelivery(
       parsed.groupKey,
       parsed.firing,
       parsed.delivery,

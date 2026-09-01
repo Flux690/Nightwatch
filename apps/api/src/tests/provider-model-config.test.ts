@@ -121,12 +121,12 @@ describe("provider/model config seam", () => {
   }
 
   // Switches the active block so the route derives through OpenRouter's rules.
-  function useOpenRouter(): void {
-    updateProvider("openrouter", {
+  async function useOpenRouter(): Promise<void> {
+    await updateProvider("openrouter", {
       model: "anthropic/claude-opus-5",
       apiKey: "sk-or-key",
     });
-    updateConfig({ provider: "openrouter" });
+    await updateConfig({ provider: "openrouter" });
   }
 
   // Listing the catalog is also how a block is verified, so these cover both.
@@ -200,7 +200,7 @@ describe("provider/model config seam", () => {
   it("POST /config/models: falls back to the saved key when none is typed", async () => {
     // Written here rather than relying on the fixture: the stored key is
     // encrypted with whichever NIGHTWARDEN_SECRET_KEY was live when it was written.
-    updateProvider("anthropic", { apiKey: "saved-key" });
+    await updateProvider("anthropic", { apiKey: "saved-key" });
     let sawAuth = "";
     vi.stubGlobal(
       "fetch",
@@ -226,7 +226,7 @@ describe("provider/model config seam", () => {
   // Whether a catalog can be read without a key is the provider's rule, so each
   // one answers for itself and the frontend is told which case it is in.
   it("POST /config/models: Anthropic asks for a key rather than being called with none", async () => {
-    clearTestLLM();
+    await clearTestLLM();
     const calls = vi.fn();
     vi.stubGlobal("fetch", calls);
     try {
@@ -241,12 +241,12 @@ describe("provider/model config seam", () => {
       // Asking anyway would come back 401 and be reported as a rejected key.
       expect(calls).not.toHaveBeenCalled();
     } finally {
-      configureTestLLM();
+      await configureTestLLM();
     }
   });
 
   it("POST /config/models: OpenRouter lists models with no key, because it publishes them", async () => {
-    clearTestLLM();
+    await clearTestLLM();
     stubFetch(() => mockResponse(200, { data: [{ id: "openai/gpt-5" }] }));
     try {
       const res = await nw.server.inject({
@@ -258,7 +258,7 @@ describe("provider/model config seam", () => {
 
       expect(JSON.parse(res.body)).toMatchObject({ ok: true });
     } finally {
-      configureTestLLM();
+      await configureTestLLM();
     }
   });
 
@@ -335,8 +335,8 @@ describe("provider/model config seam", () => {
   });
 
   describe("saving a model", () => {
-    afterEach(() => {
-      configureTestLLM();
+    afterEach(async () => {
+      await configureTestLLM();
     });
 
     async function patchModel(
@@ -475,8 +475,8 @@ describe("provider/model config seam", () => {
   describe("reasoning descriptors", () => {
     // Anthropic is the baseline useTempDb installs; a test that switches to
     // OpenRouter must not leak that choice into the next one.
-    afterEach(() => {
-      configureTestLLM();
+    afterEach(async () => {
+      await configureTestLLM();
     });
 
     it("Anthropic: derives levels from capabilities.effort and defaults to high, which is the documented API default", async () => {
@@ -578,7 +578,7 @@ describe("provider/model config seam", () => {
     });
 
     it("OpenRouter: never claims compaction, which the gateway truncates instead of summarising", async () => {
-      useOpenRouter();
+      await useOpenRouter();
       stubFetch(() =>
         mockResponse(200, {
           data: [{ id: "some/model", reasoning: { mandatory: false } }],
@@ -592,7 +592,7 @@ describe("provider/model config seam", () => {
     });
 
     it("OpenRouter: uses the model's stated levels and its own default, never a guessed one", async () => {
-      useOpenRouter();
+      await useOpenRouter();
       // kimi-k3 publishes no medium at all, and states max as its default.
       stubFetch(() =>
         mockResponse(200, {
@@ -621,7 +621,7 @@ describe("provider/model config seam", () => {
     });
 
     it("OpenRouter: offers the full gateway ladder and medium when the model publishes no levels", async () => {
-      useOpenRouter();
+      await useOpenRouter();
       stubFetch(() =>
         mockResponse(200, {
           data: [{ id: "some/model", reasoning: { mandatory: false } }],
@@ -644,7 +644,7 @@ describe("provider/model config seam", () => {
     // A free model published a ceiling equal to its whole context, so sending
     // it as max_tokens asked for one token more than the window.
     it("OpenRouter: reads a ceiling equal to the window as no ceiling at all", async () => {
-      useOpenRouter();
+      await useOpenRouter();
       stubFetch(() =>
         mockResponse(200, {
           data: [
@@ -669,7 +669,7 @@ describe("provider/model config seam", () => {
     });
 
     it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {
-      useOpenRouter();
+      await useOpenRouter();
       stubFetch(() =>
         mockResponse(200, {
           data: [
@@ -750,12 +750,12 @@ describe("provider/model config seam", () => {
   });
 
   describe("an install nobody has configured", () => {
-    beforeEach(() => {
-      clearTestLLM();
+    beforeEach(async () => {
+      await clearTestLLM();
     });
 
-    afterEach(() => {
-      configureTestLLM();
+    afterEach(async () => {
+      await configureTestLLM();
     });
 
     it("GET /config reports no provider and no model rather than guessing one, while keeping the operational defaults", async () => {

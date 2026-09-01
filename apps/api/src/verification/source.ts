@@ -10,6 +10,6 @@ export interface VerificationSource {
   // Named for the log, so a user can see which source answered.
   readonly name: string;
   // Whether this source owns the alert. False is no opinion about the condition.
-  claims(alert: NormalizedAlert): boolean;
+  claims(alert: NormalizedAlert): Promise<boolean>;
   checkCondition(alert: NormalizedAlert): Promise<ConditionState>;
 }

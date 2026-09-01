@@ -44,8 +44,11 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
 
 // Every session row exists before anything dispatches into it: the chat route
 // writes it, and promotion writes it together with the alerts it takes.
-function seedSession(sessionId: string, alerts: NormalizedAlert[]): void {
-  seedAlertSession(
+async function seedSession(
+  sessionId: string,
+  alerts: NormalizedAlert[],
+): Promise<void> {
+  await seedAlertSession(
     { sessionId, title: "t", createdAt: new Date().toISOString() },
     alerts,
   );
@@ -55,19 +58,21 @@ describe("dispatcher", () => {
   // Claiming a run and counting seats are both reads of the session row, so this
   // seam needs a database even with the run itself faked.
   let cleanupDb: () => void;
-  beforeAll(() => {
-    cleanupDb = useTempDb();
+  beforeAll(async () => {
+    cleanupDb = await useTempDb();
   });
   afterAll(() => {
     cleanupDb();
     vi.unstubAllEnvs();
   });
 
-  it("refuses to dispatch into a session nothing has written", () => {
+  it("refuses to dispatch into a session nothing has written", async () => {
     const dispatcher = createDispatcher({
       run: () => Promise.resolve<RunOutcome>("completed"),
     });
-    expect(dispatcher.dispatch({ sessionId: "never-created" })).toBe(false);
+    expect(await dispatcher.dispatch({ sessionId: "never-created" })).toBe(
+      false,
+    );
   });
 
   // The conditional UPDATE is the mutex, not a check before it, so the loser
@@ -76,17 +81,17 @@ describe("dispatcher", () => {
     const gate = deferred();
     const dispatcher = createDispatcher({ run: () => gate.promise });
     const sessionId = "s-race";
-    seedSession(sessionId, [makeAlert("race-1")]);
+    await seedSession(sessionId, [makeAlert("race-1")]);
 
-    expect(dispatcher.dispatch({ sessionId })).toBe(true);
-    expect(dispatcher.dispatch({ sessionId })).toBe(false);
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(true);
+    expect(await dispatcher.dispatch({ sessionId })).toBe(true);
+    expect(await dispatcher.dispatch({ sessionId })).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(true);
 
     gate.resolve();
     await flush();
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
     // Released, so the same session can run again - which is what a resume is.
-    expect(dispatcher.dispatch({ sessionId })).toBe(true);
+    expect(await dispatcher.dispatch({ sessionId })).toBe(true);
   });
 
   it("stop aborts the running session's signal, and answers false for an idle one", async () => {
@@ -99,10 +104,10 @@ describe("dispatcher", () => {
       },
     });
     const sessionId = "s-stop";
-    seedSession(sessionId, [makeAlert("stop-1")]);
+    await seedSession(sessionId, [makeAlert("stop-1")]);
 
     expect(dispatcher.stop(sessionId)).toBe(false);
-    dispatcher.dispatch({ sessionId });
+    await dispatcher.dispatch({ sessionId });
     expect(dispatcher.stop(sessionId)).toBe(true);
     expect(seen?.aborted).toBe(true);
 
@@ -115,67 +120,71 @@ describe("dispatcher", () => {
     // A run finishing is the only thing that frees a seat and the only thing
     // that starts the next waiting group. Nothing polls.
     it("starts a waiting group only when a run ends and frees its seat", async () => {
-      updateConfig({ maxConcurrentInvestigations: 1 });
+      await updateConfig({ maxConcurrentInvestigations: 1 });
       const gate = deferred();
       const dispatcher = createDispatcher({ run: () => gate.promise });
-      const before = countInvestigations();
+      const before = await countInvestigations();
 
       const holder = "s-holder";
-      seedSession(holder, [makeAlert("hold-1")]);
-      dispatcher.dispatch({ sessionId: holder });
+      await seedSession(holder, [makeAlert("hold-1")]);
+      await dispatcher.dispatch({ sessionId: holder });
 
-      enqueueAlerts("group-waiting", [makeAlert("wait-1")], WHOLE_DELIVERY);
-      dispatcher.promoteQueued();
+      await enqueueAlerts(
+        "group-waiting",
+        [makeAlert("wait-1")],
+        WHOLE_DELIVERY,
+      );
+      await dispatcher.promoteQueued();
       // The only seat is taken, so the group stays where it is: durable, and
       // still nobody's.
-      expect(queueDepth().waiting).toBe(1);
-      expect(countInvestigations()).toBe(before + 1);
+      expect((await queueDepth()).waiting).toBe(1);
+      expect(await countInvestigations()).toBe(before + 1);
 
       gate.resolve();
       await flush();
-      expect(queueDepth().waiting).toBe(0);
-      expect(countInvestigations()).toBe(before + 2);
-      updateConfig({ maxConcurrentInvestigations: 10 });
+      expect((await queueDepth()).waiting).toBe(0);
+      expect(await countInvestigations()).toBe(before + 2);
+      await updateConfig({ maxConcurrentInvestigations: 10 });
     });
 
-    it("takes the oldest waiting group first, and takes it whole", () => {
-      updateConfig({ maxConcurrentInvestigations: 1 });
+    it("takes the oldest waiting group first, and takes it whole", async () => {
+      await updateConfig({ maxConcurrentInvestigations: 1 });
       const gate = deferred();
       const dispatcher = createDispatcher({ run: () => gate.promise });
 
-      enqueueAlerts(
+      await enqueueAlerts(
         "group-older",
         [makeAlert("old-1"), makeAlert("old-2")],
         WHOLE_DELIVERY,
       );
-      enqueueAlerts("group-newer", [makeAlert("new-1")], WHOLE_DELIVERY);
+      await enqueueAlerts("group-newer", [makeAlert("new-1")], WHOLE_DELIVERY);
 
       // One seat, so exactly one group starts and it is the one that arrived
       // first. The newer group waits rather than being swept in with it.
-      dispatcher.promoteQueued();
-      expect(queueDepth().waiting).toBe(1);
+      await dispatcher.promoteQueued();
+      expect((await queueDepth()).waiting).toBe(1);
 
-      const started = investigationAlertIds().find((ids) =>
+      const started = (await investigationAlertIds()).find((ids) =>
         ids.includes("old-1"),
       );
       expect(started).toEqual(["old-1", "old-2"]);
-      expect(investigationAlertIds().some((ids) => ids.includes("new-1"))).toBe(
-        false,
-      );
+      expect(
+        (await investigationAlertIds()).some((ids) => ids.includes("new-1")),
+      ).toBe(false);
 
       gate.resolve();
-      updateConfig({ maxConcurrentInvestigations: 10 });
+      await updateConfig({ maxConcurrentInvestigations: 10 });
     });
   });
 
-  it("injecting records the alert on the session and hands it to the run once", () => {
+  it("injecting records the alert on the session and hands it to the run once", async () => {
     const dispatcher = createDispatcher({
       run: () => Promise.resolve<RunOutcome>("completed"),
     });
     const sessionId = "s-inject";
-    seedSession(sessionId, [makeAlert("inject-primary")]);
+    await seedSession(sessionId, [makeAlert("inject-primary")]);
 
-    dispatcher.injectAlert(
+    await dispatcher.injectAlert(
       sessionId,
       "group-inject",
       makeAlert("inject-late"),
@@ -183,7 +192,10 @@ describe("dispatcher", () => {
     );
 
     // Durable immediately, because the sender was already answered 200.
-    expect(alertIdsOf(sessionId)).toEqual(["inject-primary", "inject-late"]);
+    expect(await alertIdsOf(sessionId)).toEqual([
+      "inject-primary",
+      "inject-late",
+    ]);
     // The inbox is what tells the model, which is a separate concern from
     // keeping it - and it is drained exactly once.
     expect(
@@ -192,41 +204,45 @@ describe("dispatcher", () => {
     expect(dispatcher.drainInbox(sessionId)).toEqual([]);
   });
 
-  it("does not count a chat against the investigation seats", () => {
+  it("does not count a chat against the investigation seats", async () => {
     const gate = deferred();
     const dispatcher = createDispatcher({ run: () => gate.promise });
     const sessionId = "s-chat";
-    createSession({
+    await createSession({
       sessionId,
       title: "t",
       createdAt: new Date().toISOString(),
     });
 
-    updateConfig({ maxConcurrentInvestigations: 1 });
-    dispatcher.dispatch({ sessionId, userMessage: "hello" });
+    await updateConfig({ maxConcurrentInvestigations: 1 });
+    await dispatcher.dispatch({ sessionId, userMessage: "hello" });
 
     // One chat is running; the investigation pool is still untouched, so a
     // waiting alert group can start.
-    const before = countInvestigations();
-    enqueueAlerts("group-beside-chat", [makeAlert("beside-1")], WHOLE_DELIVERY);
-    dispatcher.promoteQueued();
-    expect(countInvestigations()).toBe(before + 1);
+    const before = await countInvestigations();
+    await enqueueAlerts(
+      "group-beside-chat",
+      [makeAlert("beside-1")],
+      WHOLE_DELIVERY,
+    );
+    await dispatcher.promoteQueued();
+    expect(await countInvestigations()).toBe(before + 1);
 
     gate.resolve();
-    updateConfig({ maxConcurrentInvestigations: 10 });
+    await updateConfig({ maxConcurrentInvestigations: 10 });
   });
 });
 
 // Every investigation, as the alert ids it covers - which is what says whether a
 // group was taken whole and whether two groups stayed apart.
-function investigationAlertIds(): string[][] {
-  return listSessionFacts(100, 0, "investigation").facts.map((s) =>
+async function investigationAlertIds(): Promise<string[][]> {
+  return (await listSessionFacts(100, 0, "investigation")).facts.map((s) =>
     s.alerts.map((entry) => entry.alert.sourceAlertId),
   );
 }
 
-function alertIdsOf(sessionId: string): string[] {
-  return (getSession(sessionId)?.alerts ?? []).map(
+async function alertIdsOf(sessionId: string): Promise<string[]> {
+  return ((await getSession(sessionId))?.alerts ?? []).map(
     (entry) => entry.alert.sourceAlertId,
   );
 }

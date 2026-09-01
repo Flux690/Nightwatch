@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findRunnerByToken, touchLastUsed } from "../fleet/runners.js";
+import { findRunnerByToken, touchLastUsed } from "../fleet/runners-store.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
@@ -34,7 +34,7 @@ export async function registerWsRoutes(
         return;
       }
 
-      const tokenRecord = findRunnerByToken(plaintext);
+      const tokenRecord = await findRunnerByToken(plaintext);
       if (!tokenRecord) {
         socket.close(4003, "Invalid or revoked token");
         return;
@@ -44,7 +44,7 @@ export async function registerWsRoutes(
 
       // Minting reclaims a name only from a row that never connected, and a
       // runner whose platform API is down authenticates but never manifests.
-      touchLastUsed(runnerId);
+      await touchLastUsed(runnerId);
 
       const conn = registerRunner({
         runnerId,
@@ -78,7 +78,7 @@ export async function registerWsRoutes(
         socket.ping();
       }, PING_INTERVAL_MS);
 
-      socket.on("message", (raw: Buffer | ArrayBuffer | Buffer[]) => {
+      socket.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
         let parsed: Record<string, unknown>;
         try {
           parsed = JSON.parse(String(raw)) as Record<string, unknown>;
@@ -108,7 +108,7 @@ export async function registerWsRoutes(
             );
             return;
           }
-          touchLastUsed(runnerId);
+          await touchLastUsed(runnerId);
           setRunnerManifest(runnerId, msg.payload);
           fastify.log.info(
             { runnerId: runnerId.slice(0, 8) },

@@ -23,7 +23,7 @@ type OpenPullRequestOutcome =
 interface OpenPullRequestHooks {
   // Host composes the final PR body: model text + incident context +
   // plain-text session reference.
-  composeBody(filesChanged: string[]): string;
+  composeBody(filesChanged: string[]): Promise<string>;
 }
 
 // The PR is a draft, so CI and the human merge are the review layers. One per
@@ -44,7 +44,7 @@ export async function openPullRequest(
     };
   }
   const files = await changedFiles(ws.dir);
-  const body = hooks.composeBody(files);
+  const body = await hooks.composeBody(files);
   if (await hasUnpushedWork(ws.dir)) {
     await push(ws.dir, ws.branch, await ws.options.authHeader());
   }

@@ -96,7 +96,7 @@ const start = async (): Promise<void> => {
     fastify.log.info("SQLite ready");
     // Env is a first-boot seed only: this writes the config row on an install
     // that has none, and never again. After that the database is the sole source.
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
     // Same first-boot rule for the evidence integrations, so a fresh install can
     // come up fully configured without anyone opening a browser.
     await seedIntegrationsFromEnv();
@@ -113,8 +113,8 @@ const start = async (): Promise<void> => {
     }
     const salvaged = await salvageWorkspaces({
       workspacesDir: workspacesDir(),
-      authHeader: () => {
-        const row = getGitHubIntegration();
+      authHeader: async () => {
+        const row = await getGitHubIntegration();
         if (row === null) {
           return Promise.reject(
             new Error("GitHub integration is not configured"),
@@ -141,7 +141,7 @@ const start = async (): Promise<void> => {
     /* Alerts queued when the process died are still queued, and the seats they
        were waiting for were freed by recovery above. Nothing else would notice
        until the next delivery arrived. */
-    dispatcher.promoteQueued();
+    await dispatcher.promoteQueued();
     // An alert usually clears minutes after the run that fixed it ended, so
     // something has to keep asking. Unref'd: the server holds the loop open.
     setInterval(() => {

@@ -2,7 +2,7 @@ import {
   claimPendingHumanInput,
   deletePendingHumanInput,
   getPendingHumanInputBySessionId,
-} from "./interrupts.js";
+} from "./gate-store.js";
 import {
   appendRowsAndResolve,
   findToolCall,
@@ -39,8 +39,8 @@ interface HumanInputActionResult extends ApprovalResponse {
   sessionId: string;
 }
 
-function requirePendingHumanInput(sessionId: string) {
-  const pending = getPendingHumanInputBySessionId(sessionId);
+async function requirePendingHumanInput(sessionId: string) {
+  const pending = await getPendingHumanInputBySessionId(sessionId);
   if (!pending) {
     throw new HumanInputError(
       409,
@@ -52,11 +52,11 @@ function requirePendingHumanInput(sessionId: string) {
 
 // Both are written in one transaction, so a miss here is a contradiction
 // rather than a case to carry forward with an empty tool name.
-function requireGatedCall(
+async function requireGatedCall(
   sessionId: string,
   toolUseId: string,
-): { name: string; input: Record<string, unknown> } {
-  const call = findToolCall(sessionId, toolUseId);
+): Promise<{ name: string; input: Record<string, unknown> }> {
+  const call = await findToolCall(sessionId, toolUseId);
   if (!call) {
     throw new HumanInputError(
       409,
@@ -68,11 +68,14 @@ function requireGatedCall(
 
 // A compare-and-swap, so a failure means someone else holds it and age tells
 // a live request from a dead one. Never cleared at boot: the write may have run.
-function claim(sessionId: string, claimedAt: string | null): "held" | "stale" {
-  if (claimPendingHumanInput(sessionId)) return "held";
+async function claim(
+  sessionId: string,
+  claimedAt: string | null,
+): Promise<"held" | "stale"> {
+  if (await claimPendingHumanInput(sessionId)) return "held";
   const heldForMs =
     claimedAt === null ? 0 : Date.now() - new Date(claimedAt).getTime();
-  if (heldForMs <= loadConfig().toolCallCeilingMs) {
+  if (heldForMs <= (await loadConfig()).toolCallCeilingMs) {
     throw new HumanInputError(
       409,
       "Human input already claimed by another request",
@@ -81,8 +84,8 @@ function claim(sessionId: string, claimedAt: string | null): "held" | "stale" {
   return "stale";
 }
 
-function ensureDeleted(sessionId: string): void {
-  if (!deletePendingHumanInput(sessionId)) {
+async function ensureDeleted(sessionId: string): Promise<void> {
+  if (!(await deletePendingHumanInput(sessionId))) {
     throw new HumanInputError(
       409,
       "Human input already resolved by another request",
@@ -93,7 +96,10 @@ function ensureDeleted(sessionId: string): void {
 // The whole turn's results as one row, since the wire needs one message for it.
 // Written rather than left to the resumed run: the result of a command that has
 // already run is the one thing a crash must not lose.
-function answeredTurn(sessionId: string, results: ToolResult[]): TranscriptRow {
+async function answeredTurn(
+  sessionId: string,
+  results: ToolResult[],
+): Promise<TranscriptRow> {
   const parts: MessagePart[] = results.map((r) => ({
     type: "tool_result",
     toolCallId: r.tool_use_id,
@@ -104,7 +110,7 @@ function answeredTurn(sessionId: string, results: ToolResult[]): TranscriptRow {
   }));
   return {
     sessionId,
-    seq: getNextSeq(sessionId),
+    seq: await getNextSeq(sessionId),
     kind: "user",
     content: messagePartsToText(parts),
     parts,
@@ -112,14 +118,14 @@ function answeredTurn(sessionId: string, results: ToolResult[]): TranscriptRow {
   };
 }
 
-function unpause(
+async function unpause(
   sessionId: string,
   toolUseId: string,
   status: HumanDecision,
   completedResults: ToolResult[],
   answer: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
-): HumanInputActionResult {
+): Promise<HumanInputActionResult> {
   const resolvedAt = new Date().toISOString();
   // Stamped here rather than at each call site: every path through this
   // function had a human at the end of it, and no other path did.
@@ -130,8 +136,11 @@ function unpause(
 
   // One transaction with the gate clear, so the seed the resumed run builds
   // already holds this answer and nothing has to hand it over.
-  const answered = answeredTurn(sessionId, [...completedResults, gatedResult]);
-  if (!appendRowsAndResolve(sessionId, [answered])) {
+  const answered = await answeredTurn(sessionId, [
+    ...completedResults,
+    gatedResult,
+  ]);
+  if (!(await appendRowsAndResolve(sessionId, [answered]))) {
     throw new HumanInputError(
       409,
       "Human input already resolved by another request",
@@ -162,7 +171,7 @@ function unpause(
     resolvedAt,
   });
 
-  dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
+  await dispatcher.dispatch({ sessionId, seed: await buildSeed(sessionId) });
 
   return { sessionId, toolUseId, status, resolvedAt };
 }
@@ -171,13 +180,13 @@ export async function respondToPendingHumanInput(
   sessionId: string,
   request: RespondRequest,
 ): Promise<HumanInputActionResult> {
-  const pending = requirePendingHumanInput(sessionId);
+  const pending = await requirePendingHumanInput(sessionId);
   const { decision, text } = request;
 
   if (pending.kind === "continue") {
     // No async work between resolve and dispatch, so ensureDeleted alone is the
     // concurrency gate; claimOrThrow is skipped since nothing here executes async.
-    ensureDeleted(sessionId);
+    await ensureDeleted(sessionId);
     const resolvedAt = new Date().toISOString();
     if (decision === "reject") {
       publishInterruptResolved({
@@ -187,9 +196,9 @@ export async function respondToPendingHumanInput(
         resolvedAt,
       });
       logger.info({ sessionId }, "continue request ended by user");
-      dispatcher.dispatch({
+      await dispatcher.dispatch({
         sessionId,
-        seed: buildSeed(sessionId),
+        seed: await buildSeed(sessionId),
         standDown: true,
       });
       return {
@@ -206,7 +215,7 @@ export async function respondToPendingHumanInput(
       resolvedAt,
     });
     logger.info({ sessionId }, "continue request resumed by user");
-    dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
+    await dispatcher.dispatch({ sessionId, seed: await buildSeed(sessionId) });
     return {
       sessionId,
       toolUseId: pending.toolUseId,
@@ -216,7 +225,7 @@ export async function respondToPendingHumanInput(
   }
 
   // Everything past the continue branch gates on a real tool call.
-  const call = requireGatedCall(sessionId, pending.toolUseId);
+  const call = await requireGatedCall(sessionId, pending.toolUseId);
 
   // Before the claim, so a malformed request is refused without taking the lock
   // and wedging the interrupt for the well-formed retry behind it.
@@ -238,12 +247,12 @@ export async function respondToPendingHumanInput(
     );
   }
 
-  if (claim(sessionId, pending.claimedAt ?? null) === "stale") {
+  if ((await claim(sessionId, pending.claimedAt ?? null)) === "stale") {
     logger.warn(
       { sessionId, tool: call.name, toolUseId: pending.toolUseId },
       "stale claim: a previous attempt died holding it, toolOutcome unknown",
     );
-    return unpause(
+    return await unpause(
       sessionId,
       pending.toolUseId,
       "approved",
@@ -261,7 +270,7 @@ export async function respondToPendingHumanInput(
 
   if (pending.kind === "clarification") {
     logger.info({ sessionId }, "clarification answered");
-    return unpause(
+    return await unpause(
       sessionId,
       pending.toolUseId,
       "answered",
@@ -277,7 +286,7 @@ export async function respondToPendingHumanInput(
     // so the approve path always reaches unpause() and the run always resumes.
     const result = await executeApprovedTool(pending, call);
     logger.info({ sessionId, tool: call.name }, "approved");
-    return unpause(
+    return await unpause(
       sessionId,
       pending.toolUseId,
       "approved",
@@ -301,7 +310,7 @@ export async function respondToPendingHumanInput(
     is_error: true,
   };
   logger.info({ sessionId, tool: call.name }, "rejected");
-  return unpause(
+  return await unpause(
     sessionId,
     pending.toolUseId,
     "rejected",

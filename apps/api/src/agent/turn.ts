@@ -101,7 +101,7 @@ export async function processToolUses(params: {
 
   // The trail's own numbering: this turn is already persisted when it runs, so
   // a count of our own would name every result a turn ahead of itself.
-  const evidenceIds = evidenceIdsIn(getTranscriptRows(sessionId));
+  const evidenceIds = evidenceIdsIn(await getTranscriptRows(sessionId));
   const toolResults: ToolResult[] = [];
   const refused: string[] = [];
   let gated: { tool: ToolUse; kind: GateKind } | null = null;

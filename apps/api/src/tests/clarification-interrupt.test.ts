@@ -22,7 +22,7 @@ import { connectFrontendEvents } from "./frontend-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { buildTranscript } from "../session/transcript.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -108,10 +108,10 @@ describe("clarification interrupts", () => {
     );
 
     // Run must have exited
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // DB row must have kind=clarification
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     // INTERRUPT event carries kind + question + options
     expect(interrupt.payload["kind"]).toBe("clarification");
@@ -131,7 +131,7 @@ describe("clarification interrupts", () => {
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
   });
 
   it("answer resolves: resumes run, tool result contains answer, reaches free-form finish", async () => {
@@ -198,11 +198,11 @@ describe("clarification interrupts", () => {
     );
 
     // Interrupt row gone after resolution
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     // One ordinary call carrying what the person said, rather than a question
     // card that outlives its own answer.
-    const asked = buildTranscript(sessionId).filter(
+    const asked = (await buildTranscript(sessionId)).filter(
       (item) => item.kind === "tool_call" && item.toolUseId === "tu-ans-1",
     );
     expect(asked).toHaveLength(1);
@@ -278,7 +278,7 @@ describe("clarification interrupts", () => {
           e.payload["toolUseId"] === "tu-ms-1",
       ),
     );
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     close();
   });
@@ -315,10 +315,10 @@ describe("clarification interrupts", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     // It never reaches a person: the run carries on to its next turn instead.
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
-    const asked = buildTranscript(sessionId).find(
+    const asked = (await buildTranscript(sessionId)).find(
       (item) => item.kind === "tool_call" && item.toolUseId === "tu-over-1",
     );
     expect(asked?.kind === "tool_call" && asked.state).toMatchObject({
@@ -391,7 +391,7 @@ describe("clarification interrupts", () => {
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
   });
 
   it("restart-resume: clarification interrupt survives process exit, resolve still works", async () => {
@@ -429,8 +429,8 @@ describe("clarification interrupts", () => {
       ),
     );
     // Simulate process exit: run has exited, no in-memory state needed
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     // Resolve purely from DB state
     const answerRes = await fetch(
@@ -448,8 +448,8 @@ describe("clarification interrupts", () => {
     );
     expect(answerRes.status).toBe(200);
 
-    await waitFor(() => !hasPendingHumanInput(sessionId));
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     close();
   });
@@ -567,7 +567,7 @@ describe("clarification interrupts", () => {
     // Restart executes exactly once, run completes
     await waitFor(() => restartCommands.length > 0);
     expect(restartCommands).toHaveLength(1);
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     close();
   });

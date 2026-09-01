@@ -332,9 +332,15 @@ interface GateController {
   gate: () => Promise<void>;
   releaseNext: () => void;
   releaseAll: () => void;
+  // How many turns are parked. A run reaches its gate asynchronously, so a test
+  // that releases before anything is waiting releases nothing.
+  waiting: () => number;
   // An investigation parks more times than its script has turns, and a test about
   // dispatch should not count them. Real timers only.
-  releaseUntil: (done: () => boolean, timeoutMs?: number) => Promise<void>;
+  releaseUntil: (
+    done: () => boolean | Promise<boolean>,
+    timeoutMs?: number,
+  ) => Promise<void>;
 }
 
 export function createGateController(): GateController {
@@ -348,9 +354,10 @@ export function createGateController(): GateController {
     gate: () => new Promise<void>((resolve) => pending.push(resolve)),
     releaseNext: () => pending.shift()?.(),
     releaseAll,
+    waiting: () => pending.length,
     releaseUntil: async (done, timeoutMs = 10_000) => {
       const start = Date.now();
-      while (!done()) {
+      while (!(await done())) {
         if (Date.now() - start > timeoutMs) {
           throw new Error("releaseUntil timed out");
         }

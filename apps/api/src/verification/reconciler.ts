@@ -1,5 +1,5 @@
 import { sessionIdsWithOpenAlerts } from "../session/alerts-store.js";
-import { runFailure } from "../session/run-state.js";
+import { runFailure } from "../session/status-store.js";
 import { getSession } from "../session/store.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasSeat } from "../run-pool.js";
@@ -38,8 +38,8 @@ const lastAsked = new Map<string, number>();
 
 // Anchored on the session, not the alert's firedAt: an alert firing for a
 // month is new to an install that just ingested it.
-function watchingSince(sessionId: string): number {
-  const created = getSession(sessionId)?.createdAt;
+async function watchingSince(sessionId: string): Promise<number> {
+  const created = (await getSession(sessionId))?.createdAt;
   return created === undefined ? Date.now() : new Date(created).getTime();
 }
 
@@ -64,12 +64,12 @@ export async function reconcileRecovery(
   now = Date.now(),
 ): Promise<{ asked: number; cleared: number; retried: number }> {
   const result = { asked: 0, cleared: 0, retried: 0 };
-  const sessionIds = sessionIdsWithOpenAlerts();
+  const sessionIds = await sessionIdsWithOpenAlerts();
   forgetSettled(new Set(sessionIds));
   const answered: ConditionCache = new Map();
 
   for (const sessionId of sessionIds) {
-    if (!due(sessionId, now - watchingSince(sessionId), now)) continue;
+    if (!due(sessionId, now - (await watchingSince(sessionId)), now)) continue;
     lastAsked.set(sessionId, now);
     result.asked++;
     try {
@@ -77,7 +77,7 @@ export async function reconcileRecovery(
         result.cleared++;
         continue;
       }
-      if (retryFailedRun(sessionId)) result.retried++;
+      if (await retryFailedRun(sessionId)) result.retried++;
     } catch (err) {
       // One unreachable source must not stop the rest of the sweep.
       logger.warn({ err, sessionId }, "recovery reconciler: session skipped");
@@ -88,18 +88,18 @@ export async function reconcileRecovery(
 
 // Rides this sweep: the sessions worth retrying are the ones worth asking
 // about. Never a permanent failure, which fails identically every time.
-function retryFailedRun(sessionId: string): boolean {
-  const failure = runFailure(sessionId);
+async function retryFailedRun(sessionId: string): Promise<boolean> {
+  const failure = await runFailure(sessionId);
   if (failure === undefined) return false;
   if (failure.kind !== "transient") return false;
   if (failure.attempts >= MAX_RUN_RETRIES) return false;
   // A retry takes a seat like any other run; when there is none, the next pass
   // of this sweep tries again.
-  if (!hasSeat(true)) return false;
+  if (!(await hasSeat(true))) return false;
 
-  const started = dispatcher.dispatch({
+  const started = await dispatcher.dispatch({
     sessionId,
-    seed: buildSeed(sessionId),
+    seed: await buildSeed(sessionId),
   });
   if (started) {
     logger.info(

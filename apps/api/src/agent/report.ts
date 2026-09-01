@@ -13,7 +13,11 @@ import type {
   ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
-import { amendRecord, appendHypothesis, getRecord } from "../session/record.js";
+import {
+  amendRecord,
+  appendHypothesis,
+  getRecord,
+} from "../session/record-store.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
@@ -45,10 +49,10 @@ interface ToolCall {
 
 // One walk of the durable transcript, which is the evidence trail. Handles are
 // read off it rather than counted, so this walk cannot disagree with another.
-function toolCallsIn(sessionId: string): ToolCall[] {
+async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
   const entries: ToolCall[] = [];
   const byToolUseId = new Map<string, ToolCall>();
-  for (const message of getTranscriptRows(sessionId)) {
+  for (const message of await getTranscriptRows(sessionId)) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
         const entry: ToolCall = {
@@ -82,11 +86,11 @@ function toolCallsIn(sessionId: string): ToolCall[] {
 /* An id the model was issued, over a call that has answered. Both halves matter:
    the provider's own id is never accepted, so a tool no claim may rest on cannot
    be cited at all, and a call still running shows nothing anyone can have read. */
-function knownCitations(
+async function knownCitations(
   sessionId: string,
   ids: string[],
-): { kept: string[]; pending: string[]; invented: string[] } {
-  const entries = toolCallsIn(sessionId);
+): Promise<{ kept: string[]; pending: string[]; invented: string[] }> {
+  const entries = await toolCallsIn(sessionId);
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
       e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
@@ -106,8 +110,8 @@ function knownCitations(
   return { kept, pending, invented };
 }
 
-function issuedRange(sessionId: string): string {
-  const highest = highestEvidenceNumber(getTranscriptRows(sessionId));
+async function issuedRange(sessionId: string): Promise<string> {
+  const highest = highestEvidenceNumber(await getTranscriptRows(sessionId));
   if (highest === 0) return "No call you have made can be cited yet.";
   return highest === 1
     ? "This investigation has e1."
@@ -116,11 +120,11 @@ function issuedRange(sessionId: string): string {
 
 /* Both kinds in one message: waiting for a result and picking a different id are
    different corrections, and one claim can get both wrong at once. */
-function citationRefusal(
+async function citationRefusal(
   sessionId: string,
   pending: string[],
   invented: string[],
-): string {
+): Promise<string> {
   const said = ["Not recorded."];
   if (pending.length > 0) {
     const one = pending.length === 1;
@@ -130,7 +134,7 @@ function citationRefusal(
   }
   if (invented.length > 0) {
     said.push(
-      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${issuedRange(sessionId)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
+      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${await issuedRange(sessionId)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
     );
   }
   said.push("Record this again citing only calls you have already read.");
@@ -151,14 +155,14 @@ function citedIds(record: InvestigationRecord): Set<string> {
 
 // Every cited call answered - a citation naming one that had not is refused when
 // the claim is made. The outcome rides along: a cited miss and a cited crash differ.
-export function resolveEvidence(
+export async function resolveEvidence(
   sessionId: string,
   record: InvestigationRecord,
-): ResolvedEvidence[] {
+): Promise<ResolvedEvidence[]> {
   const cited = citedIds(record);
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
-  for (const entry of toolCallsIn(sessionId)) {
+  for (const entry of await toolCallsIn(sessionId)) {
     const { toolUseId, evidenceId, toolName, input, result, toolOutcome } =
       entry;
     if (evidenceId === undefined || !cited.has(evidenceId)) continue;
@@ -198,8 +202,8 @@ function convictionOf(
 
 // A name cannot answer this: a refused call carries the name of a gated tool
 // and reached no gate. An answered question is not a write.
-export function gatedCalls(sessionId: string): GatedCall[] {
-  return toolCallsIn(sessionId).flatMap((entry) => {
+export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
+  return (await toolCallsIn(sessionId)).flatMap((entry) => {
     const { humanDecision, toolOutcome } = entry;
     if (entry.result === null) return [];
     if (humanDecision !== "approved" && humanDecision !== "rejected") return [];
@@ -219,8 +223,9 @@ export function gatedCalls(sessionId: string): GatedCall[] {
 
 // Only the released ones: a declined write changed nothing, so it cannot put the
 // write-up behind. Monotonic, since a call already answered never un-answers.
-export function approvedWriteCount(sessionId: string): number {
-  return gatedCalls(sessionId).filter((c) => c.decision === "approved").length;
+export async function approvedWriteCount(sessionId: string): Promise<number> {
+  return (await gatedCalls(sessionId)).filter((c) => c.decision === "approved")
+    .length;
 }
 
 /* Whether the write-up no longer covers the record. Compared against the record
@@ -251,13 +256,13 @@ function lastExecutedAt(calls: Map<string, ToolCall>): string | null {
   return latest;
 }
 
-export function computeConviction(
+export async function computeConviction(
   sessionId: string,
   record: InvestigationRecord,
-): ReportConviction {
+): Promise<ReportConviction> {
   // Keyed the way a claim cites, so a lookup needs no second vocabulary.
   const calls = new Map(
-    toolCallsIn(sessionId).flatMap((e) =>
+    (await toolCallsIn(sessionId)).flatMap((e) =>
       e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
     ),
   );
@@ -278,11 +283,11 @@ export type RecordGap =
 /* `unaccounted` is the run's own count of evidence calls answered since its last
    claim: the record cannot say, because a claim carries no mark of what it was
    recorded over. */
-export function recordGaps(
+export async function recordGaps(
   sessionId: string,
   unaccounted: number,
-): RecordGap[] {
-  const hypotheses = getRecord(sessionId)?.hypotheses ?? [];
+): Promise<RecordGap[]> {
+  const hypotheses = (await getRecord(sessionId))?.hypotheses ?? [];
   const gaps: RecordGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
@@ -314,11 +319,11 @@ function supersededBy(
 
 // One act, recorded once it has been tested. Append-only: a claim the model
 // later disagrees with stays on the record beside the one that replaced it.
-export function recordHypothesis(
+export async function recordHypothesis(
   sessionId: string,
   input: RecordHypothesisInput,
-): RecordOutcome {
-  const { kept, pending, invented } = knownCitations(
+): Promise<RecordOutcome> {
+  const { kept, pending, invented } = await knownCitations(
     sessionId,
     input.evidenceIds,
   );
@@ -328,11 +333,11 @@ export function recordHypothesis(
   if (pending.length > 0 || invented.length > 0 || kept.length === 0) {
     return {
       recorded: false,
-      message: citationRefusal(sessionId, pending, invented),
+      message: await citationRefusal(sessionId, pending, invented),
     };
   }
   const evidenceIds = kept;
-  const { id, replaced } = appendHypothesis(sessionId, (record) => {
+  const { id, replaced } = await appendHypothesis(sessionId, (record) => {
     const supersedes = supersededBy(record, input.supersedes);
     const hypothesis: Hypothesis = {
       id: `h${record.hypotheses.length + 1}`,
@@ -372,31 +377,35 @@ interface SubmitReportInput {
 
 // Written whole rather than appended, because it is authored once. Citations
 // are filtered as a hypothesis's are, so no entry points at a call that never ran.
-export function submitReport(
+export async function submitReport(
   sessionId: string,
   input: SubmitReportInput,
-): RecordOutcome {
+): Promise<RecordOutcome> {
   // Answered, not merely known: a timeline entry pointing at a call that never
   // returned shows the reader nothing when they open it.
-  const resolve = (id: string): string | undefined =>
-    knownCitations(sessionId, [id]).kept[0];
+  const resolve = async (id: string): Promise<string | undefined> =>
+    (await knownCitations(sessionId, [id])).kept[0];
   // The entry is kept when its citation is dropped: the lane describes the
   // moment rather than the call, so an unresolvable id must not cost it.
-  const timeline = input.timeline.map((entry) => {
-    const cited =
-      entry.evidenceId === undefined ? undefined : resolve(entry.evidenceId);
-    return cited !== undefined
-      ? { ...entry, evidenceId: cited }
-      : {
-          at: entry.at,
-          what: entry.what,
-          ...(entry.lane !== undefined && { lane: entry.lane }),
-        };
-  });
-  const approvedWrites = approvedWriteCount(sessionId);
+  const timeline = await Promise.all(
+    input.timeline.map(async (entry) => {
+      const cited =
+        entry.evidenceId === undefined
+          ? undefined
+          : await resolve(entry.evidenceId);
+      return cited !== undefined
+        ? { ...entry, evidenceId: cited }
+        : {
+            at: entry.at,
+            what: entry.what,
+            ...(entry.lane !== undefined && { lane: entry.lane }),
+          };
+    }),
+  );
+  const approvedWrites = await approvedWriteCount(sessionId);
   // Stamped inside the transaction, from the record being written against:
   // counted anywhere else it could name claims this report never saw.
-  amendRecord(sessionId, (record) => ({
+  await amendRecord(sessionId, (record) => ({
     ...record,
     report: {
       headline: input.headline,

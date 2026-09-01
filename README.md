@@ -311,7 +311,7 @@ What an install needs you to know once it is up.
 
 **Backup.** Everything durable is in the state directory. Stop the stack, `tar czf backup.tar.gz -C /opt nightwarden`, start it again. `secret.key` is in there: restoring the database without it leaves the stored API keys unreadable and signs every user out.
 
-**Upgrade.** `docker compose pull && docker compose up -d`. Pre-1.0 there are no schema migrations - a release that changes the schema is applied by deleting `nightwarden.db` and setting up again, and the release notes say when that applies.
+**Upgrade.** `docker compose pull && docker compose up -d`. Schema changes are applied on boot: the API runs any migration your database has not seen yet, each one inside a transaction, and refuses to start rather than serve a half-migrated schema. Nothing to run by hand, and your data survives the upgrade.
 
 **Tags.** Every push to `main` publishes, so `:latest` tracks `main` and moves under you on the next pull. Each build is also tagged `sha-<short commit>`, which never moves: pin that in the compose file and in `NIGHTWARDEN_DOCKER_RUNNER_IMAGE` / `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` if you want an upgrade to be a decision rather than a side effect of restarting. Every image carries a signed provenance attestation naming the commit and workflow that built it, verifiable with `gh attestation verify`.
 

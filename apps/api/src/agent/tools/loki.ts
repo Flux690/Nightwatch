@@ -94,12 +94,12 @@ function clampedNumber(
 
 // Evidence windows never extend into the future; metrics/logs after the alert
 // are still evidence (did it recover?) up to now.
-function anchoredWindow(
+async function anchoredWindow(
   sessionId: string,
   lookbackMinutes: number,
   lookforwardMinutes: number,
-): { start: Date; end: Date } {
-  const anchor = alertAnchorFor(sessionId);
+): Promise<{ start: Date; end: Date }> {
+  const anchor = await alertAnchorFor(sessionId);
   const start = new Date(anchor.getTime() - lookbackMinutes * 60_000);
   const end = new Date(
     Math.min(anchor.getTime() + lookforwardMinutes * 60_000, Date.now()),
@@ -224,7 +224,7 @@ export const LOKI_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const integration = getLokiIntegration();
+      const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -254,7 +254,7 @@ export const LOKI_TOOLS: Tool[] = [
       );
       const { start, end } =
         until === null
-          ? anchoredWindow(
+          ? await anchoredWindow(
               ctx.sessionId,
               lookbackMinutes,
               clampedNumber(
@@ -387,7 +387,7 @@ export const LOKI_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const integration = getLokiIntegration();
+      const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -397,7 +397,7 @@ export const LOKI_TOOLS: Tool[] = [
         };
       }
 
-      const { start, end } = anchoredWindow(
+      const { start, end } = await anchoredWindow(
         ctx.sessionId,
         clampedNumber(
           input,
@@ -477,11 +477,11 @@ export const LOKI_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const integration = getLokiIntegration();
+      const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
       const { baseUrl, orgId } = integration;
       const auth = integration.authorization;
-      const { start, end } = anchoredWindow(
+      const { start, end } = await anchoredWindow(
         ctx.sessionId,
         DISCOVERY_LOOKBACK_MINUTES,
         DISCOVERY_LOOKFORWARD_MINUTES,

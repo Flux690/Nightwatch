@@ -64,7 +64,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     expect(sessionId.length).toBeGreaterThan(0);
 
     // Wait for the run to complete so subsequent tests start clean.
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
   });
 
   it("POST /chat/:id (old route) returns 404 — token-scoped chat removed", async () => {
@@ -93,7 +93,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     const { sessionId } = (await startRes.json()) as { sessionId: string };
 
     // Wait for first run to finish before continuing.
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     // Continue the session — no token in body.
     const contRes = await fetch(
@@ -111,11 +111,11 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     const cont = (await contRes.json()) as { sessionId: string };
     expect(cont.sessionId).toBe(sessionId);
 
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
   });
 
   it("POST /chat refuses with 503 when no LLM is configured, naming what to pick", async () => {
-    clearTestLLM();
+    await clearTestLLM();
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
@@ -130,7 +130,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       const body = (await res.json()) as { error: string };
       expect(body.error).toMatch(/no LLM is configured/i);
     } finally {
-      configureTestLLM();
+      await configureTestLLM();
     }
   });
 

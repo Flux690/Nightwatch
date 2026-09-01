@@ -91,11 +91,11 @@ async function withModelFacts(
 ): Promise<ProviderPatch> {
   if (patch.model === undefined || patch.model === null) return patch;
 
-  const config = loadConfig();
+  const config = await loadConfig();
   const models = await fetchModels(
     provider,
     patch.baseUrl ?? config.providers[provider].baseUrl,
-    loadApiKey(provider) ?? "",
+    (await loadApiKey(provider)) ?? "",
   );
   const chosen = models.find((m) => m.id === patch.model);
   // An unreachable catalog leaves the facts unset rather than inventing them;
@@ -127,7 +127,7 @@ export async function registerConfigRoutes(
 ): Promise<void> {
   // gated: config includes provider/model/baseUrl — not for unauthenticated eyes
   fastify.get("/config", { preHandler: requireSession }, async () => {
-    const config = loadConfig();
+    const config = await loadConfig();
     // apiKeyMasked is safe to return; apiKeyEncrypted never reaches here
     return config;
   });
@@ -146,9 +146,9 @@ export async function registerConfigRoutes(
       for (const name of ["anthropic", "openrouter"] as const) {
         const block = providers?.[name];
         if (block !== undefined)
-          updateProvider(name, await withModelFacts(name, block));
+          await updateProvider(name, await withModelFacts(name, block));
       }
-      const updated = updateConfig(global);
+      const updated = await updateConfig(global);
       logger.info(
         { keys: Object.keys(global), providers: Object.keys(providers ?? {}) },
         "agent config updated",
@@ -175,7 +175,7 @@ export async function registerConfigRoutes(
       }
       const { provider, baseUrl, apiKey } = parsed.data;
 
-      const config = loadConfig();
+      const config = await loadConfig();
       const target = provider ?? config.provider;
       // Nothing to list until a provider is chosen.
       if (target === null || target === undefined) {
@@ -185,7 +185,7 @@ export async function registerConfigRoutes(
       // A typed key wins; otherwise the saved one, so changing a model or an
       // endpoint needs no re-pasting. Whether an empty key is a problem is the
       // provider's answer, given below.
-      const effectiveKey = apiKey ?? loadApiKey(target) ?? "";
+      const effectiveKey = apiKey ?? (await loadApiKey(target)) ?? "";
 
       const catalog = await fetchCatalog(
         target,
@@ -209,7 +209,7 @@ export async function registerConfigRoutes(
         return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { provider, apiKey } = parsed.data;
-      updateProvider(provider, { apiKey });
+      await updateProvider(provider, { apiKey });
       return { provider, apiKeyMasked: maskKey(apiKey) };
     },
   );

@@ -64,12 +64,12 @@ function deriveStatusLine(
   }
 }
 
-export function listSessionPage(
+export async function listSessionPage(
   limit: number,
   offset: number,
-  kind?: SessionKind,
-): SessionListPage {
-  const { facts, nextOffset } = listSessionFacts(limit, offset, kind);
+  kind: SessionKind,
+): Promise<SessionListPage> {
+  const { facts, nextOffset } = await listSessionFacts(limit, offset, kind);
   return {
     rows: facts.map((row) => {
       const { investigation } = row;
@@ -89,7 +89,7 @@ export function listSessionPage(
       };
     }),
     nextOffset,
-    investigationTotal: countInvestigations(),
-    queue: queueState(),
+    investigationTotal: await countInvestigations(),
+    queue: await queueState(),
   };
 }

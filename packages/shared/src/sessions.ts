@@ -6,8 +6,8 @@ import type { MessagePart, NativeEnvelope } from "./messages.js";
 import type { TranscriptItem } from "./transcript.js";
 
 // Four kinds against a provider's two roles: "error" is rendered but never
-// replayed, "nightwarden" replayed but never rendered. buildSeed maps them.
-export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
+// replayed, "harness" replayed but never rendered. buildSeed maps them.
+export type TranscriptKind = "user" | "assistant" | "error" | "harness";
 
 // Derived server-side and never declared by the model. The frontend draws
 // `running` as "Investigating"; null on a chat, which has no status to show.

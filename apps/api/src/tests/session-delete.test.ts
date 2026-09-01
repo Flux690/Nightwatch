@@ -47,7 +47,7 @@ describe("DELETE /sessions/:id", () => {
       body: JSON.stringify({ message: "Quick question." }),
     });
     const { sessionId } = (await chatRes.json()) as { sessionId: string };
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
     const delRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
@@ -57,7 +57,7 @@ describe("DELETE /sessions/:id", () => {
       },
     );
     expect(delRes.status).toBe(204);
-    expect(getSession(sessionId)).toBeUndefined();
+    expect(await getSession(sessionId)).toBeUndefined();
   });
 
   it("leaves no report behind: the report route 404s once the session is gone", async () => {
@@ -70,8 +70,8 @@ describe("DELETE /sessions/:id", () => {
       body: JSON.stringify({ message: "What happened here?" }),
     });
     const { sessionId } = (await chatRes.json()) as { sessionId: string };
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    seedCompleteReport(sessionId);
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
+    await seedCompleteReport(sessionId);
 
     const before = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
@@ -108,7 +108,7 @@ describe("DELETE /sessions/:id", () => {
       body: JSON.stringify({ message: "Long running." }),
     });
     const { sessionId } = (await chatRes.json()) as { sessionId: string };
-    await waitFor(() => dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => await dispatcher.isSessionRunning(sessionId));
 
     const delRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
@@ -118,9 +118,9 @@ describe("DELETE /sessions/:id", () => {
       },
     );
     expect(delRes.status).toBe(409);
-    expect(getSession(sessionId)).toBeDefined();
+    expect(await getSession(sessionId)).toBeDefined();
 
     gateController.releaseAll();
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
   });
 });

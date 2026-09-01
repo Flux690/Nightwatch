@@ -23,7 +23,7 @@ import {
   toolCallReached,
 } from "./frontend-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 
@@ -156,7 +156,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       ),
     ).toBe(false);
 
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     close();
   });
@@ -208,7 +208,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
 
     // Runner must NOT have executed the write yet
     expect(executedCommands).not.toContain("RestartDockerService");
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     close();
 
@@ -220,7 +220,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       },
       body: JSON.stringify({ decision: "reject" }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
   });
 
   it("ask tool suspends with clarification card: HUMAN_INPUT_REQUIRED kind=clarification, question+options forwarded", async () => {
@@ -266,7 +266,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       "What is the most likely root cause?",
     );
     expect(interrupt.payload["options"]).toEqual(CLARIFICATION_OPTIONS);
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     close();
 
@@ -278,7 +278,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
   });
 
   it("combined: read executes, ask suspends, after answer write suspends, after approval run completes", async () => {
@@ -401,8 +401,8 @@ describe("policy-gate: gating is driven by tool policy", () => {
       executedCommands.filter((c) => c === "RestartDockerService"),
     ).toHaveLength(1);
 
-    await waitFor(() => !hasPendingHumanInput(sessionId));
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     close();
   });

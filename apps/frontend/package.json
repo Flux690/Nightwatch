@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",
-    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist": "5.3.0",
     "@fontsource/geist-mono": "5.2.8",
     "@nightwarden/shared": "workspace:*",
     "@shadcn/react": "0.2.1",
@@ -40,7 +40,7 @@
     "@vitejs/plugin-react": "6.0.3",
     "@vitest/coverage-v8": "4.1.10",
     "jsdom": "29.1.1",
-    "rollup-plugin-license": "^3.7.1",
+    "rollup-plugin-license": "3.7.1",
     "shadcn": "4.13.0",
     "tailwindcss": "4.3.2",
     "typescript": "7.0.2",

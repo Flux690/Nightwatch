@@ -24,7 +24,7 @@ import {
   deleteGitHubIntegration,
   saveGitHubIntegration,
 } from "../integrations/store.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { createSession } from "../session/store.js";
 import {
   appendTranscriptRows,
@@ -164,19 +164,19 @@ async function run(
   name: string,
   input: Record<string, unknown>,
 ): Promise<DispatchedToolResult> {
-  return executeTool(tool(name), input, CTX);
+  return await executeTool(tool(name), input, CTX);
 }
 
 let cleanupDb: () => void;
 
-beforeAll(() => {
-  cleanupDb = useTempDb();
+beforeAll(async () => {
+  cleanupDb = await useTempDb();
   // Network detachment is exercised in sandbox-workspace tests; keep these
   // tool tests on the open path so the mock needs no network machinery.
-  updateConfig({ sandboxNetwork: "open" });
+  await updateConfig({ sandboxNetwork: "open" });
   installGitMock();
   installDockerMock();
-  saveGitHubIntegration({
+  await saveGitHubIntegration({
     token: "github_pat_fixture",
     repoOwner: "acme",
     repoName: "api",
@@ -207,13 +207,13 @@ describe("offering gate", () => {
 
 describe("repo tools through registry dispatch", () => {
   it("returns a corrective error when the integration is missing", async () => {
-    deleteGitHubIntegration();
+    await deleteGitHubIntegration();
     try {
       const result = await run("Read", { path: "src/app.ts" });
       expect(result.toolOutcome).toBe("permission");
       expect(result.content).toContain("Integrations page");
     } finally {
-      saveGitHubIntegration({
+      await saveGitHubIntegration({
         token: "github_pat_fixture",
         repoOwner: "acme",
         repoName: "api",
@@ -267,15 +267,15 @@ describe("repo tools through registry dispatch", () => {
     // This session's workspace has never existed, so its readPaths can only have
     // come from the transcript - which is the point.
     const resumed = "aaaabbbb-0000-4000-8000-0000000000ff";
-    createSession({
+    await createSession({
       sessionId: resumed,
       title: "t",
       createdAt: new Date().toISOString(),
     });
-    appendTranscriptRows([
+    await appendTranscriptRows([
       {
         sessionId: resumed,
-        seq: getNextSeq(resumed),
+        seq: await getNextSeq(resumed),
         kind: "assistant",
         content: "[tool: Read]",
         parts: [
@@ -419,7 +419,7 @@ describe("repo work and the time budget", () => {
     mockCreateProvider.mockImplementation(() =>
       scriptRunner.create({ gate: gates.gate }),
     );
-    updateConfig({ checkInAfterMs: 300 });
+    await updateConfig({ checkInAfterMs: 300 });
     scriptRunner.setScript([
       {
         toolUses: [{ id: "t1", name: toolName, input: { path: "src/app.ts" } }],
@@ -428,7 +428,7 @@ describe("repo work and the time budget", () => {
       { toolUses: [], text: "Done." },
     ]);
 
-    seedChatSession(sessionId, "fix the repo");
+    await seedChatSession(sessionId, "fix the repo");
     const run = runSession({ sessionId, userMessage: "fix the repo" });
     // Park turn 1 until the deadline has passed.
     await new Promise((r) => setTimeout(r, 400));
@@ -443,7 +443,7 @@ describe("repo work and the time budget", () => {
 
     await runPastTheBudget(sessionId, "Read");
 
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
   });
 
   it("which is the same answer any other tool gets", async () => {
@@ -451,6 +451,6 @@ describe("repo work and the time budget", () => {
 
     await runPastTheBudget(sessionId, "nonexistent_tool");
 
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
   });
 });

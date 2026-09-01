@@ -6,7 +6,7 @@ import WebSocket from "ws";
 import { registerTokenRoutes } from "../auth/token.js";
 import { registerWsRoutes } from "../fleet/server.js";
 import { getDb } from "../db.js";
-import { generateRunnerToken, touchLastUsed } from "../fleet/runners.js";
+import { generateRunnerToken, touchLastUsed } from "../fleet/runners-store.js";
 import { createSession } from "../session/store.js";
 
 function sha256hex(s: string): string {
@@ -56,9 +56,11 @@ describe("Runner token lifecycle (issue 038)", () => {
         token: string;
         id: string;
       };
-      const row = getDb()
-        .prepare("SELECT token FROM runner WHERE id = ?")
-        .get(id) as { token: string } | undefined;
+      const row = await getDb()
+        .selectFrom("runner")
+        .select("token")
+        .where("id", "=", id)
+        .executeTakeFirst();
       expect(row).toBeDefined();
       expect(row!.token).toBe(sha256hex(token));
       expect(row!.token).not.toContain("nwr_");
@@ -102,9 +104,11 @@ describe("Runner token lifecycle (issue 038)", () => {
         platform: string;
       };
       expect(platform).toBe("kubernetes");
-      const row = getDb()
-        .prepare("SELECT platform FROM runner WHERE id = ?")
-        .get(id) as { platform: string } | undefined;
+      const row = await getDb()
+        .selectFrom("runner")
+        .select("platform")
+        .where("id", "=", id)
+        .executeTakeFirst();
       expect(row?.platform).toBe("kubernetes");
     });
 
@@ -173,9 +177,11 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(second.statusCode).toBe(201);
 
       // The abandoned orphan is gone; only the fresh reservation holds the name.
-      const rows = getDb()
-        .prepare("SELECT id FROM runner WHERE server_name = 'db-server-01'")
-        .all() as Array<{ id: string }>;
+      const rows = await getDb()
+        .selectFrom("runner")
+        .select("id")
+        .where("server_name", "=", "db-server-01")
+        .execute();
       expect(rows).toHaveLength(1);
       expect(rows[0]!.id).not.toBe(firstId);
     });
@@ -189,7 +195,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       });
       const { id } = JSON.parse(first.body) as { id: string };
       // Simulate the runner manifesting (manifest handler sets last_used_at).
-      touchLastUsed(id);
+      await touchLastUsed(id);
 
       const res = await nw.server.inject({
         method: "POST",
@@ -533,8 +539,11 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
-      const { id: runnerId } = generateRunnerToken("docker", "history-test");
-      createSession({
+      const { id: runnerId } = await generateRunnerToken(
+        "docker",
+        "history-test",
+      );
+      await createSession({
         sessionId: "sess-history-1",
         title: "history session",
         createdAt: new Date().toISOString(),
@@ -546,9 +555,11 @@ describe("Runner token lifecycle (issue 038)", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 
-      const row = getDb()
-        .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
-        .get("sess-history-1") as { session_id: string } | undefined;
+      const row = await getDb()
+        .selectFrom("sessions")
+        .select("session_id")
+        .where("session_id", "=", "sess-history-1")
+        .executeTakeFirst();
       expect(row).toBeDefined();
     });
   });

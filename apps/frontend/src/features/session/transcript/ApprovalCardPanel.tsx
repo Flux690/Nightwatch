@@ -9,7 +9,7 @@ import { SECTION_HEADING } from "@/shared/ui/Page";
 import type { ToolCallItem } from "./types.js";
 import { SHELL_TOOLS, targetOf } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
-import { InterruptCard } from "./InterruptCard.js";
+import { GateCard } from "./GateCard.js";
 
 // Shared by both halves of the exchange so neither can be styled as the louder one.
 const EXCHANGE_LABEL_CLASS = "text-sm text-ink-subtle";
@@ -86,7 +86,7 @@ export function ApprovalCardPanel({
   const riskLine = riskLineOf(inputString(input, "risk"));
 
   return (
-    <InterruptCard data-testid="approval-card">
+    <GateCard data-testid="approval-card">
       <p className={SECTION_HEADING}>Needs your approval</p>
 
       <p className="text-base font-semibold">
@@ -182,6 +182,6 @@ export function ApprovalCardPanel({
           </Button>
         </div>
       )}
-    </InterruptCard>
+    </GateCard>
   );
 }

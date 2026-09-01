@@ -51,8 +51,8 @@ function slugify(text: string): string {
 
 // Pure in the session row, so a resume recomputes the identical branch and
 // openPullRequest finds its PR instead of opening a second one.
-function branchNameFor(sessionId: string): string {
-  const alert = getSession(sessionId)?.alerts[0]?.alert ?? null;
+async function branchNameFor(sessionId: string): Promise<string> {
+  const alert = (await getSession(sessionId))?.alerts[0]?.alert ?? null;
   const slug = alert === null ? "chat" : slugify(alert.alertType);
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
@@ -63,8 +63,8 @@ const PATH_UNLOCKING_TOOLS: ReadonlySet<string> = new Set(["Read", "Write"]);
 
 // Rebuilt from the transcript, so a re-provisioned workspace does not make the
 // model reread. Only a clean answer showed it anything.
-function readPathsFor(sessionId: string): string[] {
-  const rows = getTranscriptRows(sessionId);
+async function readPathsFor(sessionId: string): Promise<string[]> {
+  const rows = await getTranscriptRows(sessionId);
   // Any outcome at all means the call did not answer cleanly, `partial`
   // included: a fan-out that half answered showed the model half a file.
   const toolOutcomes = new Set(
@@ -94,16 +94,18 @@ function readPathsFor(sessionId: string): string[] {
   return paths;
 }
 
-function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
-  const integration = getGitHubIntegration();
+async function workspaceOptionsFor(
+  sessionId: string,
+): Promise<WorkspaceOptions | null> {
+  const integration = await getGitHubIntegration();
   if (integration === null) return null;
-  const config = loadConfig();
+  const config = await loadConfig();
   const { repoOwner, repoName } = integration;
   return {
     cloneUrl: `https://github.com/${repoOwner}/${repoName}.git`,
-    branch: branchNameFor(sessionId),
-    authHeader: () => {
-      const row = getGitHubIntegration();
+    branch: await branchNameFor(sessionId),
+    authHeader: async () => {
+      const row = await getGitHubIntegration();
       if (row === null) {
         return Promise.reject(
           new SandboxUnavailableError("GitHub integration was disconnected"),
@@ -118,25 +120,36 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     network: config.sandboxNetwork,
     allowlistHosts: config.sandboxAllowlistHosts,
     proxyConfigDir: proxyDir(),
-    readPaths: () => readPathsFor(sessionId),
+    readPaths: async () => await readPathsFor(sessionId),
     onStatus: (stage) => publishSandboxStatus({ sessionId, stage }),
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
-      create: (req) =>
-        createPullRequest(tokenFor(), repoOwner, repoName, {
+      create: async (req) =>
+        await createPullRequest(await tokenFor(), repoOwner, repoName, {
           ...req,
-          head: branchNameFor(sessionId),
+          head: await branchNameFor(sessionId),
         }),
-      findOpenByBranch: (branch) =>
-        findOpenPullRequestByBranch(tokenFor(), repoOwner, repoName, branch),
-      update: (prNumber, patch) =>
-        updatePullRequest(tokenFor(), repoOwner, repoName, prNumber, patch),
+      findOpenByBranch: async (branch) =>
+        await findOpenPullRequestByBranch(
+          await tokenFor(),
+          repoOwner,
+          repoName,
+          branch,
+        ),
+      update: async (prNumber, patch) =>
+        await updatePullRequest(
+          await tokenFor(),
+          repoOwner,
+          repoName,
+          prNumber,
+          patch,
+        ),
     },
     log: logger,
   };
 
-  function tokenFor(): string {
-    const row = getGitHubIntegration();
+  async function tokenFor(): Promise<string> {
+    const row = await getGitHubIntegration();
     if (row === null) {
       throw new SandboxUnavailableError("GitHub integration was disconnected");
     }
@@ -190,7 +203,7 @@ async function runRepoTool<T>(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<T>,
 ): Promise<{ content: T | string; toolOutcome?: ToolOutcome }> {
-  const options = workspaceOptionsFor(ctx.sessionId);
+  const options = await workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
     return {
       content:
@@ -230,13 +243,13 @@ function badInput(message: string): ToolExecuteResult {
 // PR body section order (model text, then incident context, files) is host
 // policy. The session reference is plain text: a link would have to be built
 // from PUBLIC_URL, which is the operator's address and not GitHub's to reach.
-function composePrBody(
+async function composePrBody(
   sessionId: string,
   branch: string,
   modelBody: string,
   filesChanged: string[],
-): string {
-  const session = getSession(sessionId);
+): Promise<string> {
+  const session = await getSession(sessionId);
   const alert = session?.alerts[0]?.alert ?? null;
   const sections: string[] = [];
   if (modelBody.trim().length > 0) sections.push(modelBody.trim());
@@ -300,21 +313,23 @@ export const REPO_TOOLS: Tool[] = [
     evidenceKind: "text",
     timeoutMs: 60_000,
     on: "api",
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const path = requireString(input, "path");
       if (path === null) {
         return Promise.resolve(badInput("path (string) is required."));
       }
-      return runRepoTool(ctx, (ws) =>
-        readRepoFile(ws, {
-          path,
-          ...(optionalNumber(input, "offset") !== undefined && {
-            offset: optionalNumber(input, "offset"),
+      return await runRepoTool(
+        ctx,
+        async (ws) =>
+          await readRepoFile(ws, {
+            path,
+            ...(optionalNumber(input, "offset") !== undefined && {
+              offset: optionalNumber(input, "offset"),
+            }),
+            ...(optionalNumber(input, "limit") !== undefined && {
+              limit: optionalNumber(input, "limit"),
+            }),
           }),
-          ...(optionalNumber(input, "limit") !== undefined && {
-            limit: optionalNumber(input, "limit"),
-          }),
-        }),
       );
     },
   },
@@ -354,7 +369,7 @@ export const REPO_TOOLS: Tool[] = [
     evidenceKind: "diff",
     timeoutMs: 60_000,
     on: "api",
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const path = requireString(input, "path");
       const oldString = requireString(input, "old_string");
       const newString = requireString(input, "new_string");
@@ -363,13 +378,15 @@ export const REPO_TOOLS: Tool[] = [
           badInput("path, old_string and new_string (strings) are required."),
         );
       }
-      return runRepoTool(ctx, (ws) =>
-        editRepoFile(ws, {
-          path,
-          old_string: oldString,
-          new_string: newString,
-          replace_all: input["replace_all"] === true,
-        }),
+      return await runRepoTool(
+        ctx,
+        async (ws) =>
+          await editRepoFile(ws, {
+            path,
+            old_string: oldString,
+            new_string: newString,
+            replace_all: input["replace_all"] === true,
+          }),
       );
     },
   },
@@ -400,7 +417,7 @@ export const REPO_TOOLS: Tool[] = [
     evidenceKind: "diff",
     timeoutMs: 60_000,
     on: "api",
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const path = requireString(input, "path");
       const content = requireString(input, "content");
       if (path === null || content === null) {
@@ -408,7 +425,10 @@ export const REPO_TOOLS: Tool[] = [
           badInput("path and content (strings) are required."),
         );
       }
-      return runRepoTool(ctx, (ws) => writeRepoFile(ws, { path, content }));
+      return await runRepoTool(
+        ctx,
+        async (ws) => await writeRepoFile(ws, { path, content }),
+      );
     },
   },
   {
@@ -438,13 +458,13 @@ export const REPO_TOOLS: Tool[] = [
     evidenceKind: "text",
     timeoutMs: 300_000,
     on: "api",
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const command = requireString(input, "command");
       if (command === null) {
         return Promise.resolve(badInput("command (string) is required."));
       }
       const cwd = requireString(input, "cwd");
-      return runRepoTool(ctx, async (ws) => {
+      return await runRepoTool(ctx, async (ws) => {
         const result = await execInRepo(
           ws,
           { command, ...(cwd !== null && { cwd }) },
@@ -496,15 +516,22 @@ export const REPO_TOOLS: Tool[] = [
       const title = requireString(input, "title");
       if (title === null) return badInput("title (string) is required.");
       const modelBody = requireString(input, "body") ?? "";
-      const result = await runRepoTool(ctx, (ws) =>
-        openPullRequest(
-          ws,
-          { title },
-          {
-            composeBody: (filesChanged) =>
-              composePrBody(ctx.sessionId, ws.branch, modelBody, filesChanged),
-          },
-        ),
+      const result = await runRepoTool(
+        ctx,
+        async (ws) =>
+          await openPullRequest(
+            ws,
+            { title },
+            {
+              composeBody: async (filesChanged) =>
+                await composePrBody(
+                  ctx.sessionId,
+                  ws.branch,
+                  modelBody,
+                  filesChanged,
+                ),
+            },
+          ),
       );
       // Having nothing to propose is a true answer about the branch, not a
       // fault, so it reads as a miss rather than as a failed pull request.

@@ -34,7 +34,7 @@ describe("POST /setup", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
   });
 
@@ -104,7 +104,7 @@ describe("GET /auth/status", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
   });
 
@@ -187,7 +187,7 @@ describe("POST /login", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     await server.inject({
       method: "POST",
@@ -244,7 +244,7 @@ describe("requireSession gate", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     // Establish owner so login_version = 0 is in the DB
     await server.inject({
@@ -312,7 +312,7 @@ describe("session cookie unlocks protected routes", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
   });
 
@@ -349,7 +349,7 @@ describe("POST /logout", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     await server.inject({
       method: "POST",
@@ -382,7 +382,7 @@ describe("rolling session reissue", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     await server.inject({
       method: "POST",
@@ -431,7 +431,7 @@ describe("POST /logout-all", () => {
   let validCookie: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     const setupRes = await server.inject({
       method: "POST",
@@ -487,7 +487,7 @@ describe("credential endpoint rate limiting", () => {
   let cleanupDb: () => void;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     server = await buildServer();
     await server.inject({
       method: "POST",

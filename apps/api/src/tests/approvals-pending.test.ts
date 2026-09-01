@@ -18,7 +18,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
@@ -54,7 +54,7 @@ const RESTART_TURN = (): ScriptedTurn => ({
   ],
 });
 
-describe("a suspended session serves its pending row with its transcript", () => {
+describe("a suspended session serves its pending row with its transcript", async () => {
   let nw: Harness;
   let port: number;
   let SESSION: string;
@@ -69,10 +69,10 @@ describe("a suspended session serves its pending row with its transcript", () =>
     vi.unstubAllEnvs();
   });
 
-  function connectRunner(label: string): {
+  async function connectRunner(label: string): Promise<{
     conn: ReturnType<typeof registerRunner>;
-  } {
-    const token = generateRunnerToken("docker", label).id;
+  }> {
+    const token = (await generateRunnerToken("docker", label)).id;
     const conn = registerRunner({
       runnerId: token,
       platform: "docker",
@@ -105,7 +105,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
   }
 
   async function listSessions(): Promise<SessionListRow[]> {
-    const r = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
+    const r = await fetch(`http://127.0.0.1:${port}/api/sessions?kind=chat`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
     return ((await r.json()) as SessionListPage).rows;
@@ -120,7 +120,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
 
   // The session id is discovered the way the frontend discovers it: from the list.
   async function waitForAwaitingSession(): Promise<string> {
-    return waitFor(async () => {
+    return await waitFor(async () => {
       const rows = await listSessions();
       return rows.find((s) => s.awaitingHumanInput)?.sessionId ?? null;
     });
@@ -138,7 +138,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
   }
 
   it("projects the suspended tool call as a card awaiting a human", async () => {
-    const { conn } = connectRunner("qa");
+    const { conn } = await connectRunner("qa");
     await startGatedChat("test");
 
     const sessionId = await waitForAwaitingSession();
@@ -161,7 +161,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
   });
 
   it("still shows the decision, and what the tool returned, after the wait ends", async () => {
-    const { conn } = connectRunner("after-decision");
+    const { conn } = await connectRunner("after-decision");
     await startGatedChat("decision survives");
 
     const sessionId = await waitForAwaitingSession();
@@ -188,7 +188,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
   });
 
   it("flags the waiting session user-wide, whichever runner produced it", async () => {
-    const { conn } = connectRunner("scope-c");
+    const { conn } = await connectRunner("scope-c");
     await startGatedChat("scope test");
 
     // No token parameter anywhere: the user sees every waiting session.
@@ -200,7 +200,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
   });
 
   it("clears pending and the awaiting flag once resolved", async () => {
-    const { conn } = connectRunner("empty-after");
+    const { conn } = await connectRunner("empty-after");
     await startGatedChat("empty after resolve");
 
     const sessionId = await waitForAwaitingSession();

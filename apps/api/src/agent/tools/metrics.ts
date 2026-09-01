@@ -78,9 +78,11 @@ function capSeries(data: MetricsQueryData): MetricsQueryResult {
 }
 
 // One source or none, so a call names nothing and this only reports absence.
-function resolveMetricsSource(): MetricsSource | ToolExecuteResult {
+async function resolveMetricsSource(): Promise<
+  MetricsSource | ToolExecuteResult
+> {
   return (
-    getMetricsSource() ?? {
+    (await getMetricsSource()) ?? {
       content:
         "No metrics source is connected. The user can connect one from the Integrations page. Continue without metric evidence.",
       toolOutcome: "permission",
@@ -149,7 +151,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource();
+      const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -163,7 +165,7 @@ export const METRICS_TOOLS: Tool[] = [
           source.query,
           query,
           input["at"] === "alert"
-            ? alertAnchorFor(ctx.sessionId).toISOString()
+            ? (await alertAnchorFor(ctx.sessionId)).toISOString()
             : undefined,
         );
         const result: MetricsQueryResult = capSeries(data);
@@ -217,7 +219,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource();
+      const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
@@ -227,7 +229,7 @@ export const METRICS_TOOLS: Tool[] = [
         };
       }
 
-      const anchor = alertAnchorFor(ctx.sessionId);
+      const anchor = await alertAnchorFor(ctx.sessionId);
       const lookbackMs =
         clampedNumber(
           input,
@@ -312,7 +314,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource();
+      const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const contains = input["contains"];
       try {
@@ -366,7 +368,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource();
+      const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const metric = input["metric"];
       if (typeof metric !== "string" || metric.trim() === "") {
@@ -424,7 +426,7 @@ export const METRICS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const source = resolveMetricsSource();
+      const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       // A source with no rules endpoint has told us nothing, not that it
       // evaluates none: VictoriaMetrics serves them from vmalert alone.

@@ -12,9 +12,13 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Added
 
+- **Upgrading no longer deletes your database.** Schema changes now ship as migrations the API applies on boot, each in its own transaction, and it refuses to start rather than serve a half-migrated schema. Nothing to run by hand. — `0.3.174`
+
 - **The API image now carries the licence text of every package bundled into the frontend**, served at `/THIRD-PARTY-LICENSES.txt` and written at build time from what Vite actually bundles. Vite inlines those packages into the browser assets, so unlike an installed dependency their own licence files never reached the image. The README's License section now names where every set of terms lives. — `0.3.173`
 
 ### Changed
+
+- **The session list requires a `kind`.** `GET /api/sessions` now answers 400 without `?kind=investigation` or `?kind=chat`. The unfiltered shape no index could serve, and nothing asked for it; every page in the frontend already sent one. — `0.3.174`
 
 - **One metrics source, not one per product.** Connecting Prometheus now closes the VictoriaMetrics, Mimir, Thanos and AMP cards until you disconnect it, and the agent no longer names a source on any metrics call. What you point at is already an aggregate, so the second connection was a setting that could only ever disagree with itself. — `0.3.172`
 - **Docker and Kubernetes logs carry a timestamp on every line**, the one the engine recorded, so a log line can be placed against the moment the alert fired. `contains` and `excludes` now match the message alone rather than the timestamp beside it. — `0.3.171`

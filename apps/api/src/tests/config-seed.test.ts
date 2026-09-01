@@ -40,9 +40,9 @@ const PROVIDER_FAMILIES = [
 describe("first-boot config seed from the environment", () => {
   let cleanupDb: () => void;
 
-  beforeEach(() => {
-    cleanupDb = useTempDb();
-    clearTestLLM();
+  beforeEach(async () => {
+    cleanupDb = await useTempDb();
+    await clearTestLLM();
   });
 
   afterEach(() => {
@@ -52,23 +52,23 @@ describe("first-boot config seed from the environment", () => {
 
   it.each(PROVIDER_FAMILIES)(
     "seeds the $provider block from its own variables and activates it",
-    ({ provider, env, model, apiKey, baseUrl }) => {
+    async ({ provider, env, model, apiKey, baseUrl }) => {
       vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", provider);
       for (const [name, value] of Object.entries(env)) {
         vi.stubEnv(name, value);
       }
 
-      seedConfigFromEnv();
+      await seedConfigFromEnv();
 
-      const config = loadConfig();
+      const config = await loadConfig();
       expect(config.provider).toBe(provider);
       expect(config.providers[provider].model).toBe(model);
       expect(config.providers[provider].baseUrl).toBe(baseUrl);
-      expect(loadApiKey(provider)).toBe(apiKey);
+      expect(await loadApiKey(provider)).toBe(apiKey);
     },
   );
 
-  it("fills both blocks when both are specified, and activates only the one NIGHTWARDEN_LLM_PROVIDER names", () => {
+  it("fills both blocks when both are specified, and activates only the one NIGHTWARDEN_LLM_PROVIDER names", async () => {
     vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "openrouter");
     for (const family of PROVIDER_FAMILIES) {
       for (const [name, value] of Object.entries(family.env)) {
@@ -76,54 +76,56 @@ describe("first-boot config seed from the environment", () => {
       }
     }
 
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
 
-    const config = loadConfig();
+    const config = await loadConfig();
     expect(config.provider).toBe("openrouter");
     // The unselected provider keeps its own credentials, ready to switch to.
     expect(config.providers.anthropic.model).toBe("claude-sonnet-4-6");
-    expect(loadApiKey("anthropic")).toBe("sk-ant-seeded");
+    expect(await loadApiKey("anthropic")).toBe("sk-ant-seeded");
   });
 
-  it("seeds a block with no model at all, rather than inventing one", () => {
+  it("seeds a block with no model at all, rather than inventing one", async () => {
     vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "anthropic");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-no-model");
 
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
 
-    const config = loadConfig();
+    const config = await loadConfig();
     expect(config.provider).toBeNull();
     expect(config.providers.anthropic.model).toBeNull();
-    expect(loadApiKey("anthropic")).toBeUndefined();
+    expect(await loadApiKey("anthropic")).toBeUndefined();
   });
 
-  it("activates nothing without NIGHTWARDEN_LLM_PROVIDER, so credentials alone never start an agent", () => {
+  it("activates nothing without NIGHTWARDEN_LLM_PROVIDER, so credentials alone never start an agent", async () => {
     for (const [name, value] of Object.entries(PROVIDER_FAMILIES[0].env)) {
       vi.stubEnv(name, value);
     }
 
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
 
-    const config = loadConfig();
+    const config = await loadConfig();
     expect(config.provider).toBeNull();
     // The block is still filled: the user only has to pick, not re-enter a key.
     expect(config.providers.anthropic.model).toBe("claude-sonnet-4-6");
   });
 
-  it("leaves an already-configured install alone: env is a first-boot seed, not an override", () => {
+  it("leaves an already-configured install alone: env is a first-boot seed, not an override", async () => {
     vi.stubEnv("NIGHTWARDEN_LLM_PROVIDER", "anthropic");
     vi.stubEnv("ANTHROPIC_MODEL", "claude-sonnet-4-6");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-first");
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
 
     // The user then changes their mind in the frontend, and the box restarts
     // with the old environment still in its compose file.
     vi.stubEnv("ANTHROPIC_MODEL", "claude-opus-4-8");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-second");
-    seedConfigFromEnv();
+    await seedConfigFromEnv();
 
-    expect(loadConfig().providers.anthropic.model).toBe("claude-sonnet-4-6");
-    expect(loadApiKey("anthropic")).toBe("sk-ant-first");
+    expect((await loadConfig()).providers.anthropic.model).toBe(
+      "claude-sonnet-4-6",
+    );
+    expect(await loadApiKey("anthropic")).toBe("sk-ant-first");
   });
 });
 
@@ -132,8 +134,8 @@ describe("first-boot config seed from the environment", () => {
 describe("first-boot integration seed from the environment", () => {
   let cleanupDb: () => void;
 
-  beforeEach(() => {
-    cleanupDb = useTempDb();
+  beforeEach(async () => {
+    cleanupDb = await useTempDb();
     vi.stubEnv(
       "NIGHTWARDEN_SECRET_KEY",
       "test-only-secret-key-for-seed-tests-32bytes",
@@ -167,22 +169,26 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(metricsSourceRow()).toMatchObject({
+    expect(await metricsSourceRow()).toMatchObject({
       kind: "prometheus",
       queryUrl: "http://prom.internal:9090",
       // Prometheus serves its own rules, which is what makes recovery
       // verification work on a seeded install with nothing else configured.
       rulesUrl: "http://prom.internal:9090",
     });
-    expect(getLokiIntegration()).toMatchObject({
+    expect(await getLokiIntegration()).toMatchObject({
       baseUrl: "http://loki.internal:3100",
       orgId: "tenant-a",
     });
     // The accessor hands back plaintext; the column never holds it.
-    expect(metricsSourceRow()?.queryAuthorization).toBe("Bearer prom-secret");
-    const stored = getDb()
-      .prepare("SELECT secrets FROM integrations WHERE kind = 'prometheus'")
-      .get() as { secrets: string };
+    expect((await metricsSourceRow())?.queryAuthorization).toBe(
+      "Bearer prom-secret",
+    );
+    const stored = (await getDb()
+      .selectFrom("integrations")
+      .select("secrets")
+      .where("kind", "=", "prometheus")
+      .executeTakeFirst())!;
     expect(stored.secrets).not.toContain("prom-secret");
   });
 
@@ -192,18 +198,20 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(metricsSourceRow()).toBeNull();
+    expect(await metricsSourceRow()).toBeNull();
   });
 
   it("never overwrites an integration the user already connected", async () => {
-    connectTestMetrics({ queryUrl: "http://chosen-by-user:9090" });
+    await connectTestMetrics({ queryUrl: "http://chosen-by-user:9090" });
     vi.stubEnv("PROMETHEUS_URL", "http://from-stale-compose-file:9090");
     const fetchMock = answering(true);
     vi.stubGlobal("fetch", fetchMock);
 
     await seedIntegrationsFromEnv();
 
-    expect(metricsSourceRow()?.queryUrl).toBe("http://chosen-by-user:9090");
+    expect((await metricsSourceRow())?.queryUrl).toBe(
+      "http://chosen-by-user:9090",
+    );
     // Not even probed: the database already owns this one.
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -211,7 +219,7 @@ describe("first-boot integration seed from the environment", () => {
   it("does nothing when the variables are absent", async () => {
     await seedIntegrationsFromEnv();
 
-    expect(metricsSourceRow()).toBeNull();
-    expect(getLokiIntegration()).toBeNull();
+    expect(await metricsSourceRow()).toBeNull();
+    expect(await getLokiIntegration()).toBeNull();
   });
 });

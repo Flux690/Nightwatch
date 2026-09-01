@@ -78,8 +78,8 @@ export async function generateSessionTitle(
     );
     // The run's retry policy, but logged only: a RUN_RETRYING event here would
     // put title work on the investigation's stream, which this must never touch.
-    const response = await withLLMRetries(() => provider.chat([]), {
-      delays: retryDelaysMs(loadConfig().maxRetries),
+    const response = await withLLMRetries(async () => await provider.chat([]), {
+      delays: retryDelaysMs((await loadConfig()).maxRetries),
       onRetry: (notice) =>
         logger.warn(
           { sessionId, attempt: notice.attempt, delayMs: notice.delayMs },
@@ -94,7 +94,7 @@ export async function generateSessionTitle(
       );
       return;
     }
-    updateSessionTitle(sessionId, title);
+    await updateSessionTitle(sessionId, title);
     publishSessionTitleUpdated(sessionId, title);
   } catch (err) {
     logger.warn({ err, sessionId }, "session title generation failed");

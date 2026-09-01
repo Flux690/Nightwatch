@@ -159,11 +159,11 @@ export function publishReportUpdated(sessionId: string): void {
 
 // Published from the dispatcher and the ingest path rather than computed by
 // the frontend, so the numbers are the ones the pool actually used.
-export function publishQueueChanged(): void {
+export async function publishQueueChanged(): Promise<void> {
   const env: FrontendQueueChanged = {
     messageId: randomUUID(),
     type: "QUEUE_CHANGED",
-    payload: queueState(),
+    payload: await queueState(),
   };
   publishFrontendEvent(env);
 }

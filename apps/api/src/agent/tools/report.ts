@@ -106,7 +106,7 @@ export const REPORT_TOOLS: Tool[] = [
           `That hypothesis could not be recorded - ${fieldErrors(parsed.error)}.${citations}`,
         );
       }
-      return toResult(recordHypothesis(ctx.sessionId, parsed.data));
+      return toResult(await recordHypothesis(ctx.sessionId, parsed.data));
     },
   },
 ];
@@ -130,7 +130,7 @@ export const SUBMIT_REPORT_TOOL: Tool = {
     const { headline, affected, summary, timeline, impact, recommendation } =
       parsed.data;
     return toResult(
-      submitReport(ctx.sessionId, {
+      await submitReport(ctx.sessionId, {
         headline,
         affected,
         summary,

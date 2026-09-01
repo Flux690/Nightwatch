@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { hashToken } from "../fleet/runners.js";
+import { hashToken } from "../fleet/runners-store.js";
 import {
   allIntegrations,
   deleteIntegrationsOfKind,
@@ -24,8 +24,10 @@ function isAlertSourceRow(row: IntegrationRow): boolean {
   return (ALERT_SOURCE_KINDS as readonly string[]).includes(row.kind);
 }
 
-export function getAlertSource(kind: AlertSourceKind): AlertSourceRow | null {
-  const row = integrationOfKind(kind);
+export async function getAlertSource(
+  kind: AlertSourceKind,
+): Promise<AlertSourceRow | null> {
+  const row = await integrationOfKind(kind);
   if (row === null) return null;
   return {
     kind: row.kind,
@@ -36,10 +38,12 @@ export function getAlertSource(kind: AlertSourceKind): AlertSourceRow | null {
 
 /* Rotation resets the delivery stamp: deliveries made with the previous
    credential prove nothing about the new one, so status regresses to waiting. */
-export function generateAlertSourceToken(kind: AlertSourceKind): string {
+export async function generateAlertSourceToken(
+  kind: AlertSourceKind,
+): Promise<string> {
   const plaintext = `nwi_${randomBytes(32).toString("base64url")}`;
-  const existing = integrationOfKind(kind);
-  putIntegration(
+  const existing = await integrationOfKind(kind);
+  await putIntegration(
     {
       kind,
       name:
@@ -55,21 +59,26 @@ export function generateAlertSourceToken(kind: AlertSourceKind): string {
   return plaintext;
 }
 
-export function setAlertSourceReceived(kind: string, receivedAt: string): void {
-  const row = integrationOfKind(kind);
-  if (row !== null) touchIntegration(row.id, receivedAt);
+export async function setAlertSourceReceived(
+  kind: string,
+  receivedAt: string,
+): Promise<void> {
+  const row = await integrationOfKind(kind);
+  if (row !== null) await touchIntegration(row.id, receivedAt);
 }
 
-export function deleteAlertSource(kind: AlertSourceKind): void {
-  deleteIntegrationsOfKind(kind);
+export async function deleteAlertSource(kind: AlertSourceKind): Promise<void> {
+  await deleteIntegrationsOfKind(kind);
 }
 
 /* Compared in constant time against every sender rather than looked up by
    index: an indexed lookup on a secret leaks timing. Only the hash is read,
    never a stored credential. */
-export function findAlertSourceKindByToken(plaintext: string): string | null {
+export async function findAlertSourceKindByToken(
+  plaintext: string,
+): Promise<string | null> {
   const presented = Buffer.from(hashToken(plaintext), "hex");
-  for (const row of allIntegrations()) {
+  for (const row of await allIntegrations()) {
     if (!isAlertSourceRow(row) || row.tokenHash === null) continue;
     const stored = Buffer.from(row.tokenHash, "hex");
     if (

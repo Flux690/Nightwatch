@@ -11,10 +11,10 @@ import { updateConfig, updateProvider } from "../config/store.js";
 
 // Call at the top of beforeAll before anything opens the lazy db; pair the
 // teardown with vi.unstubAllEnvs().
-export function useTempDb(): () => void {
+export async function useTempDb(): Promise<() => void> {
   const dir = mkdtempSync(join(tmpdir(), "nw-api-"));
   vi.stubEnv("NIGHTWARDEN_DIR", dir);
-  configureTestLLM();
+  await configureTestLLM();
   return () => {
     resetDb();
     rmSync(dir, { recursive: true, force: true });
@@ -23,22 +23,25 @@ export function useTempDb(): () => void {
 
 // The run gate refuses without an LLM, so this is the baseline. Re-call after
 // stubbing a new key: the stored one is encrypted with whichever was live.
-export function configureTestLLM(): void {
-  updateProvider("anthropic", { model: "test-model", apiKey: "test-api-key" });
-  updateConfig({ provider: "anthropic" });
+export async function configureTestLLM(): Promise<void> {
+  await updateProvider("anthropic", {
+    model: "test-model",
+    apiKey: "test-api-key",
+  });
+  await updateConfig({ provider: "anthropic" });
 }
 
-export function clearTestLLM(): void {
-  updateConfig({ provider: null });
-  getDb().prepare(`DELETE FROM provider_config`).run();
+export async function clearTestLLM(): Promise<void> {
+  await updateConfig({ provider: null });
+  await getDb().deleteFrom("provider_config").execute();
 }
 
 // One connected Prometheus, serving its own rules: the ordinary single-source
 // install every seam downstream of a metrics connection assumes.
-export function connectTestMetrics(
+export async function connectTestMetrics(
   over: Partial<MetricsSourceInput> = {},
-): void {
-  saveMetricsSource({
+): Promise<void> {
+  await saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: "http://prom.internal:9090",

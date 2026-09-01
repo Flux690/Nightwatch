@@ -89,10 +89,12 @@ describe("metrics tools through the tool dispatch", () => {
   let mock: PromMock;
   let sessionSeq = 0;
 
-  function mintSession(...alerts: NormalizedAlert[]): ToolDispatchContext {
+  async function mintSession(
+    ...alerts: NormalizedAlert[]
+  ): Promise<ToolDispatchContext> {
     sessionSeq++;
     const sessionId = `prom-tools-${sessionSeq}`;
-    seedAlertSession(
+    await seedAlertSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alerts,
     );
@@ -103,10 +105,10 @@ describe("metrics tools through the tool dispatch", () => {
     };
   }
 
-  function connect(
+  async function connect(
     over: Partial<Parameters<typeof saveMetricsSource>[0]> = {},
-  ): void {
-    saveMetricsSource({
+  ): Promise<void> {
+    await saveMetricsSource({
       kind: "prometheus",
       label: "Prometheus",
       queryUrl: "http://prom.internal:9090",
@@ -119,8 +121,8 @@ describe("metrics tools through the tool dispatch", () => {
     });
   }
 
-  beforeEach(() => {
-    cleanupDb = useTempDb();
+  beforeEach(async () => {
+    cleanupDb = await useTempDb();
     mock = makeMock();
     installPromMock(mock);
     instant = findTool("QueryMetrics")!;
@@ -136,7 +138,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up" },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
     expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("No metrics source is connected");
@@ -144,11 +146,11 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("instant query anchors at the alert when asked, at now by default, sending the header verbatim", async () => {
-    connect();
+    await connect();
     mock.result = [
       { metric: { name: "api" }, value: [1752667200, "412000000"] },
     ];
-    const ctx = mintSession(ALERT);
+    const ctx = await mintSession(ALERT);
 
     const atAlert = await executeTool(
       instant,
@@ -166,7 +168,7 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("signs an AMP query with SigV4 instead of sending a static header", async () => {
-    connect({
+    await connect({
       kind: "amp",
       label: "AMP",
       queryUrl:
@@ -184,7 +186,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       instant,
       { query: "up" },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
 
     expect(result.toolOutcome).toBeUndefined();
@@ -194,11 +196,11 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("range query windows around firedAt with an auto step, echoing the window in the result", async () => {
-    connect();
+    await connect();
     const result = await executeTool(
       range,
       { query: "up" },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
     // No series is a miss rather than a reading of zero: a metric that does not
     // exist answers identically, so the window is still echoed.
@@ -216,7 +218,7 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("anchors a batch on the earliest of them, since that is when it began", async () => {
-    connect();
+    await connect();
     // The window elects no primary, so anchoring on whichever arrived first
     // would put the window wherever ingest ordering happened to land it.
     const earlier: NormalizedAlert = {
@@ -224,7 +226,11 @@ describe("metrics tools through the tool dispatch", () => {
       sourceAlertId: "alert-0",
       firedAt: "2026-07-16T11:30:00.000Z",
     };
-    await executeTool(range, { query: "up" }, mintSession(ALERT, earlier));
+    await executeTool(
+      range,
+      { query: "up" },
+      await mintSession(ALERT, earlier),
+    );
 
     const params = mock.requests[0]!.params;
     expect(params.get("start")).toBe("2026-07-16T08:30:00.000Z");
@@ -232,8 +238,8 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("chat sessions anchor on now, and the window never extends into the future", async () => {
-    connect();
-    await executeTool(range, { query: "up" }, mintSession());
+    await connect();
+    await executeTool(range, { query: "up" }, await mintSession());
 
     const params = mock.requests[0]!.params;
     const end = Date.parse(params.get("end")!);
@@ -246,7 +252,7 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("caps lookback at 7 days and the result at 20 series with an omitted count", async () => {
-    connect();
+    await connect();
     mock.result = Array.from({ length: 25 }, (_, i) => ({
       metric: { name: `svc-${i}` },
       values: [[1752667200, "1"]],
@@ -254,7 +260,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up", lookbackMinutes: 999_999 },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
 
     const params = mock.requests[0]!.params;
@@ -269,7 +275,7 @@ describe("metrics tools through the tool dispatch", () => {
   /* Twenty series is a count, not a size: at the step this tool asks for, each
      carries around two hundred points, which is several times the ceiling. */
   it("drops whole series once twenty of them exceed the size budget", async () => {
-    connect();
+    await connect();
     mock.result = Array.from({ length: 20 }, (_, i) => ({
       metric: { name: `svc-${i}` },
       values: Array.from({ length: 200 }, (_, p): [number, string] => [
@@ -280,7 +286,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up" },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
 
     const content = parsedContent<MetricsRangeResult>(result);
@@ -292,13 +298,13 @@ describe("metrics tools through the tool dispatch", () => {
   });
 
   it("a rejected query becomes a corrective result naming the server's error, never a throw", async () => {
-    connect();
+    await connect();
     mock.status = "error";
     mock.error = "parse error: unexpected identifier";
     const result = await executeTool(
       instant,
       { query: "up{" },
-      mintSession(ALERT),
+      await mintSession(ALERT),
     );
     expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("parse error");
@@ -326,7 +332,7 @@ describe("metrics tools through the tool dispatch", () => {
     }
 
     it("narrows metric names by substring, case-insensitively", async () => {
-      connect();
+      await connect();
       installDiscoveryMock({
         "/api/v1/label/__name__/values": [
           "container_memory_working_set_bytes",
@@ -338,7 +344,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("ListMetricNames")!,
         { contains: "MeMoRy" },
-        mintSession(ALERT),
+        await mintSession(ALERT),
       );
       const content = parsedContent<{ names: string[] }>(result);
       expect(content.names).toEqual([
@@ -350,20 +356,20 @@ describe("metrics tools through the tool dispatch", () => {
     // A miss is the useful answer here: it says the name is wrong now, rather
     // than leaving an empty chart to say it later.
     it("says nothing matched rather than answering with an empty list", async () => {
-      connect();
+      await connect();
       installDiscoveryMock({ "/api/v1/label/__name__/values": ["up"] });
 
       const result = await executeTool(
         findTool("ListMetricNames")!,
         { contains: "nonesuch" },
-        mintSession(ALERT),
+        await mintSession(ALERT),
       );
       expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("No metric names matched");
     });
 
     it("reads a metric's type and unit, which is how a counter is told from a gauge", async () => {
-      connect();
+      await connect();
       installDiscoveryMock({
         "/api/v1/metadata": {
           container_memory_working_set_bytes: [
@@ -375,7 +381,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("GetMetricMetadata")!,
         { metric: "container_memory_working_set_bytes" },
-        mintSession(ALERT),
+        await mintSession(ALERT),
       );
       expect(parsedContent(result)).toMatchObject({
         type: "gauge",
@@ -386,20 +392,20 @@ describe("metrics tools through the tool dispatch", () => {
     // Absence of metadata says nothing about whether the metric exists, so it
     // must not read as "no such metric".
     it("distinguishes an undeclared metric from a missing one", async () => {
-      connect();
+      await connect();
       installDiscoveryMock({ "/api/v1/metadata": {} });
 
       const result = await executeTool(
         findTool("GetMetricMetadata")!,
         { metric: "custom_thing" },
-        mintSession(ALERT),
+        await mintSession(ALERT),
       );
       expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("may still exist");
     });
 
     it("lists alerting rules with the expression each one tests", async () => {
-      connect();
+      await connect();
       installDiscoveryMock({
         "/api/v1/rules": {
           groups: [
@@ -426,7 +432,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("ListAlertRules")!,
         {},
-        mintSession(ALERT),
+        await mintSession(ALERT),
       );
       const content = parsedContent<{
         rules: Array<{ name: string; query: string; firingCount: number }>;
@@ -447,12 +453,12 @@ describe("metrics tools through the tool dispatch", () => {
        support cannot answer questions the tools ask. */
     describe("what a source cannot answer, said rather than shown as absence", () => {
       it("names VictoriaMetrics' missing metadata API instead of reporting the metric as undeclared", async () => {
-        connect({ kind: "victoriametrics", label: "vm" });
+        await connect({ kind: "victoriametrics", label: "vm" });
 
         const result = await executeTool(
           findTool("GetMetricMetadata")!,
           { metric: "container_memory_working_set_bytes" },
-          mintSession(ALERT),
+          await mintSession(ALERT),
         );
 
         expect(result.content).toContain("does not implement");
@@ -463,12 +469,12 @@ describe("metrics tools through the tool dispatch", () => {
       });
 
       it("says a missing rules endpoint is a gap in the connection, not an absence of rules", async () => {
-        connect({ rulesUrl: null, rulesAuthorization: null });
+        await connect({ rulesUrl: null, rulesAuthorization: null });
 
         const result = await executeTool(
           findTool("ListAlertRules")!,
           {},
-          mintSession(ALERT),
+          await mintSession(ALERT),
         );
 
         expect(result.toolOutcome).toBe("permission");
@@ -489,7 +495,7 @@ describe("metrics tools through the tool dispatch", () => {
         const result = await executeTool(
           findTool(name)!,
           { metric: "x" },
-          mintSession(ALERT),
+          await mintSession(ALERT),
         );
         expect(result.toolOutcome).toBe("permission");
         expect(result.content).toContain("No metrics source is connected");

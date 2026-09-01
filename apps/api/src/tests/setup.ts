@@ -1,8 +1,16 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, vi } from "vitest";
 import { openDb } from "../db.js";
 import { logger } from "../logger.js";
 import { initSecrets } from "../secrets.js";
-import { deriveStatus } from "../session/status.js";
+import { deriveStatus } from "../session/status-store.js";
+
+/* Suite-wide, before anything can open a database: a test that reaches getDb
+   without its own useTempDb would otherwise create one in the developer's real
+   ~/.nightwarden. Structural, so remembering it is not a per-file duty. */
+process.env["NIGHTWARDEN_DIR"] = mkdtempSync(join(tmpdir(), "nw-suite-"));
 
 // A fixed key keeps the suite off the developer's .env, and the suite runs the
 // same boot step production does rather than reaching past it.
@@ -32,19 +40,18 @@ export function expectDuplicateAlert(): void {
 /* A stored status that a fresh derivation disagrees with means a transition
    wrote its column and forgot to refresh. `running` is exempt: it is claimed by
    a process rather than derived, so no stored row can confirm it. */
-function assertStatusesDerivable(): void {
+async function assertStatusesDerivable(): Promise<void> {
   // openDb, not getDb: a test file with no database of its own must not have
   // one created for it here.
   const db = openDb();
   if (db === undefined) return;
-  const rows = db
-    .prepare(
-      `SELECT session_id AS sessionId, status FROM sessions
-        WHERE status <> 'running'`,
-    )
-    .all() as Array<{ sessionId: string; status: string }>;
+  const rows = await db
+    .selectFrom("sessions")
+    .select(["session_id as sessionId", "status"])
+    .where("status", "!=", "running")
+    .execute();
   for (const row of rows) {
-    const derived = deriveStatus(row.sessionId);
+    const derived = await deriveStatus(row.sessionId);
     if (derived !== row.status) {
       throw new Error(
         `Session ${row.sessionId} is stored as "${row.status}" but derives to ` +
@@ -54,8 +61,8 @@ function assertStatusesDerivable(): void {
   }
 }
 
-afterEach(() => {
-  assertStatusesDerivable();
+afterEach(async () => {
+  await assertStatusesDerivable();
   const dropped = infoSpy.mock.calls.some((args) =>
     args.includes("duplicate alerts dropped"),
   );

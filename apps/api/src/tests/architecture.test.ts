@@ -42,10 +42,12 @@ function resolveImport(from: string, spec: string): string {
 // the modules together is its whole job, while infrastructure is stood on.
 const INFRASTRUCTURE = [
   "db.ts",
+  "migrations.ts",
   "logger.ts",
   "secrets.ts",
   "paths.ts",
   "public-url.ts",
+  "schema.ts",
   "frontend.ts",
 ];
 

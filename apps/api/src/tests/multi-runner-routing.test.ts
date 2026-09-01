@@ -30,7 +30,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -146,10 +146,10 @@ describe("multi-runner routing", () => {
       "test-only-secret-key-for-routing-tests-32b",
     );
     initSecrets();
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
-    runnerIdA = generateRunnerToken("docker", "web-01").id;
-    runnerIdB = generateRunnerToken("docker", "db-02").id;
+    runnerIdA = (await generateRunnerToken("docker", "web-01")).id;
+    runnerIdB = (await generateRunnerToken("docker", "db-02")).id;
 
     conns.push(
       registerRunner({
@@ -173,7 +173,7 @@ describe("multi-runner routing", () => {
     );
     setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
-    runnerId2 = generateRunnerToken("docker", "cache-01").id;
+    runnerId2 = (await generateRunnerToken("docker", "cache-01")).id;
     conns.push(
       registerRunner({
         runnerId: runnerId2,
@@ -185,7 +185,7 @@ describe("multi-runner routing", () => {
     );
     setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
 
-    runnerIdK = generateRunnerToken("kubernetes", "k8s-cluster-01").id;
+    runnerIdK = (await generateRunnerToken("kubernetes", "k8s-cluster-01")).id;
     conns.push(
       registerRunner({
         runnerId: runnerIdK,
@@ -227,16 +227,16 @@ describe("multi-runner routing", () => {
     const sessionId = randomUUID();
     // The chat route writes the row before dispatching, so that a run always has
     // a session to claim; this drives the dispatcher directly and must do the same.
-    createSession({
+    await createSession({
       sessionId,
       title: "t",
       createdAt: new Date().toISOString(),
     });
-    dispatcher.dispatch({
+    await dispatcher.dispatch({
       sessionId,
       userMessage: "investigate",
     });
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
     return sessionId;
   }
 
@@ -306,7 +306,7 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
 
     // The error is persisted as a user-turn message in the transcript.
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     const errorMsg = messages.find(
       (m) => m.kind === "user" && m.content.includes("ghost-svc"),
     );
@@ -335,7 +335,9 @@ describe("multi-runner routing", () => {
     const sessionId = await runSession();
     runnerError = null;
 
-    const answer = getTranscriptRows(sessionId)
+    const answer = await (
+      await getTranscriptRows(sessionId)
+    )
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-missing");
     expect(answer).toMatchObject({ toolOutcome: "expected_miss" });
@@ -383,7 +385,7 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(1);
 
     // Each answer is attributed, so the model can tell which host is the sick one.
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     const result = messages.find(
       (m) => m.kind === "user" && m.content.includes("byServer"),
     );

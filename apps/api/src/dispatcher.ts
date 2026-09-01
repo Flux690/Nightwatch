@@ -11,10 +11,10 @@ import {
   isRunning,
   recordRunFailure,
   releaseRun,
-} from "./session/run-state.js";
+} from "./session/status-store.js";
 import { openSessionForGroup, sessionExists } from "./session/store.js";
 import { appendErrorMessage } from "./session/transcript-store.js";
-import { markStopped } from "./session/run-state.js";
+import { markStopped } from "./session/status-store.js";
 import { hasSeat } from "./run-pool.js";
 import { describeLLMError, isTransientLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
@@ -32,12 +32,12 @@ import type { DeliveryContext } from "./alerts/delivery.js";
 interface Dispatcher {
   // Answers whether the run started. False means the session already holds a
   // run, which is a race the caller reports rather than a fault.
-  dispatch(input: RunSessionInput): boolean;
+  dispatch(input: RunSessionInput): Promise<boolean>;
   // Starts as many waiting alert groups as there are free seats. Called when a
   // seat frees, when a delivery is queued, and once at boot.
   promoteQueued(): void;
   // guards the 409 on POST /sessions/:id/messages
-  isSessionRunning(sessionId: string): boolean;
+  isSessionRunning(sessionId: string): Promise<boolean>;
   injectAlert(
     sessionId: string,
     groupKey: string,
@@ -66,9 +66,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
   /* Classified here or not at all: only the error object can say whether trying
      again could ever work, and it does not survive into the transcript row. */
-  function recordFailure(sessionId: string, err: unknown): void {
+  async function recordFailure(sessionId: string, err: unknown): Promise<void> {
     logger.error({ err, sessionId }, "investigation failed");
-    recordRunFailure(
+    await recordRunFailure(
       sessionId,
       isTransientLLMError(err) ? "transient" : "permanent",
     );
@@ -77,7 +77,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     const text = describeLLMError(err);
     let row: TranscriptRow;
     try {
-      row = appendErrorMessage(sessionId, text);
+      row = await appendErrorMessage(sessionId, text);
     } catch (persistErr: unknown) {
       logger.warn(
         { err: persistErr, sessionId },
@@ -97,14 +97,17 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
   // Every run ends here, named. Exactly one terminal event each: a suspended run
   // already published its interrupt, and a failed one its row above.
-  function onRunEnded(sessionId: string, ending: RunEnding): void {
+  async function onRunEnded(
+    sessionId: string,
+    ending: RunEnding,
+  ): Promise<void> {
     if (ending === "failed") return;
     // A run that reached an ending, however it ended, is not a failure any more,
     // so it stops carrying one and gets its full three attempts back.
-    clearRunFailure(sessionId);
+    await clearRunFailure(sessionId);
     if (ending === "completed") publishRunFinished(sessionId);
     else if (ending === "stopped") {
-      markStopped(sessionId);
+      await markStopped(sessionId);
       publishRunStopped(sessionId);
     }
   }
@@ -115,17 +118,17 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     return arr;
   }
 
-  function start(input: RunSessionInput): boolean {
+  async function start(input: RunSessionInput): Promise<boolean> {
     // Claimed durably first, so a restart can tell a run that was alive from one
     // that concluded, and a second dispatch cannot start.
-    if (!sessionExists(input.sessionId)) {
+    if (!(await sessionExists(input.sessionId))) {
       logger.error(
         { sessionId: input.sessionId },
         "dispatch refused: no such session, its row must be written first",
       );
       return false;
     }
-    if (!claimRun(input.sessionId)) {
+    if (!(await claimRun(input.sessionId))) {
       logger.warn(
         { sessionId: input.sessionId },
         "dispatch refused: a run already holds this session",
@@ -137,30 +140,30 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     controllers.set(input.sessionId, controller);
 
     void run({ ...input, signal: controller.signal, drainInbox })
-      .then((outcome) => onRunEnded(input.sessionId, outcome))
-      .catch((err: unknown) => {
-        recordFailure(input.sessionId, err);
-        onRunEnded(input.sessionId, "failed");
+      .then(async (outcome) => await onRunEnded(input.sessionId, outcome))
+      .catch(async (err: unknown) => {
+        await recordFailure(input.sessionId, err);
+        await onRunEnded(input.sessionId, "failed");
       })
-      .finally(() => {
+      .finally(async () => {
         // Conditional on 'running', so a run that suspended keeps the seat it is
         // waiting on a human with.
-        releaseRun(input.sessionId);
+        await releaseRun(input.sessionId);
         controllers.delete(input.sessionId);
         inbox.delete(input.sessionId);
-        promoteQueued();
+        await promoteQueued();
       });
     return true;
   }
 
   // Here rather than in the pool, because starting a run is this module's job
   // and the pool only counts seats.
-  function promoteQueued(): void {
-    while (hasSeat(true)) {
-      const group = oldestQueuedGroup();
+  async function promoteQueued(): Promise<void> {
+    while (await hasSeat(true)) {
+      const group = await oldestQueuedGroup();
       if (group === undefined) return;
       const sessionId = randomUUID();
-      openSessionForGroup(
+      await openSessionForGroup(
         buildSessionMeta(sessionId, group.alerts[0] ?? null, undefined),
         group.groupKey,
       );
@@ -172,10 +175,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         },
         "queued alert group promoted to an investigation",
       );
-      publishQueueChanged();
+      await publishQueueChanged();
       // A promotion that cannot start would spin: the group is assigned, so the
       // next pass would find a different head and never reach this one again.
-      if (!start({ sessionId, alerts: group.alerts })) return;
+      if (!(await start({ sessionId, alerts: group.alerts }))) return;
     }
   }
 
@@ -185,19 +188,19 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
     // Read from the row, not from memory: a run that died with the process is
     // not running, and only the row survives to say so.
-    isSessionRunning(sessionId: string): boolean {
-      return isRunning(sessionId);
+    async isSessionRunning(sessionId: string): Promise<boolean> {
+      return await isRunning(sessionId);
     },
 
     // Durable first: the sender was already answered 200, so a crash here must
     // not lose the alert.
-    injectAlert(
+    async injectAlert(
       sessionId: string,
       groupKey: string,
       alert: NormalizedAlert,
       delivery: DeliveryContext,
-    ): void {
-      appendSessionAlert(sessionId, groupKey, alert, delivery);
+    ): Promise<void> {
+      await appendSessionAlert(sessionId, groupKey, alert, delivery);
       const arr = inbox.get(sessionId) ?? [];
       arr.push(alert);
       inbox.set(sessionId, arr);

@@ -9,7 +9,7 @@ import type {
   FleetRunner,
   RunnerRecord,
 } from "@nightwarden/shared";
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
@@ -63,7 +63,7 @@ describe("flat runner registry", () => {
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -100,11 +100,11 @@ describe("flat runner registry", () => {
   }
 
   it("lists two runners each on their own token with correct manifests", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+    const { plaintext: tokenA, id: tokenAId } = await generateRunnerToken(
       "docker",
       "one-up-a",
     );
-    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+    const { plaintext: tokenB, id: tokenBId } = await generateRunnerToken(
       "docker",
       "one-up-b",
     );
@@ -153,11 +153,11 @@ describe("flat runner registry", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+    const { plaintext: tokenA, id: tokenAId } = await generateRunnerToken(
       "docker",
       "close-one-a",
     );
-    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+    const { plaintext: tokenB, id: tokenBId } = await generateRunnerToken(
       "docker",
       "close-one-b",
     );
@@ -192,7 +192,7 @@ describe("flat runner registry", () => {
   });
 
   it("a reconnect on the same token displaces the old socket and survives its late close", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken(
+    const { plaintext: token, id: tokenId } = await generateRunnerToken(
       "docker",
       "displace",
     );
@@ -239,11 +239,11 @@ describe("flat runner registry", () => {
   });
 
   it("two runners on different tokens both appear in the fleet", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+    const { plaintext: tokenA, id: tokenAId } = await generateRunnerToken(
       "docker",
       "cross-a",
     );
-    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+    const { plaintext: tokenB, id: tokenBId } = await generateRunnerToken(
       "docker",
       "cross-b",
     );
@@ -279,7 +279,7 @@ describe("flat runner registry", () => {
 
   describe("in-flight commands on socket close", () => {
     it("rejects an in-flight command promptly when the runner socket closes, and drops the late result", async () => {
-      const { plaintext: token, id: tokenId } = generateRunnerToken(
+      const { plaintext: token, id: tokenId } = await generateRunnerToken(
         "docker",
         "inflight",
       );
@@ -333,7 +333,7 @@ describe("flat runner registry", () => {
     });
 
     it("a displaced socket's in-flight command rejects while the replacement stays online", async () => {
-      const { plaintext: token, id: tokenId } = generateRunnerToken(
+      const { plaintext: token, id: tokenId } = await generateRunnerToken(
         "docker",
         "inflight-displace",
       );
@@ -390,8 +390,14 @@ describe("flat runner registry", () => {
   });
 
   it("GET /fleet returns connected runners with their service identities, with no token-management fields", async () => {
-    const { plaintext: tokenA } = generateRunnerToken("docker", "fleet-a");
-    const { plaintext: tokenB } = generateRunnerToken("docker", "fleet-b");
+    const { plaintext: tokenA } = await generateRunnerToken(
+      "docker",
+      "fleet-a",
+    );
+    const { plaintext: tokenB } = await generateRunnerToken(
+      "docker",
+      "fleet-b",
+    );
 
     const a = await connectRunner(
       port,
@@ -443,7 +449,7 @@ describe("protocol ping/pong liveness", () => {
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -470,7 +476,7 @@ describe("protocol ping/pong liveness", () => {
   }
 
   it("terminates a socket that stops answering pings and drops the runner offline", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken(
+    const { plaintext: token, id: tokenId } = await generateRunnerToken(
       "docker",
       "no-pong",
     );
@@ -509,7 +515,7 @@ describe("protocol ping/pong liveness", () => {
   });
 
   it("pongs keep the runner online past the liveness TTL", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken(
+    const { plaintext: token, id: tokenId } = await generateRunnerToken(
       "docker",
       "pong-live",
     );

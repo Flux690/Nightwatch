@@ -25,7 +25,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../fleet/runners.js";
+import { generateRunnerToken } from "../fleet/runners-store.js";
 
 // The two servers this file connects, named once so keys and addresses agree.
 const SERVER_A = "web-01";
@@ -89,13 +89,13 @@ describe("fleet summary injection", () => {
   let connA: RunnerConnection | undefined;
   let connB: RunnerConnection | undefined;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     vi.stubEnv(
       "NIGHTWARDEN_SECRET_KEY",
       "test-only-secret-key-fleet-summary-tests-32b",
     );
     initSecrets();
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
   });
 
   afterAll(() => {
@@ -117,9 +117,9 @@ describe("fleet summary injection", () => {
   });
 
   describe("multi-runner fleet", () => {
-    beforeAll(() => {
-      runnerIdA = generateRunnerToken("docker", SERVER_A).id;
-      runnerIdB = generateRunnerToken("docker", SERVER_B).id;
+    beforeAll(async () => {
+      runnerIdA = (await generateRunnerToken("docker", SERVER_A)).id;
+      runnerIdB = (await generateRunnerToken("docker", SERVER_B)).id;
     });
 
     it("first user message lists every server and its advertised services", async () => {
@@ -144,8 +144,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
@@ -182,8 +184,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
 
@@ -208,8 +212,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       expect(captureStartMessage()).toContain(`${SERVER_A} (Docker host):`);
     });
@@ -236,8 +242,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
@@ -270,8 +278,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
@@ -284,8 +294,8 @@ describe("fleet summary injection", () => {
   });
 
   describe("graceful degradation", () => {
-    beforeAll(() => {
-      runnerIdA = generateRunnerToken("docker", SERVER_A).id;
+    beforeAll(async () => {
+      runnerIdA = (await generateRunnerToken("docker", SERVER_A)).id;
     });
 
     it("single-runner fleet: fleet summary still lists the one server", async () => {
@@ -301,8 +311,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
@@ -318,8 +330,10 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
-      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+      await dispatchAlertSession(sessionId, [makeAlert("nginx")]);
+      await waitFor(
+        async () => !(await dispatcher.isSessionRunning(sessionId)),
+      );
 
       const msg = captureStartMessage();
       expect(msg).toBeDefined();

@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupOption } from "@/shared/ui/radio-group";
 import { InputGroup, InputGroupInput } from "@/shared/ui/input-group";
 import { asRecord, stringAt } from "@/shared/lib/toolResult";
 import type { ToolCallItem } from "./types.js";
-import { InterruptCard } from "./InterruptCard.js";
+import { GateCard } from "./GateCard.js";
 
 // Pinned unlike an approval, because a question stops the whole run rather
 // than one tool: there is nothing else for the reader to do.
@@ -212,7 +212,7 @@ export function ClarificationCardPanel({
   });
 
   return (
-    <InterruptCard data-testid="clarification-card">
+    <GateCard data-testid="clarification-card">
       <div className="flex flex-col gap-1">
         <p className="text-sm">{question}</p>
         {/* Words rather than a glyph, so every row stays identical in both
@@ -306,6 +306,6 @@ export function ClarificationCardPanel({
           Submit
         </Button>
       </div>
-    </InterruptCard>
+    </GateCard>
   );
 }

@@ -16,44 +16,47 @@ export const WHOLE_DELIVERY: DeliveryContext = {
 
 // By the only route production has: queued under a group key, then taken. A
 // direct insert would build a shape ingest cannot produce.
-export function seedAlertSession(
+export async function seedAlertSession(
   meta: SessionMeta,
   alerts: NormalizedAlert[],
   groupKey = `test-group-${randomUUID()}`,
-): void {
+): Promise<void> {
   if (alerts.length === 0) {
-    createSession(meta, true);
+    await createSession(meta, true);
     return;
   }
-  enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
-  openSessionForGroup(meta, groupKey);
+  await enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
+  await openSessionForGroup(meta, groupKey);
 }
 
 // The row and its alerts exist before anything dispatches into it, so a test
 // that skips this is testing a shape ingest cannot reach.
-export function dispatchAlertSession(
+export async function dispatchAlertSession(
   sessionId: string,
   alerts: NormalizedAlert[],
   groupKey = `test-group-${randomUUID()}`,
-): boolean {
+): Promise<boolean> {
   // Queued first, then the session takes them - the order promotion uses, and
   // what makes an opening alert predate the session it opened.
-  enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
-  openSessionForGroup(
+  await enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
+  await openSessionForGroup(
     buildSessionMeta(sessionId, alerts[0] ?? null, undefined),
     groupKey,
   );
-  return dispatcher.dispatch({ sessionId, alerts });
+  return await dispatcher.dispatch({ sessionId, alerts });
 }
 
 // A chat session's row, on the same terms: the route writes it before handing
 // out the id, so a run dispatched into one always finds it there.
-export function seedChatSession(sessionId: string, message?: string): void {
-  createSession(buildSessionMeta(sessionId, null, message));
+export async function seedChatSession(
+  sessionId: string,
+  message?: string,
+): Promise<void> {
+  await createSession(buildSessionMeta(sessionId, null, message));
 }
 
 // Returns a valid nw_auth cookie for the given loginVersion (default 0, matching a fresh
 // temp DB). Usage: headers: { cookie: `nw_auth=${await mintTestSession()}` }.
 export async function mintTestSession(loginVersion = 0): Promise<string> {
-  return mintSession(loginVersion);
+  return await mintSession(loginVersion);
 }

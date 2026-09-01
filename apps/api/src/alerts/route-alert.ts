@@ -16,17 +16,17 @@ interface Routed {
 
 // One webhook is one group, routed whole: regrouping on our own clock would
 // replace the user's group_by with a guess.
-export function routeDelivery(
+export async function routeDelivery(
   groupKey: string,
   firing: NormalizedAlert[],
   // Required, not defaulted: a caller that forgets it silently tells every
   // investigation the group arrived whole and unexplained.
   delivery: DeliveryContext,
-): Routed {
+): Promise<Routed> {
   const fresh: NormalizedAlert[] = [];
   let skipped = 0;
   for (const alert of firing) {
-    if (isDuplicate(alert)) skipped++;
+    if (await isDuplicate(alert)) skipped++;
     else fresh.push(alert);
   }
   // Repeats are ordinary - Alertmanager re-sends on repeat_interval - but a
@@ -35,10 +35,10 @@ export function routeDelivery(
     logger.info({ groupKey, skipped }, "duplicate alerts dropped");
   if (fresh.length === 0) return { enqueued: 0, skipped };
 
-  const sessionId = sessionCoveringGroup(groupKey);
+  const sessionId = await sessionCoveringGroup(groupKey);
   if (sessionId !== undefined) {
     for (const alert of fresh) {
-      dispatcher.injectAlert(sessionId, groupKey, alert, delivery);
+      await dispatcher.injectAlert(sessionId, groupKey, alert, delivery);
     }
     logger.info(
       { groupKey, sessionId, alertCount: fresh.length },
@@ -49,12 +49,12 @@ export function routeDelivery(
 
   // Durable before any decision about capacity: the sender was answered 200, so
   // a full pool must delay this delivery, never lose it.
-  enqueueAlerts(groupKey, fresh, delivery);
+  await enqueueAlerts(groupKey, fresh, delivery);
   logger.info(
     { groupKey, alertCount: fresh.length },
     "alerts queued for investigation",
   );
-  publishQueueChanged();
-  dispatcher.promoteQueued();
+  await publishQueueChanged();
+  await dispatcher.promoteQueued();
   return { enqueued: fresh.length, skipped };
 }

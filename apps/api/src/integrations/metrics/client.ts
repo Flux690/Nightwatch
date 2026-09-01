@@ -195,7 +195,7 @@ export async function instantQuery(
     timeout: QUERY_TIMEOUT,
     ...(timeIso !== undefined && { time: timeIso }),
   });
-  return parseEnvelope(endpoint, res);
+  return await parseEnvelope(endpoint, res);
 }
 
 export async function rangeQuery(
@@ -212,7 +212,7 @@ export async function rangeQuery(
     step: String(stepSeconds),
     timeout: QUERY_TIMEOUT,
   });
-  return parseEnvelope(endpoint, res);
+  return await parseEnvelope(endpoint, res);
 }
 
 // One currently-active instance of an alerting rule, as the source itself sees

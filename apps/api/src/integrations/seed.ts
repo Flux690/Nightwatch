@@ -20,7 +20,7 @@ export async function seedIntegrationsFromEnv(): Promise<void> {
 }
 
 async function seedPrometheus(): Promise<void> {
-  if (getMetricsSource() !== null) return;
+  if ((await getMetricsSource()) !== null) return;
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
   const authHeader = optionalEnv("PROMETHEUS_AUTH_HEADER");
@@ -44,7 +44,7 @@ async function seedPrometheus(): Promise<void> {
   /* Seeded as its own rules endpoint, which is true of Prometheus and of
      nothing else: every other source serves rules elsewhere, and there is no
      second environment variable to guess one from. */
-  saveMetricsSource({
+  await saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: url,
@@ -58,7 +58,7 @@ async function seedPrometheus(): Promise<void> {
 }
 
 async function seedLoki(): Promise<void> {
-  if (getLokiIntegration() !== null) return;
+  if ((await getLokiIntegration()) !== null) return;
   const url = process.env["LOKI_URL"];
   if (!url) return;
   const authHeader = optionalEnv("LOKI_AUTH_HEADER");
@@ -74,7 +74,7 @@ async function seedLoki(): Promise<void> {
     return;
   }
 
-  saveLokiIntegration({
+  await saveLokiIntegration({
     baseUrl: url,
     orgId,
     authorization: authHeader,

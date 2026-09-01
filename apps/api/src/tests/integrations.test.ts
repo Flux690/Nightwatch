@@ -65,15 +65,20 @@ function stubFetch(
 
 /* The secret column holds one encrypted value whose plaintext is a map, so a
    test reads the key it wrote rather than the column. */
-function rawSecrets(kind: string): string {
-  const row = getDb()
-    .prepare("SELECT secrets FROM integrations WHERE kind = ?")
-    .get(kind) as { secrets: string | null } | undefined;
+async function rawSecrets(kind: string): Promise<string> {
+  const row = await getDb()
+    .selectFrom("integrations")
+    .select("secrets")
+    .where("kind", "=", kind)
+    .executeTakeFirst();
   return row?.secrets ?? "";
 }
 
-function storedSecret(kind: string, key: string): string | undefined {
-  const raw = rawSecrets(kind);
+async function storedSecret(
+  kind: string,
+  key: string,
+): Promise<string | undefined> {
+  const raw = await rawSecrets(kind);
   if (raw === "") return undefined;
   return (JSON.parse(decrypt(raw)) as Record<string, string>)[key];
 }
@@ -84,7 +89,7 @@ describe("GitHub integration routes", () => {
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
@@ -266,8 +271,8 @@ describe("GitHub integration routes", () => {
         expiresAt: EXPIRY_ISO,
       });
 
-      expect(rawSecrets("github")).not.toContain(TOKEN);
-      expect(storedSecret("github", "token")).toBe(TOKEN);
+      expect(await rawSecrets("github")).not.toContain(TOKEN);
+      expect(await storedSecret("github", "token")).toBe(TOKEN);
     });
 
     it("uses the stored token for the picker proxy after binding", async () => {
@@ -356,7 +361,7 @@ describe("GitHub integration routes", () => {
       const headers = (calledInit?.headers ?? {}) as Record<string, string>;
       expect(headers["Authorization"]).toBe(`Bearer ${TOKEN}`);
 
-      expect(storedSecret("github", "token")).toBe(TOKEN);
+      expect(await storedSecret("github", "token")).toBe(TOKEN);
     });
 
     it("surfaces repo_not_found the same way bind does, without accepting a token", async () => {
@@ -405,7 +410,7 @@ describe("metrics source routes", () => {
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerMetricsRoutes);
@@ -417,9 +422,9 @@ describe("metrics source routes", () => {
     cleanupDb();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
-    getDb().prepare("DELETE FROM integrations").run();
+    await getDb().deleteFrom("integrations").execute();
   });
 
   function authed(opts: {
@@ -515,8 +520,8 @@ describe("metrics source routes", () => {
 
     const expected = `Basic ${Buffer.from("123456:glc-token", "utf8").toString("base64")}`;
     expect(sawAuth).toBe(expected);
-    expect(storedSecret("mimir", "query")).toBe(expected);
-    expect(rawSecrets("mimir")).not.toContain("glc-token");
+    expect(await storedSecret("mimir", "query")).toBe(expected);
+    expect(await rawSecrets("mimir")).not.toContain("glc-token");
   });
 
   // AMP signs every request instead of carrying a header, so the probe itself
@@ -548,8 +553,8 @@ describe("metrics source routes", () => {
     expect(seen?.headers.get("authorization")).toMatch(
       /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-east-1\/aps\/aws4_request/,
     );
-    expect(storedSecret("amp", "query")).toContain("AKIDEXAMPLE");
-    expect(rawSecrets("amp")).not.toContain("wJalrXUtnFEMI");
+    expect(await storedSecret("amp", "query")).toContain("AKIDEXAMPLE");
+    expect(await rawSecrets("amp")).not.toContain("wJalrXUtnFEMI");
   });
 
   /* A legitimate configuration, not an error - and the one the frontend has to
@@ -669,7 +674,7 @@ describe("Alertmanager integration routes", () => {
   let SESSION: string;
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
@@ -747,11 +752,11 @@ describe("Alertmanager integration routes", () => {
     const { token } = JSON.parse(res.body) as { token: string };
     expect(token).toMatch(/^nwi_[A-Za-z0-9_-]{43}$/);
 
-    const row = getDb()
-      .prepare(
-        "SELECT token_hash FROM integrations WHERE kind = 'alertmanager'",
-      )
-      .get() as { token_hash: string };
+    const row = (await getDb()
+      .selectFrom("integrations")
+      .select("token_hash")
+      .where("kind", "=", "alertmanager")
+      .executeTakeFirst())!;
     expect(row.token_hash).toBe(sha256hex(token));
     expect(row.token_hash).not.toContain("nwi_");
 
@@ -776,7 +781,7 @@ describe("Alertmanager integration routes", () => {
       url: "/api/integrations/alerting/alertmanager/credential",
     });
     const { token: oldToken } = JSON.parse(first.body) as { token: string };
-    setAlertSourceReceived("alertmanager", "2026-07-18T03:12:00.000Z");
+    await setAlertSourceReceived("alertmanager", "2026-07-18T03:12:00.000Z");
 
     const before = await authed({
       method: "GET",
@@ -794,11 +799,11 @@ describe("Alertmanager integration routes", () => {
     const { token: newToken } = JSON.parse(second.body) as { token: string };
     expect(newToken).not.toBe(oldToken);
 
-    const row = getDb()
-      .prepare(
-        "SELECT token_hash, last_used_at FROM integrations WHERE kind = 'alertmanager'",
-      )
-      .get() as { token_hash: string; last_used_at: string | null };
+    const row = (await getDb()
+      .selectFrom("integrations")
+      .select(["token_hash", "last_used_at"])
+      .where("kind", "=", "alertmanager")
+      .executeTakeFirst())!;
     expect(row.token_hash).toBe(sha256hex(newToken));
     expect(row.token_hash).not.toBe(sha256hex(oldToken));
     expect(row.last_used_at).toBeNull();
@@ -813,7 +818,7 @@ describe("Loki integration routes", () => {
   const LOKI_LABELS = { status: "success", data: ["app", "namespace"] };
 
   beforeAll(async () => {
-    cleanupDb = useTempDb();
+    cleanupDb = await useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
@@ -826,9 +831,9 @@ describe("Loki integration routes", () => {
     vi.unstubAllEnvs();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
-    deleteLokiIntegration();
+    await deleteLokiIntegration();
   });
 
   function authed(opts: {
@@ -891,11 +896,15 @@ describe("Loki integration routes", () => {
     // The probe URL must not carry the credential.
     expect(String(mock.mock.calls[0]?.[0])).not.toContain("secret-123");
 
-    const row = getDb()
-      .prepare("SELECT config FROM integrations WHERE kind = 'loki'")
-      .get() as { config: string };
-    expect(storedSecret("loki", "authorization")).toBe("Bearer secret-123");
-    expect(rawSecrets("loki")).not.toContain("secret-123");
+    const row = (await getDb()
+      .selectFrom("integrations")
+      .select("config")
+      .where("kind", "=", "loki")
+      .executeTakeFirst())!;
+    expect(await storedSecret("loki", "authorization")).toBe(
+      "Bearer secret-123",
+    );
+    expect(await rawSecrets("loki")).not.toContain("secret-123");
     expect(JSON.parse(row.config)).toEqual({
       baseUrl: "http://loki.internal:3100/",
       orgId: "team-a",

@@ -177,8 +177,10 @@ describe("frontend SSE pipeline", () => {
 
   it("sends heartbeat comments on the configured interval", async () => {
     const hb = Fastify({ logger: false, forceCloseConnections: true });
-    await mountApi(hb, (api: FastifyInstance) =>
-      registerFrontendEventRoutes(api, { heartbeatInterval: 50 }),
+    await mountApi(
+      hb,
+      async (api: FastifyInstance) =>
+        await registerFrontendEventRoutes(api, { heartbeatInterval: 50 }),
     );
     await hb.listen({ port: 0, host: "127.0.0.1" });
     const hbPort = (hb.server.address() as AddressInfo).port;

@@ -1,6 +1,6 @@
 import { Button } from "@/shared/ui/button";
 import type { ContinueCardItem } from "./types.js";
-import { InterruptCard } from "./InterruptCard.js";
+import { GateCard } from "./GateCard.js";
 
 export function ContinueCardPanel({
   item,
@@ -14,7 +14,7 @@ export function ContinueCardPanel({
   const state = item.state;
 
   return (
-    <InterruptCard data-testid="continue-card">
+    <GateCard data-testid="continue-card">
       <p className="text-sm">
         Time budget reached. Resume with a fresh budget or end the
         investigation.
@@ -42,6 +42,6 @@ export function ContinueCardPanel({
           </Button>
         </div>
       )}
-    </InterruptCard>
+    </GateCard>
   );
 }

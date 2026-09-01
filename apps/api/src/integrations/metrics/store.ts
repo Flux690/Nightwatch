@@ -58,8 +58,8 @@ function isMetricsRow(row: IntegrationRow): boolean {
 /* One source, whatever product it is: the kind stays one of five, so this
    filters the kind set rather than reading a single fixed kind the way Loki
    does. The connect route is what refuses a second. */
-export function metricsSourceRow(): MetricsSourceRow | null {
-  const row = allIntegrations().find(isMetricsRow);
+export async function metricsSourceRow(): Promise<MetricsSourceRow | null> {
+  const row = (await allIntegrations()).find(isMetricsRow);
   return row === undefined ? null : toSource(row);
 }
 
@@ -74,7 +74,9 @@ export interface MetricsSourceInput {
   rulesOrgId: string | null;
 }
 
-export function saveMetricsSource(input: MetricsSourceInput): void {
+export async function saveMetricsSource(
+  input: MetricsSourceInput,
+): Promise<void> {
   const secrets: Record<string, string> = {};
   if (input.queryAuthorization !== null) {
     secrets["query"] = input.queryAuthorization;
@@ -82,7 +84,7 @@ export function saveMetricsSource(input: MetricsSourceInput): void {
   if (input.rulesAuthorization !== null) {
     secrets["rules"] = input.rulesAuthorization;
   }
-  putIntegration(
+  await putIntegration(
     {
       kind: input.kind,
       name: input.label,
@@ -96,11 +98,11 @@ export function saveMetricsSource(input: MetricsSourceInput): void {
       secrets,
     },
     // Reconnecting replaces in place, as Loki does, so the row keeps its id.
-    metricsSourceRow()?.id,
+    (await metricsSourceRow())?.id,
   );
 }
 
-export function deleteMetricsSource(): void {
-  const row = metricsSourceRow();
-  if (row !== null) deleteIntegrationById(row.id);
+export async function deleteMetricsSource(): Promise<void> {
+  const row = await metricsSourceRow();
+  if (row !== null) await deleteIntegrationById(row.id);
 }

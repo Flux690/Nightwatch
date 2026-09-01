@@ -12,7 +12,7 @@ import {
   getUserCredentials,
   getLoginVersion,
   saveUser,
-} from "./user.js";
+} from "./user-store.js";
 import { createCredentialRateLimiter } from "./rate-limit.js";
 
 const MIN_PASSWORD = 12;
@@ -31,7 +31,7 @@ export async function registerAuthRoutes(
   fastify.post<{ Body: { email?: string; password?: string } }>(
     "/setup",
     async (request, reply) => {
-      if (getUserCredentials()) {
+      if (await getUserCredentials()) {
         return reply.code(409).send({ error: "setup already complete" });
       }
       if (!checkSetupRateLimit(request.ip)) {
@@ -51,8 +51,8 @@ export async function registerAuthRoutes(
           .send({ error: "password must be at least 12 characters" });
       }
       const userHash = await hash(password);
-      saveUser(email, userHash);
-      const cookie = await mintSession(getLoginVersion());
+      await saveUser(email, userHash);
+      const cookie = await mintSession(await getLoginVersion());
       reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
       return reply.code(200).send({ ok: true });
     },
@@ -67,13 +67,13 @@ export async function registerAuthRoutes(
           .send({ error: "too many attempts, try again later" });
       }
       const { email, password } = request.body ?? {};
-      const user = getUserCredentials();
+      const user = await getUserCredentials();
       const hashToVerify = user?.hash ?? dummyHash;
       const valid = await verify(hashToVerify, password ?? "");
       if (!user || user.email !== email || !valid) {
         return reply.code(401).send({ error: "invalid credentials" });
       }
-      const cookie = await mintSession(getLoginVersion());
+      const cookie = await mintSession(await getLoginVersion());
       reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
       return reply.code(200).send({ ok: true });
     },
@@ -91,13 +91,13 @@ export async function registerAuthRoutes(
     "/logout-all",
     { preHandler: requireSession },
     async (_request, reply) => {
-      bumpLoginVersion();
+      await bumpLoginVersion();
       return reply.code(200).send({ ok: true });
     },
   );
 
   fastify.get("/auth/status", async (request): Promise<AuthStatusResponse> => {
-    const user = getUserCredentials();
+    const user = await getUserCredentials();
     if (!user) return { ownerExists: false };
     if (!(await isAuthenticated(request))) {
       return { ownerExists: true, authenticated: false };

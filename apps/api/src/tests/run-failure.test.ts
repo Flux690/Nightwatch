@@ -112,7 +112,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     expect(first?.type === "RUN_RETRYING" && first.payload.summary).toBe(
       "Provider error (502). Retrying in 5s - attempt 2 of 4.",
     );
-    const roles = getTranscriptRows(sessionId).map((m) => m.kind);
+    const roles = (await getTranscriptRows(sessionId)).map((m) => m.kind);
     expect(roles).toEqual(["user", "assistant"]);
   });
 
@@ -146,7 +146,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       "(HTTP 502 from Poolside)",
     );
 
-    const messages = getTranscriptRows(sessionId);
+    const messages = await getTranscriptRows(sessionId);
     expect(messages.map((m) => [m.seq, m.kind])).toEqual([
       [0, "user"],
       [1, "error"],
@@ -175,7 +175,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       ),
     );
 
-    const truncation = getTranscriptRows(sessionId).find(
+    const truncation = (await getTranscriptRows(sessionId)).find(
       (m) => m.kind === "error",
     );
     expect(truncation?.content).toContain("cut off");
@@ -227,15 +227,17 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     );
     expect(res.status).toBe(202);
 
-    await waitFor(() =>
-      getTranscriptRows(sessionId).some((m) => m.kind === "assistant"),
+    await waitFor(async () =>
+      (await getTranscriptRows(sessionId)).some((m) => m.kind === "assistant"),
     );
 
     // The failed exchange stays in the transcript but never reached the model:
     // the provider was started fresh, not seeded.
     expect(healthy.seed).not.toHaveBeenCalled();
     expect(healthy.start).toHaveBeenCalledWith("try again");
-    expect(getTranscriptRows(sessionId).map((m) => [m.seq, m.kind])).toEqual([
+    expect(
+      (await getTranscriptRows(sessionId)).map((m) => [m.seq, m.kind]),
+    ).toEqual([
       [0, "user"],
       [1, "error"],
       [2, "user"],

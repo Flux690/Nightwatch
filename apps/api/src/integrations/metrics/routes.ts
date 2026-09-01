@@ -39,8 +39,11 @@ const ConnectSchema = z.object({
   rules: EndpointSchema.optional(),
 });
 
-function statusPayload(): MetricsSourceStatus {
-  return statusOf(getMetricsSource(), metricsSourceRow()?.validatedAt ?? null);
+async function statusPayload(): Promise<MetricsSourceStatus> {
+  return statusOf(
+    await getMetricsSource(),
+    (await metricsSourceRow())?.validatedAt ?? null,
+  );
 }
 
 // bad_query maps to 400 explicitly: a Prometheus-compatible source reports
@@ -68,7 +71,7 @@ export async function registerMetricsRoutes(
   fastify.get(
     "/integrations/metrics",
     { preHandler: requireSession },
-    async () => statusPayload(),
+    async () => await statusPayload(),
   );
 
   // Probed with the calls an investigation makes, so a rules URL answering
@@ -85,7 +88,7 @@ export async function registerMetricsRoutes(
       const name = METRICS_PRESETS[kind].label;
       // One source, whatever product: what you point at is already an
       // aggregate, so a second is a mistake rather than a name to invent.
-      const connected = getMetricsSource();
+      const connected = await getMetricsSource();
       if (connected !== null) {
         return reply.code(409).send({
           error: `${connected.label} is already connected. Disconnect it first.`,
@@ -96,7 +99,7 @@ export async function registerMetricsRoutes(
         if (rules !== undefined) {
           await alertingRules(endpointFrom(rules, `${name} rules`, kind));
         }
-        saveMetricsSource({
+        await saveMetricsSource({
           kind,
           label: name,
           queryUrl: query.url,
@@ -108,9 +111,9 @@ export async function registerMetricsRoutes(
           rulesOrgId: rules?.orgId ?? null,
         });
         logger.info({ kind, url: query.url }, "metrics source connected");
-        return await reply.code(201).send(statusPayload());
+        return await reply.code(201).send(await statusPayload());
       } catch (err) {
-        return sendMetricsError(reply, err);
+        return await sendMetricsError(reply, err);
       }
     },
   );
@@ -120,7 +123,7 @@ export async function registerMetricsRoutes(
     "/integrations/metrics",
     { preHandler: requireSession },
     async (_request, reply) => {
-      deleteMetricsSource();
+      await deleteMetricsSource();
       logger.info({}, "metrics source disconnected");
       return reply.code(204).send();
     },

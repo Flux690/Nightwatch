@@ -33,7 +33,7 @@ import {
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../session/interrupts.js";
+import { hasPendingHumanInput } from "../session/gate-store.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -113,10 +113,10 @@ describe("durable approval interrupts", () => {
     );
 
     // Run must have exited (dispatcher slot freed)
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // Interrupt row must be in the DB
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     // Runner must NOT have executed the write yet
     const countBefore = restartCommands.length;
@@ -209,12 +209,12 @@ describe("durable approval interrupts", () => {
     });
 
     // Interrupt row is gone from DB after resolution
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     /* Written by the resolve, in the transaction that cleared the gate, and not
        again by the run that resumed: a command already run must survive a crash
        between the two, and must not be recorded twice when it does not. */
-    const answers = getTranscriptRows(sessionId).flatMap((row) =>
+    const answers = (await getTranscriptRows(sessionId)).flatMap((row) =>
       row.parts.flatMap((part) =>
         part.type === "tool_result" && part.toolCallId === "tu-apr-1"
           ? [part]
@@ -226,7 +226,7 @@ describe("durable approval interrupts", () => {
 
     // A report must exist for the route to answer, but the actions beside it
     // are independent of what it says.
-    seedCompleteReport(sessionId);
+    await seedCompleteReport(sessionId);
     const reportRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
@@ -313,7 +313,7 @@ describe("durable approval interrupts", () => {
       ),
     );
 
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
     close();
   });
 
@@ -370,7 +370,7 @@ describe("durable approval interrupts", () => {
       },
     );
     expect(ctxRes.status).toBe(400);
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     close();
 
@@ -382,7 +382,7 @@ describe("durable approval interrupts", () => {
       },
       body: JSON.stringify({ decision: "reject" }),
     });
-    await waitFor(() => !hasPendingHumanInput(sessionId));
+    await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
   });
 
   it("second resolution of same interrupt returns 409", async () => {
@@ -527,7 +527,7 @@ describe("durable approval interrupts", () => {
       expect(restartCommands).toHaveLength(0);
     }
 
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
     close();
   });
 
@@ -703,10 +703,10 @@ describe("durable approval interrupts", () => {
       ),
     );
     // Assert: run has exited (simulates what a restart would see — no in-memory state)
-    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    expect(await dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // Assert: interrupt row is in DB (survives a restart because it's persisted)
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     // Resolve via REST — works purely from DB state (as it would after restart)
     const approveRes = await fetch(
@@ -836,7 +836,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectFrontendEvents(port, SESSION);
 
-    dispatchAlertSession(sessionId, [alert]);
+    await dispatchAlertSession(sessionId, [alert]);
 
     await waitFor(() =>
       events.find(
@@ -868,7 +868,7 @@ describe("durable approval interrupts", () => {
     );
     close();
 
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(await hasPendingHumanInput(sessionId)).toBe(false);
     expect(
       events.some(
         (e) => e.type === "ESCALATED" && e.payload["sessionId"] === sessionId,
@@ -921,7 +921,7 @@ describe("durable approval interrupts", () => {
         ),
       { timeout: 5_000 },
     );
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     // Jump a day with nothing in flight: any reaper timer would fire here.
     vi.useFakeTimers({ shouldAdvanceTime: false });
@@ -929,7 +929,7 @@ describe("durable approval interrupts", () => {
     vi.useRealTimers();
 
     // Nothing reaped the interrupt row.
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
+    expect(await hasPendingHumanInput(sessionId)).toBe(true);
 
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
