@@ -239,9 +239,14 @@ export async function registerSessionRoutes(
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
       }
+      // An investigation is a session with a falsifiable condition attached, and
+      // only an alert carries one, so this path creates chats alone.
       const kind = request.body?.kind ?? "chat";
-      if (kind !== "chat" && kind !== "investigation") {
-        return reply.code(400).send({ error: "invalid kind" });
+      if (kind !== "chat") {
+        return reply.code(400).send({
+          error:
+            "invalid kind: an investigation is opened by an alert, not by hand",
+        });
       }
       const readiness = await checkLLMReadiness();
       if (!readiness.ready) {
@@ -249,31 +254,23 @@ export async function registerSessionRoutes(
           .code(503)
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
-      // Declared here and never again. Nothing infers it later - not the agent
-      // mid-conversation, and not the harness from what the run recorded.
-      const investigation = kind === "investigation";
       // Refused rather than queued, because someone is watching and would get
       // a spinner with no end. A resume already holds its seat.
-      if (!(await hasSeat(investigation))) {
+      if (!(await hasSeat(false))) {
         return reply.code(503).send({
-          error: investigation
-            ? `All ${await seatLimit(true)} investigation slots are busy. Wait for one to finish, or raise the limit in Settings.`
-            : `You've reached the limit of ${await seatLimit(false)} simultaneous conversations. Wait for one to finish before starting another.`,
+          error: `You've reached the limit of ${await seatLimit(false)} simultaneous conversations. Wait for one to finish before starting another.`,
         });
       }
       const sessionId = randomUUID();
       // The row exists before its id is handed out, so a 202 never names a
       // session the next request cannot fetch. The run's own call is idempotent.
-      await createSession(
-        buildSessionMeta(sessionId, null, message),
-        investigation,
-      );
+      await createSession(buildSessionMeta(sessionId, null, message), false);
       await dispatcher.dispatch({
         sessionId,
         userMessage: message,
-        investigation,
+        investigation: false,
       });
-      logger.info({ sessionId, kind }, "session started");
+      logger.info({ sessionId }, "session started");
       return reply.code(202).send({ sessionId });
     },
   );

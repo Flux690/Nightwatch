@@ -486,28 +486,6 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    // No session crosses between the two families, so nothing has to survive the
-    // crossing - which is what let the portal carrying chat between them go.
-    it("sends an investigation straight to its record, never through /agent", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await screen.findByRole("textbox");
-      await user.click(screen.getByRole("button", { name: /^mode:/i }));
-      await user.click(
-        await screen.findByRole("menuitem", { name: /investigate/i }),
-      );
-
-      await user.type(screen.getByRole("textbox"), "Why is checkout slow?");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/investigations/new-s1");
-      });
-      // One stream for the run, opened where it was started and never reopened.
-      expect(MockEventSource.instances).toHaveLength(1);
-    });
-
     // The layout is the route's and nothing else's. A session flipping to an
     // investigation does not rearrange the page under a user mid-read;
     // the promotion replaces the address, and the address decides.

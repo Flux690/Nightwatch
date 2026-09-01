@@ -12,6 +12,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Added
 
+- **Sentry, as an evidence source.** Connect it under Integrations with a base URL, your organization slug and an auth token carrying `event:read` and `project:read`; both scopes are probed before the connection is saved, so a token missing one is refused with the scope named rather than failing mid-incident. Investigations gain five read-only tools: search the issues around the alert, read one issue's latest event with its stack trace, break an issue down by a tag such as `server_name`, list releases with how long before or after the alert each was deployed, and list the commits in a release with the pull request and Sentry's suspect-commit marker. Self-hosted Sentry and sentry.io both work. Nothing is written back to Sentry. — `0.4.0`
+
 - **Upgrading no longer deletes your database.** Schema changes now ship as migrations the API applies on boot, each in its own transaction, and it refuses to start rather than serve a half-migrated schema. Nothing to run by hand. — `0.3.174` (`c306689`)
 
 - **The API image now carries the licence text of every package bundled into the frontend**, served at `/THIRD-PARTY-LICENSES.txt` and written at build time from what Vite actually bundles. Vite inlines those packages into the browser assets, so unlike an installed dependency their own licence files never reached the image. The README's License section now names where every set of terms lives. — `0.3.173` (`f9923f8`)
@@ -31,6 +33,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - **Action required** on the Investigations page now means a run is frozen waiting on you, and nothing else. A finished investigation whose recommendation nobody has acted on moves to **Completed**, where its recommendation still reads on the row. Nothing marks a recommendation as acted on, so the old group could only ever grow. — `0.3.162` (`d553ea9`)
 
 ### Removed
+
+- **Starting an investigation by hand.** The mode picker beside the message box is gone and `POST /api/chat` refuses `kind: "investigation"`; typing opens a chat, and an alert opens an investigation. An investigation is a session with a falsifiable condition attached, and only an alert carries one - so a manually started investigation could never have its recovery confirmed, and produced a report nothing could ever verify. The investigations list, the record and the report are unchanged, and stopping or resuming a session works exactly as before. — `0.3.175`
 
 - The **container** field on `GetK8sConfig`, `GetK8sStats`, `GetK8sEvents` and `RestartK8sWorkload`. All four report on the whole workload and none ever read it; it stays on the three tools that do. — `0.3.171` (`f49f9c8`)
 - The **Inconclusive** status. A finished run reads **Completed** whatever its record holds, and what it found or ruled out reads on the row beneath it. — `0.3.162` (`d553ea9`)

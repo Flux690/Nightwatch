@@ -14,9 +14,12 @@ mockCreateProvider.mockImplementation(() =>
   createContractFakeProvider([{ toolUses: [], text: "Done." }]),
 );
 
+import { randomUUID } from "node:crypto";
+
 import { connectTestMetrics } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { connectFrontendEvents } from "./frontend-events-helper.js";
+import { dispatchAlertSession } from "./session-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerFrontendEventRoutes } from "../session/events.js";
@@ -137,18 +140,19 @@ describe("POST /sessions/:id/stop", () => {
     );
 
     const frontend = await connectFrontendEvents(port, SESSION);
-    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+    // An alert opens it, which is the only way an investigation starts.
+    const sessionId = randomUUID();
+    await dispatchAlertSession(sessionId, [
+      {
+        sourceAlertId: `stop-${randomUUID()}`,
+        labels: {},
+        alertType: "ContainerDown",
+        firedAt: new Date().toISOString(),
+        annotations: {},
+        generatorURL: null,
+        values: {},
       },
-      body: JSON.stringify({
-        message: "Look and then ask.",
-        kind: "investigation",
-      }),
-    });
-    const { sessionId } = (await chatRes.json()) as { sessionId: string };
+    ]);
     await waitFor(() => readStarted);
 
     const stopRes = await fetch(
