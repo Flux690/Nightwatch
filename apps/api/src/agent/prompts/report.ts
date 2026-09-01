@@ -194,7 +194,7 @@ function findingLine(
   const standing = replaced.has(h.id)
     ? " (replaced, and still on the record)"
     : h.id === leadingId
-      ? " (this is what the investigation currently stands behind)"
+      ? " (this is what the investigation stands behind)"
       : "";
   return `${h.id} [${h.verdict}]${standing} ${h.statement}\n    ${h.finding}\n    cites: ${cites}`;
 }

@@ -5,10 +5,9 @@ import type {
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
 import {
-  ADDRESSING_PROTOCOL,
+  FLEET_PROTOCOL,
   BASE_PROMPT,
   budgetLine,
-  CHAT_SECTION,
   HARNESS_PROTOCOL,
   INVESTIGATION_SECTION,
   type PromptOptions,
@@ -34,14 +33,15 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
 // One base and one section, each block gated on its own condition. A chat is
 // never told it has an investigation to shape, which puts a stopwatch on a
 // one-line question.
+/* Ordered so the invariant part comes first and the varying part last: every
+   session shares the first two blocks byte for byte, which is the prefix a
+   provider can cache, and only the budget line carries a number. */
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
-  let prompt = BASE_PROMPT;
-  prompt += investigation ? INVESTIGATION_SECTION : CHAT_SECTION;
-  prompt += budgetLine(opts, investigation);
-  if (investigation) prompt += REPORT_PROTOCOL;
-  prompt += HARNESS_PROTOCOL;
-  if (opts.fleetTools) prompt += ADDRESSING_PROTOCOL;
+  let prompt = BASE_PROMPT + HARNESS_PROTOCOL;
+  if (opts.fleetTools) prompt += FLEET_PROTOCOL;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
+  if (investigation) prompt += INVESTIGATION_SECTION + REPORT_PROTOCOL;
+  prompt += budgetLine(opts, investigation);
   return prompt;
 }
 

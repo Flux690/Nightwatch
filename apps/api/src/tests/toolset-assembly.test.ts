@@ -42,6 +42,8 @@ import type { RunnerConnection } from "../fleet/connections.js";
 import { resolveCommand } from "../fleet/transport.js";
 import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
 import { buildChatContext } from "../agent/context.js";
+import { BASE_PROMPT, INVESTIGATION_SECTION } from "../agent/prompts/system.js";
+import { REPORT_PROTOCOL } from "../agent/prompts/report.js";
 import { connectedPlatforms } from "../agent/policy.js";
 import { randomUUID } from "node:crypto";
 import { runSession } from "../agent/loop.js";
@@ -300,21 +302,22 @@ describe("toolset assembly by fleet capabilities", () => {
 
     // The section is the only difference between the two, so what belongs to an
     // investigation must be absent from a chat rather than merely contradicted.
+    /* Structural, not textual: the two sections are asserted whole, so a
+       reword changes the prompt without breaking the claim that a chat carries
+       neither of them. */
     it("gives a chat none of the investigation's framing", () => {
       const opts = { budgetMinutes: 30, repo: null, fleetTools: false };
       const chat = buildChatContext([], opts, false).systemPrompt;
       const investigating = buildChatContext([], opts, true).systemPrompt;
 
-      for (const line of [
-        "You are investigating an incident",
-        "An investigation has a shape",
-        "Record what you settle as you settle it",
-        "RecordHypothesis",
-      ]) {
-        expect(investigating).toContain(line);
-        expect(chat).not.toContain(line);
+      for (const section of [INVESTIGATION_SECTION, REPORT_PROTOCOL]) {
+        expect(investigating).toContain(section);
+        expect(chat).not.toContain(section);
       }
-      expect(chat).toContain("you are keeping no record of one");
+      // Everything a chat is, an investigation is too: it adds, never replaces.
+      expect(investigating).toContain(BASE_PROMPT);
+      expect(chat).toContain(BASE_PROMPT);
+      expect(chat).not.toMatch(/investigat/i);
     });
   });
 
