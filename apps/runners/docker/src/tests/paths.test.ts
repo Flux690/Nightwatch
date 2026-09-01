@@ -9,21 +9,21 @@ describe("isPathAllowed", () => {
     delete process.env["NIGHTWARDEN_FILE_ALLOWLIST"];
   });
 
-  it("allows a path within an allowlisted root", () => {
-    expect(isPathAllowed("/var/log/nginx/access.log")).toBe(true);
-  });
-
-  it("allows the exact allowlisted root", () => {
-    expect(isPathAllowed("/var/log")).toBe(true);
-  });
-
-  it("rejects .. traversal out of an allowed root", () => {
-    expect(isPathAllowed("/var/log/../../etc/shadow")).toBe(false);
-  });
-
-  it("rejects a sibling-prefix path", () => {
-    // /etc/app is allowlisted but /etc/app-secrets must not be
-    expect(isPathAllowed("/etc/app-secrets")).toBe(false);
+  /* One verdict per path shape, so a shape the allowlist has to know is a row.
+     The two below need a real symlink and a real directory, so they stay apart. */
+  it.each([
+    ["a path within an allowlisted root", "/var/log/nginx/access.log", true],
+    ["the exact allowlisted root", "/var/log", true],
+    [".. traversal out of an allowed root", "/var/log/../../etc/shadow", false],
+    // /etc/app is allowlisted but /etc/app-secrets must not be.
+    ["a sibling-prefix path", "/etc/app-secrets", false],
+    [
+      "a path outside every allowlisted root",
+      "/home/user/passwords.txt",
+      false,
+    ],
+  ])("%s is %s", (_shape, candidate, allowed) => {
+    expect(isPathAllowed(candidate)).toBe(allowed);
   });
 
   it("rejects a symlink inside an allowed directory that points outside it", () => {
@@ -53,10 +53,6 @@ describe("isPathAllowed", () => {
     } finally {
       fs.rmdirSync(tmpDir);
     }
-  });
-
-  it("rejects a path outside all allowlisted roots", () => {
-    expect(isPathAllowed("/home/user/passwords.txt")).toBe(false);
   });
 });
 

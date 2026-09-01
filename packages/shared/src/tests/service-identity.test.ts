@@ -58,32 +58,33 @@ describe("parseTargetKey", () => {
 });
 
 describe("composeServiceLabels", () => {
-  it("reads Docker's own dotted labels", () => {
-    expect(
-      composeServiceLabels({
+  /* Three renderings of one pair, so a labelling convention is a row. Docker
+     writes dots, Prometheus relabelling writes underscores, cAdvisor prefixes. */
+  it.each([
+    [
+      "Docker's own dotted labels",
+      {
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
-      }),
-    ).toEqual({ project: "myapp", service: "postgres" });
-  });
-
-  it("reads the underscored rendering", () => {
-    expect(
-      composeServiceLabels({
-        compose_project: "myapp",
-        compose_service: "postgres",
-      }),
-    ).toEqual({ project: "myapp", service: "postgres" });
-  });
-
-  it("reads cAdvisor's container_label_ rendering", () => {
-    expect(
-      composeServiceLabels({
+      },
+      { project: "myapp", service: "postgres" },
+    ],
+    [
+      "the underscored rendering",
+      { compose_project: "myapp", compose_service: "postgres" },
+      { project: "myapp", service: "postgres" },
+    ],
+    [
+      "cAdvisor's container_label_ rendering",
+      {
         job: "cadvisor",
         container_label_com_docker_compose_project: "encodr",
         container_label_com_docker_compose_service: "cache",
-      }),
-    ).toEqual({ project: "encodr", service: "cache" });
+      },
+      { project: "encodr", service: "cache" },
+    ],
+  ])("reads %s", (_rendering, labels, identity) => {
+    expect(composeServiceLabels(labels)).toEqual(identity);
   });
 
   it("is null unless both halves of the pair are present", () => {

@@ -173,71 +173,59 @@ describe("resolveAlertTarget", () => {
       ]),
     ];
 
-    it("resolves a workload named outright by its controller label", () => {
-      expect(
-        resolveAlertTarget({ namespace: "shop", deployment: "api" }, FLEET),
-      ).toMatchObject({ kind: "resolved", keys: ["cluster-1/shop/api"] });
-    });
-
-    it("resolves KubePodCrashLooping, which carries only namespace, pod and container", () => {
-      const res = resolveAlertTarget(
+    /* One fleet, so a row is the labels an alert carried and the key they must
+       resolve to. `null` means unresolved: a wrong confident answer is worse
+       than none, so the refusals belong in the same table as the matches. */
+    it.each([
+      [
+        "a workload named outright by its controller label",
+        { namespace: "shop", deployment: "api" },
+        ["cluster-1/shop/api"],
+      ],
+      [
+        "KubePodCrashLooping, which carries only namespace, pod and container",
         {
           alertname: "KubePodCrashLooping",
           namespace: "shop",
           pod: "api-7d9f4c8b6-x2k4m",
           container: "api",
         },
-        FLEET,
-      );
-
-      expect(res).toMatchObject({
-        kind: "resolved",
-        keys: ["cluster-1/shop/api"],
-      });
-    });
-
-    it("resolves a StatefulSet pod by its ordinal suffix", () => {
-      expect(
-        resolveAlertTarget({ namespace: "shop", pod: "db-0" }, FLEET),
-      ).toMatchObject({ kind: "resolved", keys: ["cluster-1/shop/db"] });
-    });
-
-    it("resolves a DaemonSet pod, whose name has no template hash", () => {
-      expect(
-        resolveAlertTarget(
-          { namespace: "kube-system", pod: "node-exporter-x9k2m" },
-          FLEET,
-        ),
-      ).toMatchObject({
-        kind: "resolved",
-        keys: ["cluster-1/kube-system/node-exporter"],
-      });
-    });
-
-    it("resolves KubeDaemonSetRolloutStuck by its daemonset label", () => {
-      expect(
-        resolveAlertTarget(
-          {
-            alertname: "KubeDaemonSetRolloutStuck",
-            namespace: "kube-system",
-            daemonset: "node-exporter",
-          },
-          FLEET,
-        ),
-      ).toMatchObject({ kind: "resolved" });
-    });
-
-    it("will not match a workload in another namespace", () => {
-      expect(
-        resolveAlertTarget({ namespace: "other", deployment: "api" }, FLEET),
-      ).toEqual({ kind: "unresolved" });
-    });
-
-    it("will not match a statefulset label against a same-named Deployment", () => {
+        ["cluster-1/shop/api"],
+      ],
+      [
+        "a StatefulSet pod by its ordinal suffix",
+        { namespace: "shop", pod: "db-0" },
+        ["cluster-1/shop/db"],
+      ],
+      [
+        "a DaemonSet pod, whose name has no template hash",
+        { namespace: "kube-system", pod: "node-exporter-x9k2m" },
+        ["cluster-1/kube-system/node-exporter"],
+      ],
+      [
+        "KubeDaemonSetRolloutStuck by its daemonset label",
+        {
+          alertname: "KubeDaemonSetRolloutStuck",
+          namespace: "kube-system",
+          daemonset: "node-exporter",
+        },
+        ["cluster-1/kube-system/node-exporter"],
+      ],
+      [
+        "nothing for a workload in another namespace",
+        { namespace: "other", deployment: "api" },
+        null,
+      ],
       // The label that named the workload also names its kind.
-      expect(
-        resolveAlertTarget({ namespace: "shop", statefulset: "api" }, FLEET),
-      ).toEqual({ kind: "unresolved" });
+      [
+        "nothing for a statefulset label against a same-named Deployment",
+        { namespace: "shop", statefulset: "api" },
+        null,
+      ],
+    ])("resolves %s", (_shape, labels, keys) => {
+      expect(resolveAlertTarget(labels, FLEET)).toEqual(
+        keys === null ? { kind: "unresolved" } : { kind: "resolved", keys },
+      );
     });
 
     it("will not resolve a pod against a workload whose kind gives it the wrong shape", () => {
