@@ -13,7 +13,6 @@ const REFRESHES: ReadonlySet<FrontendEvent["type"]> = new Set([
   "RUN_FAILED",
 ]);
 
-// The session itself: what it is, the alert that opened it, and its transcript.
 // Both layout decisions read this, so neither infers a session's kind from the
 // artifacts a run happened to produce.
 export function useSession(sessionId: string | null): SessionDetail | null {

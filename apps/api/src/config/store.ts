@@ -303,8 +303,7 @@ export async function updateProvider(
 }
 
 // Env is a first-boot seed, never a live source, so the database stays the one
-// runtime source of truth. Each provider reads only its own prefix, and
-// NIGHTWARDEN_LLM_PROVIDER alone decides which becomes active.
+// runtime source of truth.
 export async function seedConfigFromEnv(): Promise<void> {
   for (const provider of PROVIDER_NAMES) {
     await seedProviderFromEnv(provider);

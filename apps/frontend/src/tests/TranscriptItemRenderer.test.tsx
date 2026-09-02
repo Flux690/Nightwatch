@@ -321,8 +321,7 @@ describe("TranscriptItemRenderer", () => {
   });
 
   /* Both names are the API's, so a rename there silently changes what the
-     transcript shows. Pinned here because that is exactly how the last one
-     went unnoticed. */
+     transcript shows. Pinned here because that is how the last one slipped. */
   describe("the report tools", () => {
     it("draws nothing for the submission the report card already announces", () => {
       wrap({
@@ -575,9 +574,8 @@ describe("TranscriptItemRenderer", () => {
 
       const notice = screen.getByRole("status");
       expect(notice).toHaveTextContent("Context summarised");
-      /* The reader's actual question on seeing this: did the evidence go? It did
-         not - the model forgot, the transcript did not, and a compacted tool
-         result is still citable in the report. */
+      /* The evidence did not go: the model forgot, the transcript did not, and a
+         compacted tool result is still citable in the report. */
       expect(notice).toHaveTextContent("stays in the record");
     });
   });

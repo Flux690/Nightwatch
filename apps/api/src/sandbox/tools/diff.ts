@@ -56,9 +56,8 @@ export function computeDiffHunks(
   return windowHunks(flat);
 }
 
-// Keeps only a few unchanged lines around each change, for orientation. Two
-// changes whose kept windows touch merge into a single hunk automatically -
-// there is nothing left to drop between them.
+// Keeps a few unchanged lines around each change for orientation. Two whose
+// windows touch merge into one hunk, with nothing left to drop between them.
 function windowHunks(flat: DiffLine[]): DiffHunk[] {
   const keep = new Array<boolean>(flat.length).fill(false);
   for (let i = 0; i < flat.length; i++) {

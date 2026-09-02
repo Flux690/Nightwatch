@@ -37,9 +37,8 @@ export function isNotFoundError(err: unknown): boolean {
 
 interface ResolvedWorkloadKind {
   kind: K8sWorkloadKind;
-  // Desired replicas: a restart gates on this (a scaled-to-0 workload has nothing
-  // to restart), while still allowing a running-but-unhealthy one to be rolled. A
-  // DaemonSet's equivalent is how many nodes it is scheduled onto.
+  // A restart gates on this, so a scaled-to-0 workload is refused and a running
+  // but unhealthy one still rolls. For a DaemonSet it counts scheduled nodes.
   replicas: number;
 }
 
@@ -156,9 +155,8 @@ function selectContainer(
   return { kind: "ambiguous", available: names };
 }
 
-// The kind rides back with the selector because the probe below establishes it
-// anyway, and an event lookup that matches on name alone claims every Service,
-// ConfigMap and ServiceAccount sharing that name.
+// The kind rides back with the selector because an event lookup matching on name
+// alone claims every Service, ConfigMap and ServiceAccount sharing that name.
 export interface WorkloadSelector {
   labelSelector: string;
   kind: K8sWorkloadKind;

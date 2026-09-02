@@ -166,9 +166,8 @@ describe("API-local session store", () => {
   });
 
   it("replays a harness message to the model and draws it for nobody", async () => {
-    // The user did not write it, so the transcript must not show it as
-    // theirs; the model answered it, so a resume that dropped it would leave
-    // that answer replying to nothing.
+    // The user did not write it, so it must not read as theirs, and a resume
+    // that dropped it would leave the model's answer replying to nothing.
     const m = meta();
     await seedAlertSession(m, [alert]);
     await appendTranscriptRows([
@@ -379,9 +378,8 @@ describe("API-local session store", () => {
   // The five words and nothing else. Every one of them is derived from the
   // action log, the alert or the hypothesis rows; none is ever declared.
   describe("derived status", () => {
-    /* One answered call the claims below can cite. A citation is an evidence id
-     the model was issued, so a test that hands a raw tool_use id is describing
-     something production refuses. */
+    /* A citation is an evidence id the model was issued, so a test handing a raw
+       tool_use id describes something production refuses. */
     async function seedCitedCall(sessionId: string): Promise<string> {
       await appendTranscriptRows([
         {
@@ -443,9 +441,8 @@ describe("API-local session store", () => {
       expect(await statusOf(sessionId)).toBe("completed");
     });
 
-    // No alert means no condition, and no condition means nothing can ever say
-    // the incident is over - so it never reads Resolved rather than reading it
-    // on the strength of something having run.
+    // No alert means no condition, and no condition means nothing can say the
+    // incident is over, so it never reads Resolved.
     it("never resolves a session that fired on no alert", async () => {
       const m = meta();
       await createSession(m, true);
@@ -528,8 +525,7 @@ describe("API-local session store", () => {
     });
 
     /* Status reads no part of the record, so every finished run reads the same
-       word whatever it found. A recommendation nobody has acted on is not a
-       gate: nothing marks one as acted on, so that group would never empty. */
+       word. A recommendation is not a gate, since nothing marks one as acted on. */
     it("reads Completed for a finished run, whatever its record holds", async () => {
       const recommended = await investigation();
       await seedCompleteReport(recommended);
@@ -554,8 +550,7 @@ describe("API-local session store", () => {
     });
 
     /* Verification asks whoever owns the condition, never the model, and writes
-       the same clearedAt the resolved webhook writes. Stubbing fetch is the
-       system boundary; everything below it is ours. */
+       the same clearedAt the resolved webhook does. */
     describe("verifying the condition against its own source", () => {
       function rulesAnswer(alerts: unknown[]): void {
         vi.stubGlobal(
@@ -676,9 +671,8 @@ describe("API-local session store", () => {
         expect(await statusOf(sessionId)).toBe("completed");
       });
 
-      // The load-bearing case: an unanswerable question is not a yes. If this
-      // ever collapses into "confirmed", an unreachable Prometheus silently
-      // resolves every open incident.
+      // An unanswerable question is not a yes. Collapse this into "confirmed"
+      // and an unreachable Prometheus silently resolves every open incident.
       it("never reads an unreachable source as recovery", async () => {
         const sessionId = await investigation();
         await seedCompleteReport(sessionId);

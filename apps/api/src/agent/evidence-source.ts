@@ -28,9 +28,8 @@ const BY_TOOL = new Map(
   ),
 );
 
-/* Whether a claim may rest on this call, and so whether it is issued an evidence
-   id at all. Recording a claim, writing the report and asking a person are none
-   of them observations of the system, so none of them can back one. */
+/* Recording a claim, writing the report and asking a person observe nothing, so
+   none of them earns an evidence id and none can back a claim. */
 export function isCitable(toolName: string): boolean {
   return BY_TOOL.has(toolName);
 }

@@ -90,9 +90,8 @@ async function lokiFetch(
   return res;
 }
 
-// Loki reports a bad LogQL query as HTTP 400 with a plain-text body (no JSON
-// error envelope like Prometheus), so surface that text as the agent-visible
-// message; everything else degrades into a typed bad_response.
+// Loki reports a bad LogQL query as a 400 with a plain-text body rather than
+// Prometheus's JSON envelope, so that text becomes the agent-visible message.
 async function readData(res: Response): Promise<unknown> {
   if (!res.ok) {
     const text = (await res.text().catch(() => "")).slice(0, 300);
@@ -296,9 +295,8 @@ export async function series(
   return Array.isArray(data) ? data.map(narrowLabels) : [];
 }
 
-// Cheap, auth- and tenant-exercising probe used wherever a Loki connection is
-// established: a recent-window label listing proves the URL, credential, and
-// X-Scope-OrgID all work and that discovery will function.
+// A recent-window label listing proves the URL, the credential and the
+// X-Scope-OrgID all work, and that discovery will function.
 export async function probeLoki(
   url: string,
   authHeader: string | null,

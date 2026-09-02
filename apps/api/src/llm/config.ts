@@ -1,6 +1,5 @@
-// These seed the global Config row; the loop reads effective values from the
-// config, never from here. MAX_OUTPUT_TOKENS stands in only for models whose
-// catalog publishes no ceiling of their own.
+// These seed the global config row, and the loop reads effective values from it
+// rather than from here. MAX_OUTPUT_TOKENS covers models publishing no ceiling.
 export const MAX_OUTPUT_TOKENS = 32_000;
 
 // guards truly stalled connections; SDK default is 10 min, streaming keeps normal turns well clear

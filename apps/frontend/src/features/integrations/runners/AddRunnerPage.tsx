@@ -59,9 +59,8 @@ export function AddRunnerPage({
 
   const STEP_TITLES = ["Name it", "Install the runner", "Confirm what it sees"];
 
-  // The same rule the mint route enforces, so a name that passes here cannot
-  // come back a 400. Shown once typing starts: an untouched field is not a
-  // mistake, but Continue stays shut from the moment the page loads.
+  // The same rule the mint route enforces, so a name passing here cannot come
+  // back a 400. Shown once typing starts: an untouched field is not a mistake.
   const nameError = serverNameError(serverName);
   const shownError = touched ? nameError : null;
 

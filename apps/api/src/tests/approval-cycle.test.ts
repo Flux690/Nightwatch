@@ -211,9 +211,8 @@ describe("durable approval interrupts", () => {
     // Interrupt row is gone from DB after resolution
     expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
-    /* Written by the resolve, in the transaction that cleared the gate, and not
-       again by the run that resumed: a command already run must survive a crash
-       between the two, and must not be recorded twice when it does not. */
+    /* Written by the resolve in the transaction that cleared the gate, and never
+       again by the resumed run, so a crash between them loses nor doubles it. */
     const answers = (await getTranscriptRows(sessionId)).flatMap((row) =>
       row.parts.flatMap((part) =>
         part.type === "tool_result" && part.toolCallId === "tu-apr-1"

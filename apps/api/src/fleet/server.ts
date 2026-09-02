@@ -90,9 +90,8 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
-          // The row decided this platform at onboarding; the manifest says which binary
-          // connected. A disagreement is a real user error, so refuse rather than
-          // serve a fleet whose entries lie about what they are.
+          // The row decided the platform at onboarding and the manifest says which
+          // binary connected, so a disagreement is refused rather than served.
           if (msg.payload.platform !== tokenRecord.platform) {
             fastify.log.error(
               {

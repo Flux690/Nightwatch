@@ -229,9 +229,8 @@ export function Evidence({
 }: {
   entry: ResolvedEvidence;
   alert: NormalizedAlert | null;
-  // The same call cited by a later claim. It is named once in the sources row
-  // and never drawn again: one call's chart three times reads as three
-  // measurements.
+  // Named once in the sources row and never drawn again, because one call's
+  // chart three times reads as three measurements.
   repeat?: boolean;
 }): React.JSX.Element | null {
   if (repeat) return null;

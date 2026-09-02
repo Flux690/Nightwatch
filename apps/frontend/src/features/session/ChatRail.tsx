@@ -26,8 +26,7 @@ export function ChatRail({
   sessionId: string | null;
   open: boolean;
   // Covers the stage rather than widening past its ceiling. A distinct mode, so
-  // leaving it restores the width the user chose instead of a drag's
-  // leftover.
+  // leaving it restores the width the user chose.
   expanded: boolean;
 }): React.JSX.Element {
   const railRef = useRef<HTMLElement>(null);

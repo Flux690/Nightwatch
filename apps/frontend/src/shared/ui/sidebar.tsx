@@ -192,9 +192,8 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          /* The sheet's own three-quarter width is a phone rule and it carries
-             a variant's specificity, so the declared width has to answer at the
-             same specificity or the panel opens half the window wide. */
+          /* The sheet's three-quarter width carries a variant's specificity, so
+             this must match it or the panel opens half the window wide. */
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground data-[side=left]:w-(--sidebar-width) sm:max-w-none [&>button]:hidden"
           style={
             {

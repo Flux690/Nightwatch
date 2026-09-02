@@ -82,9 +82,8 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../session/gate-store.js";
 
-/* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider snapshot
-   always comes back without them. The run knew both before the row existed; this
-   puts them back. */
+/* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider
+   snapshot loses both. The run knew them, so this puts them back. */
 type ResultAnnotation = Pick<ToolResult, "toolOutcome" | "humanDecision">;
 
 function stampOutcomes(
@@ -209,9 +208,8 @@ function publishReportCard(
   });
 }
 
-/* null alert = chat session; title from user message. A placeholder either way:
-   the title model replaces it seconds later. Shared with the chat route, which
-   writes the row before handing out its id. */
+/* A placeholder either way: the title model replaces it seconds later. Shared
+   with the chat route, which writes the row before handing out its id. */
 export function buildSessionMeta(
   sessionId: string,
   alert: NormalizedAlert | null,
@@ -251,9 +249,8 @@ const CALLS_BEFORE_RECORD_CHECK = 8;
 // is bounded rather than asked for the rest of it.
 const MAX_RECORD_CHECKS = 3;
 
-/* Whether this turn wrote the report, read from the tool's own answer. The
-   record cannot say: a follow-up run already holds one, so its presence proves
-   nothing about the turn that just ran. */
+/* Read from the tool's own answer: a follow-up run already holds a report, so
+   the record's contents prove nothing about the turn that just ran. */
 function reportRefusal(results: readonly ToolResult[]): string | null {
   // The turn offers one tool, so the first result is the submission or there is
   // none. The tool already told the model which field was wrong.
@@ -266,9 +263,8 @@ function reportRefusal(results: readonly ToolResult[]): string | null {
 
 export interface RunSessionInput {
   sessionId: string;
-  // The alert group opening this session, as the sender grouped it. No member is
-  // elected: they are investigated as one incident. Absent on a resume, which
-  // recovers them from the session row.
+  // As the sender grouped them, investigated as one incident with none elected.
+  // Absent on a resume, which recovers them from the session row.
   alerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
@@ -297,9 +293,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     input.alerts ?? (stored?.alerts ?? []).map((entry) => entry.alert);
   const alert = allAlerts[0] ?? null;
 
-  // An alert opens an investigation; otherwise the session's own row answers,
-  // never an artifact a previous run happened to leave behind. The row is the
-  // one-way ratchet, so this can only ever turn on.
+  // An alert opens an investigation; otherwise the row answers, never an artifact
+  // a previous run left behind. The row is a ratchet, so this only turns on.
   const opensInvestigation =
     allAlerts.length > 0 ||
     (input.investigation ?? false) ||
@@ -361,9 +356,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
     );
 
-  // Snapshot indices NightWarden wrote. Recorded as each message is sent, since
-  // by the time the diff is persisted a harness turn is indistinguishable from
-  // one the user typed.
+  // Recorded as each message is sent: once the diff is persisted, a harness turn
+  // is indistinguishable from one the user typed.
   const harnessTurns = new Set<number>();
 
   // Held for the run, not the turn: a resumed turn's results are stamped from
@@ -544,9 +538,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
   let barrenTurns = 0;
-  /* Evidence calls answered since the last claim was recorded, and the record's
-     size when that reset happened. Recording is what clears the debt, so a run
-     that settles something early and then reads on is asked again. */
+  /* Recording is what clears the debt, so a run that settles something early and
+     then reads on is asked again. */
   let callsSinceClaim = 0;
   let claimsSeen = 0;
   // The debt when the check last spoke, so it asks again after another eight
@@ -558,9 +551,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
   const deadline = Date.now() + config.checkInAfterMs;
-  // Propagated into the model request and every tool call so the budget is one
-  // shared instant, not a duration each layer counts separately. Distinct from
-  // `signal`, which means the user stopped the run.
+  // One shared instant rather than a duration each layer counts separately.
+  // Distinct from `signal`, which means the user stopped the run.
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
@@ -592,9 +584,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
               (await getRecord(sessionId))?.hypotheses ?? [],
               await gatedCalls(sessionId),
               unrecovered,
-              /* What a previous run already wrote, so a follow-up revises it
-                 rather than rewriting it from a context that may since have been
-                 compacted. Null on the first run, which has nothing to revise. */
+              /* So a follow-up revises what a previous run wrote rather than
+                 rebuilding it from a context that may since have been compacted. */
               (await getRecord(sessionId))?.report ?? null,
             )
           : reportRetry(problem),
@@ -745,9 +736,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       return "completed";
     }
 
-    // A turn cut off at max_tokens is not a finished answer, and its last tool
-    // call may carry truncated arguments. Say so rather than reading the stump
-    // as a conclusion.
+    // A turn cut off at max_tokens is not an answer, and its last tool call may
+    // carry truncated arguments. Say so rather than reading the stump as one.
     if (response.stopReason === "max_tokens") {
       log.warn({ turn, model: llm.model }, "turn truncated at max_tokens");
       await appendErrorMessage(
@@ -799,9 +789,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
       const approvedWrites = await approvedWriteCount(sessionId);
-      /* Rewriting is lossy by design - the request says anything left out is
-         lost - so a write-up that still covers the record is kept. Recovery is
-         deliberately not a reason: a cleared alert already reads as Resolved. */
+      /* Rewriting is lossy, so a write-up that still covers the record is kept.
+         Recovery is not a reason: a cleared alert already reads as Resolved. */
       const record = await getRecord(sessionId);
       if (record !== undefined && !reportIsBehind(record, approvedWrites)) {
         log.info({ turn }, "write-up still covers the record; keeping it");
@@ -944,9 +933,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       callsSinceClaim = 0;
       checkedAt = 0;
     }
-    /* Calls that answered and could back a claim: a refused one taught the run
-       nothing, and recording is not reading. Counted here rather than earlier: a
-       harness turn between a tool_use and its result orphans the pair. */
+    /* Calls that answered and could back a claim; a refused one taught nothing.
+       Counted here because a harness turn orphans a tool_use from its result. */
     const evidenceCalls = new Set(
       response.toolUses.filter((t) => isCitable(t.name)).map((t) => t.id),
     );

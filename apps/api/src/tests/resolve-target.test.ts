@@ -173,9 +173,8 @@ describe("resolveAlertTarget", () => {
       ]),
     ];
 
-    /* One fleet, so a row is the labels an alert carried and the key they must
-       resolve to. `null` means unresolved: a wrong confident answer is worse
-       than none, so the refusals belong in the same table as the matches. */
+    /* A row is the labels an alert carried and the key they must resolve to.
+       `null` means unresolved, so refusals sit in the table beside matches. */
     it.each([
       [
         "a workload named outright by its controller label",
@@ -239,9 +238,8 @@ describe("resolveAlertTarget", () => {
 
     describe("no wrong confident answer", () => {
       it("resolves a CronJob's pod to neither, though its name fits a Deployment structurally", () => {
-        // A CronJob's pod is backup-<unix-minutes>-<5 random>: eight digits then five
-        // characters, which is structurally the Deployment shape. It is rejected because
-        // a unix-minute timestamp begins with `2`, not a template-hash character.
+        // A CronJob's pod matches the Deployment shape structurally, and is rejected
+        // because a unix-minute timestamp begins with `2`, which the alphabet excludes.
         const fleet = [
           k8sRunner("c", [k8s("c")("batch", "backup", "Deployment")]),
         ];
@@ -301,9 +299,8 @@ describe("resolveAlertTarget", () => {
 
   describe("mixed fleet", () => {
     it("does not let a Docker container of the same name spoil a Kubernetes match", () => {
-      // A Kubernetes alert carries `container`, which is also how an anonymous
-      // Docker container is named. Matching both would produce two distinct keys
-      // and force a perfectly resolvable alert to unresolved.
+      // A Kubernetes alert's `container` is also how an anonymous Docker container
+      // is named, so matching both would yield two keys and resolve to neither.
       const fleet = [
         runner("docker-host", [docker("docker-host")("api", "api")]),
         k8sRunner("cluster-1", [k8s("cluster-1")("shop", "api", "Deployment")]),

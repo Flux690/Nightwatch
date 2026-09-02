@@ -69,9 +69,8 @@ function describesDockerService(
   labels: Record<string, string>,
   identity: DockerServiceIdentity,
 ): boolean {
-  // `namespace` means Kubernetes, which Docker and Compose alerts never carry.
-  // Without it a Kubernetes alert's `container` label matches a Docker host running
-  // a container of that name, forcing a perfectly resolvable alert to unresolved.
+  // `namespace` means Kubernetes, which Docker alerts never carry. Without it a
+  // Kubernetes `container` label matches a Docker host running that name.
   if (labels["namespace"] !== undefined) return false;
 
   // Compose labels are re-stamped on every recreate, so when present they are the
@@ -127,9 +126,8 @@ function describesK8sWorkload(
 // rand.String(5) in k8s.io/apimachinery/pkg/util/rand: the random suffix every
 // generated pod name ends with.
 const POD_SUFFIX_ALPHABET = "bcdfghjklmnpqrstvwxz2456789";
-// A ReplicaSet's pod-template-hash is rand.SafeEncodeString(fmt.Sprint(fnv32a.Sum32())),
-// which maps each BYTE of a decimal string through alphanums[b % 27]. The input bytes are
-// only ever '0'-'9', so the output is only ever these ten characters.
+// A pod-template-hash maps each byte of a decimal string through alphanums[b % 27].
+// Those bytes are only ever '0'-'9', so the output is only ever these ten characters.
 const TEMPLATE_HASH_ALPHABET = "456789bcdf";
 
 function allFrom(text: string, alphabet: string): boolean {
@@ -155,9 +153,8 @@ function podBelongsToWorkload(
     return remainder.length === 5 && allFrom(remainder, POD_SUFFIX_ALPHABET);
   }
 
-  // Deployment: <pod-template-hash>-<5 random>. The narrow hash alphabet closes the
-  // CronJob case: `backup-<unix-minutes>-<5 random>` fits this shape structurally, but
-  // a unix-minute timestamp begins with `2`, which is not a template-hash character.
+  // The narrow hash alphabet closes the CronJob case: `backup-<unix-minutes>-<5>`
+  // fits the shape, but a unix minute begins with `2`, which the alphabet excludes.
   const split = remainder.lastIndexOf("-");
   if (split <= 0) return false;
   const hash = remainder.slice(0, split);

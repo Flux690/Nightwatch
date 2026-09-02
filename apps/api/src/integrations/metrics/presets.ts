@@ -1,18 +1,15 @@
 import type { MetricsSourceKind } from "@nightwarden/shared";
 
 /* What differs between products, as data rather than behaviour. A gap declared
-   here is one a tool result states out loud, because an empty answer reads to
-   the agent as "nothing is wrong". */
+   here is one a tool result states, because an empty answer reads as healthy. */
 export interface MetricsPreset {
   // The product's own name, as its vendor writes it.
   label: string;
-  /* Whether /api/v1/metadata answers at all. VictoriaMetrics serves an empty
-     placeholder for every metric ever queried, so absence there is a fact about
-     VictoriaMetrics and not about the metric. */
+  /* VictoriaMetrics serves an empty placeholder for every metric ever queried,
+     so absence there is a fact about the server and not about the metric. */
   metricMetadata: boolean;
-  /* Whether the query endpoint also serves /api/v1/rules. False means a rules
-     URL has to be configured separately or recovery can never be confirmed:
-     VictoriaMetrics serves rules only from vmalert, a separate binary. */
+  /* False means a rules URL must be configured separately or recovery is never
+     confirmed: VictoriaMetrics serves rules only from vmalert. */
   rulesOnQueryEndpoint: boolean;
 }
 

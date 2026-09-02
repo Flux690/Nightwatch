@@ -40,9 +40,8 @@ function Field({
   );
 }
 
-/* Publishes `${htmlFor}-label` for itself. A button cannot be named by
-   <label for>, so a Select or Combobox trigger points aria-labelledby here, and
-   leaving that id to each call site is a name silently lost. */
+/* A button cannot be named by <label for>, so a Select or Combobox trigger
+   points aria-labelledby here rather than each call site minting an id. */
 function FieldLabel({
   className,
   htmlFor,

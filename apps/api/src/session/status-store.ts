@@ -2,9 +2,8 @@ import type { InvestigationStatus } from "@nightwarden/shared";
 import { sql } from "kysely";
 import { getDb, type Db } from "../db.js";
 
-// The session's status column: what it derives to, and every transition that
-// writes it. `running` is the one value no stored row can confirm, so it is
-// claimed by a conditional UPDATE that doubles as the dispatch mutex.
+// `running` is the one value no stored row can confirm, so it is claimed by a
+// conditional UPDATE that doubles as the dispatch mutex.
 
 // The counts are nullable because a correlated subquery may return no row.
 // COUNT always does, so they read as zero rather than being asserted away.
@@ -79,8 +78,7 @@ export async function refreshSessionStatus(
 }
 
 // The conditional UPDATE is the whole mutex: two racing dispatches attempt it
-// and one changes a row. Every status but 'running' is claimable, since a
-// finished session takes a new message and a gated one resumes.
+// and one changes a row. Every status but 'running' is claimable.
 export async function claimRun(sessionId: string): Promise<boolean> {
   const res = await getDb()
     .updateTable("sessions")
@@ -154,9 +152,8 @@ export async function runFailure(
     : { kind: row.kind, attempts: row.attempts };
 }
 
-/* Unconditional, unlike releaseRun: boot recovery uses it to give back a seat
-   held by a session waiting on nobody, which releaseRun deliberately will not
-   touch because that session is not running. */
+/* Unconditional, unlike releaseRun: boot recovery gives back a seat held by a
+   session waiting on nobody, which releaseRun leaves alone. */
 export async function markDone(sessionId: string): Promise<void> {
   await getDb()
     .updateTable("sessions")

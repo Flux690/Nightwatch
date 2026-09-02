@@ -30,12 +30,8 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   fleetTools: false,
 };
 
-// One base and one section, each block gated on its own condition. A chat is
-// never told it has an investigation to shape, which puts a stopwatch on a
-// one-line question.
-/* Ordered so the invariant part comes first and the varying part last: every
-   session shares the first two blocks byte for byte, which is the prefix a
-   provider can cache, and only the budget line carries a number. */
+/* Invariant blocks first: every session shares the opening two byte for byte,
+   which is the prefix a provider can cache. Only the budget line varies. */
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
   let prompt = BASE_PROMPT + HARNESS_PROTOCOL;
   if (opts.fleetTools) prompt += FLEET_PROTOCOL;
@@ -51,8 +47,7 @@ export function buildChatContext(
   investigation = false,
 ): InitialContext {
   // Chat has no alert message to carry the fleet map, so it rides the system
-  // prompt instead - the model still needs the target keys and the names the
-  // `server` parameter is drawn from.
+  // prompt: the model still needs the target keys and the `server` names.
   return {
     systemPrompt:
       systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),

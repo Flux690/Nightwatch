@@ -22,8 +22,7 @@ type Pages = InfiniteData<SessionListPage, number>;
 interface UseSessionsResult {
   sessions: SessionListRow[];
   // Answered by the server over every investigation, so a record's place in the
-  // queue neither climbs as the user scrolls nor reads zero on a page that
-  // never loaded the list.
+  // queue neither climbs as the user scrolls nor reads zero on a fresh page.
   investigationTotal: number;
   // Null until the first page lands, so the band draws nothing rather than
   // claiming an empty queue it has not been told about.

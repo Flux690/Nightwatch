@@ -123,9 +123,8 @@ function downsample(points: Point[]): Point[] {
   );
 }
 
-// Null when the result holds no measurement at all, which is the caller's cue
-// to fall back to quoting it. Nothing here summarises: every number drawn came
-// from the recorded result.
+// Null when the result holds no measurement, which is the caller's cue to quote
+// it instead. Nothing here summarises: every number drawn is a recorded one.
 export function plotFrom(
   result: unknown,
   alert: NormalizedAlert | null,

@@ -4,9 +4,8 @@ import type { Line, Plot, PlotUnit } from "./plot.js";
 import { clock } from "@/shared/lib/time";
 import { compact } from "./format.js";
 
-/* Hand-drawn SVG, no charting dependency: the shapes are few and the colours
-   are the app's own tokens. Nothing re-queries, so a chart still draws after
-   the metric's retention window has expired. */
+/* Hand-drawn SVG rather than a charting dependency. Nothing re-queries, so a
+   chart still draws after the metric's retention window has expired. */
 
 const W = 720;
 const H = 240;

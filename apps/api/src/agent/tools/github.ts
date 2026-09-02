@@ -220,9 +220,8 @@ export const GITHUB_TOOLS: Tool[] = [
             listCommits(token, repoOwner, repoName, branch, since, until),
           ]);
 
-        // Drop PR merge commits from the commit list so the two lists do not
-        // double-report; multi-parent commits are merges by definition, and
-        // squash merges match the PR's merge_commit_sha.
+        // Drop merge commits so the two lists do not double-report: multi-parent
+        // ones are merges, and a squash merge matches the PR's merge_commit_sha.
         const commits: RecentCommit[] = allCommits
           .filter((c) => c.parentCount <= 1 && !mergeShas.has(c.sha))
           .map(({ sha, message, author, committedAt }) => ({

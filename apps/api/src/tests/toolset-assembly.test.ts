@@ -66,9 +66,8 @@ const K8S_SERVICE = {
 
 describe("toolset assembly by fleet capabilities", () => {
   describe("provider library injection (unit)", () => {
-    /* Not pure any more: the prompt assertions below build a system prompt, and
-       that reads the connected metrics sources. Without this the suite would
-       open the real ~/.nightwarden database. */
+    /* The prompt assertions below read the connected metrics sources, so without
+       this the suite opens the real ~/.nightwarden database. */
     let cleanupDb: () => void;
     beforeAll(async () => {
       cleanupDb = await useTempDb();
@@ -279,9 +278,8 @@ describe("toolset assembly by fleet capabilities", () => {
       }
     });
 
-    /* One base and one section, so a rule stated twice is a rule two wordings
-       can drift apart. Counted rather than merely found: the duplication this
-       replaced was the same sentence written differently in each prompt. */
+    /* One base and one section, so a rule stated twice is one two wordings can
+       drift apart. Counted rather than found, which the duplication survived. */
     it("states each shared rule exactly once, whichever session it is for", () => {
       const opts = { budgetMinutes: 30, repo: null, fleetTools: false };
       const shared = [
@@ -300,11 +298,8 @@ describe("toolset assembly by fleet capabilities", () => {
       }
     });
 
-    // The section is the only difference between the two, so what belongs to an
-    // investigation must be absent from a chat rather than merely contradicted.
-    /* Structural, not textual: the two sections are asserted whole, so a
-       reword changes the prompt without breaking the claim that a chat carries
-       neither of them. */
+    /* The section is the only difference, so what belongs to an investigation is
+       absent from a chat rather than contradicted. Asserted whole, not textually. */
     it("gives a chat none of the investigation's framing", () => {
       const opts = { budgetMinutes: 30, repo: null, fleetTools: false };
       const chat = buildChatContext([], opts, false).systemPrompt;
@@ -441,9 +436,8 @@ describe("toolset assembly by fleet capabilities", () => {
       await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
     });
 
-    // A chat stays a chat. Nothing the model can call opens an investigation,
-    // so the report tools stay absent for every turn of the run and for every
-    // run after it.
+    // Nothing the model can call opens an investigation, so the report tools
+    // stay absent for every turn of this run and every run after it.
     it("never gives a chat the report tools, on any turn or any later run", async () => {
       mockCreateProvider.mockClear();
       setScript([
@@ -535,9 +529,8 @@ describe("toolset assembly by fleet capabilities", () => {
          this method cannot have. */
       const record = provider.appendToolResults.getMockImplementation() as
         ((results: ToolResult[]) => void) | undefined;
-      /* Connected as the first turn's results land, which is between the two
-         reads of the toolset - where a user connecting Loki in another tab
-         would land. */
+      /* Connected as the first turn's results land, between the two reads of the
+         toolset, where a user connecting Loki in another tab would land. */
       provider.appendToolResults.mockImplementation(async (results) => {
         await saveLokiIntegration({
           baseUrl: "http://loki.internal:3100",

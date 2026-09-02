@@ -4,9 +4,8 @@ import type { FrontendEvent, SessionReportResponse } from "@nightwarden/shared";
 import { apiFetch, ApiError } from "@/shared/api/client";
 import { useFrontendEvents } from "@/shared/events/FrontendEventsProvider.js";
 
-// The session's stored report, kept live: REPORT_UPDATED invalidates and the
-// provider's reconnect self-heals a missed event. A 404 means no finding has
-// been recorded yet; this hook never says what a session is.
+// REPORT_UPDATED invalidates and the provider's reconnect heals a missed event.
+// A 404 means nothing is recorded yet, never that the session is absent.
 export function useSessionReport(
   sessionId: string | null,
 ): SessionReportResponse | null {

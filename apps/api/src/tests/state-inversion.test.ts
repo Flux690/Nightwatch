@@ -181,9 +181,8 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(JSON.stringify(session.transcript[0])).not.toMatch(/<alert>/);
   });
 
-  // An alert opens an investigation. The run below writes no report, so a
-  // classification inferred from the leftovers would file this as a plain
-  // conversation - which is the defect.
+  // The run below writes no report, so a classification inferred from what it
+  // left behind would file this investigation as a plain conversation.
   it("classifies an alert-opened session as an investigation with no report written", async () => {
     setScript([{ text: "Looking into it.", toolUses: [] }]);
     const { events, close } = await connectFrontendEvents(port, SESSION);

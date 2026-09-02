@@ -62,9 +62,8 @@ function AlertDialogHeader({
     <div
       data-slot="alert-dialog-header"
       className={cn(
-        // Left at every size: the centred default un-centred for only one of
-        // the two, so a small dialog asked from the middle and a large one from
-        // the edge.
+        // Left at every size: the centred default un-centred for only one of the
+        // two, so a small dialog asked from the middle and a large one the edge.
         "grid grid-rows-[auto_1fr] place-items-start gap-2 text-left has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 has-data-[slot=alert-dialog-media]:group-data-[size=default]/alert-dialog-content:grid-rows-[auto_1fr]",
         className,
       )}
@@ -81,9 +80,8 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        /* One row, ending at the right edge, under the question it answers.
-           The stacked reversal below sm is a phone layout this frontend has no
-           width for. */
+        /* One row at the right edge, under the question it answers. The stacked
+           reversal below sm is a phone layout this frontend has no width for. */
         "flex flex-row justify-end gap-2",
         className,
       )}

@@ -1,6 +1,5 @@
-// LLM tool payload types for the host tools - matched to Anthropic
-// TOOL_SCHEMAS in apps/api. Host facts come from the Docker runner only; a
-// Kubernetes runner has no host to report on.
+// Host facts come from the Docker runner alone: a Kubernetes runner serves a
+// cluster and has no single host to report on.
 
 export interface HostMemoryResult {
   totalBytes: number;

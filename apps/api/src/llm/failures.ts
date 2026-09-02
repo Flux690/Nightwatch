@@ -136,9 +136,8 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-// The only retry mechanism: the SDKs' own are switched off, so the configured
-// count is the real one. Abort cuts the sleep and rethrows so the caller's stop
-// handling sees the original error.
+// The only retry mechanism, since the SDKs' own are off, so the configured count
+// is the real one. Abort cuts the sleep and rethrows the original error.
 export async function withLLMRetries<T>(
   fn: () => Promise<T>,
   opts: {

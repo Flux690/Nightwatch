@@ -180,9 +180,8 @@ export async function buildTranscript(
       nextArrival++;
     }
 
-    // The harness talking to the model, not to the user. Stored so a resume
-    // replays faithfully; never drawn, so the transcript reads as one
-    // conversation between two parties.
+    // The harness talking to the model, not the user. Stored so a resume replays
+    // faithfully, and never drawn, so the transcript reads as one conversation.
     if (msg.kind === "harness") continue;
 
     if (msg.kind === "error") {

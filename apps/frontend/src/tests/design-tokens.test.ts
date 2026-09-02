@@ -577,9 +577,8 @@ describe("the ladder", () => {
 });
 
 describe("the contrast matrix", () => {
-  /* Measured within a ground, never across two. After re-anchoring, ink inside
-     a menu is the menu's ink; holding it against the page's background tests a
-     pair that never appears on screen. */
+  /* Measured within a ground, never across two: ink inside a menu is the menu's,
+     so holding it against the page tests a pair never seen on screen. */
   it("keeps full ink at 9:1+ on its own ground", () => {
     for (const g of GROUNDS) {
       expect(
@@ -820,9 +819,8 @@ describe("radius", () => {
     expect(rungs.sort()).toEqual(["-2xl", "-lg", "-md", "-sm", "-xl"]);
   });
 
-  /* Radius rises with depth, so it says what the shadow says a second time.
-     Held at one value above the control rung, a panel and the menu over it
-     were separated by fill alone. */
+  /* Radius rises with depth, restating the shadow. Held at one value above the
+     control rung, a panel and the menu over it separated by fill alone. */
   it("rises from the control rung to the panel to what floats", () => {
     const rem = (name: string): number =>
       Number(new RegExp(`--${name}:\\s*([\\d.]+)rem`).exec(css)?.[1]);

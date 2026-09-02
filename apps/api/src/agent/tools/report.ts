@@ -1,6 +1,5 @@
-// Thin adapters over the report domain service. RecordHypothesis is offered only
-// to a session under investigation; SubmitInvestigationReport only on the
-// report turn, which is the loop's business rather than the toolset's.
+// Thin adapters over the report domain service. Which turn is offered which of
+// them is the loop's business rather than the toolset's.
 
 import { z } from "zod";
 import {
@@ -111,9 +110,8 @@ export const REPORT_TOOLS: Tool[] = [
   },
 ];
 
-/* Never in the toolset: the loop attaches this one schema, alone, on the
-   report turn. Offering it alongside the investigation tools would let a
-   run write itself up in the middle of working. */
+/* Never in the toolset: offering it alongside the investigation tools would let
+   a run write itself up in the middle of working. */
 export const SUBMIT_REPORT_TOOL: Tool = {
   schema: SUBMIT_INVESTIGATION_REPORT_SCHEMA,
   effect: "read",

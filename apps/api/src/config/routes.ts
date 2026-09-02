@@ -182,9 +182,8 @@ export async function registerConfigRoutes(
         return { ok: true, models: [] } satisfies ModelCatalog;
       }
       const stored = config.providers[target];
-      // A typed key wins; otherwise the saved one, so changing a model or an
-      // endpoint needs no re-pasting. Whether an empty key is a problem is the
-      // provider's answer, given below.
+      // A typed key wins, otherwise the saved one, so changing a model or an
+      // endpoint needs no re-pasting.
       const effectiveKey = apiKey ?? (await loadApiKey(target)) ?? "";
 
       const catalog = await fetchCatalog(

@@ -66,9 +66,8 @@ export function clipLine(line: string): string {
 const SEVERE = /\b(error|err|fatal|panic|exception|traceback|oom)\b/i;
 const WARNING = /\b(warn|warning)\b/i;
 
-// Highest severity wins, and the line is returned as written. Choosing which
-// line to show is a sort; rewording it would be a summary, which is the thing
-// we are avoiding.
+// Highest severity wins and the line is returned as written: choosing one is a
+// sort, while rewording it would be a summary.
 function worstLine(lines: string[]): { line: string; severe: boolean } | null {
   const severe = lines.find((l) => SEVERE.test(l));
   if (severe !== undefined) return { line: severe, severe: true };

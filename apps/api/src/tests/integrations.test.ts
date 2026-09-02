@@ -498,9 +498,8 @@ describe("metrics source routes", () => {
     });
   });
 
-  /* Grafana Cloud hands out an instance id and a token, never a base64 blob, so
-     the pair is encoded here and stored as the one credential everything else
-     reads. */
+  /* Grafana Cloud hands out an instance id and a token rather than a base64
+     blob, so the pair is encoded here into the one credential others read. */
   it("encodes a basic pair into one Authorization header and never stores the parts", async () => {
     let sawAuth: string | undefined;
     stubFetch((_url, init) => {
@@ -580,7 +579,6 @@ describe("metrics source routes", () => {
 
   /* One connection per product: what you point at is already an aggregate, so
      a second Prometheus is a mistake to refuse rather than a name to invent. */
-  // What you point at is already an aggregate, so a second one is a mistake.
   it("refuses a second metrics source, of its own kind or any other", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
     const first = await authed({

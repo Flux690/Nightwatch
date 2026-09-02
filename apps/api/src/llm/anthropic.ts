@@ -26,9 +26,8 @@ const DIALECT: WireDialect = "anthropic-messages";
 export const ANTHROPIC_MODELS_PATH = "/v1/models";
 export const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com";
 
-// Anthropic's catalog publishes which levels a model accepts but never a
-// default, so the API-wide documented default stands in: sending "high" is
-// identical to omitting the parameter.
+// The catalog publishes which levels a model accepts but never a default, so
+// the documented API-wide one stands in: "high" equals omitting the parameter.
 const ANTHROPIC_DEFAULT_EFFORT = "high";
 
 // Strongest first. Every rung is checked independently because the ladder has
@@ -47,9 +46,8 @@ export function anthropicAuthHeaders(apiKey: string): Record<string, string> {
   return { "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
 }
 
-/* Server-side compaction: the conversation is summarised rather than refused
-   when it outgrows the window. Safe because the full tool result stays in the
-   transcript - the model forgets, the record does not. */
+/* The conversation is summarised rather than refused when it outgrows the
+   window. The model forgets; the transcript keeps every result in full. */
 const COMPACTION_BETA = "compact-2026-01-12";
 
 // One identifier, which Anthropic uses both as the edit type on a request and
@@ -375,9 +373,8 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   seed(history: ProviderMessage[]): void {
-    // A message this dialect wrote is replayed byte-exact: thinking blocks carry
-    // signatures Anthropic rejects if altered. Anything else is rebuilt from parts,
-    // which loses the reasoning and keeps the conversation.
+    // A message this dialect wrote is replayed byte-exact, since thinking blocks
+    // carry signatures Anthropic rejects if altered. Anything else is rebuilt.
     const replayed = history.map((m) =>
       m.native?.dialect === DIALECT
         ? (m.native.message as BetaMessageParam)

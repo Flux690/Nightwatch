@@ -43,9 +43,8 @@ export interface FrontendMessage extends FrontendEnvelope {
   };
 }
 
-// The one terminal event for a run that finished on its own (the model stopped
-// with no tool call). Exactly one per completed run; stopped/failed/suspended
-// runs end via their own distinct terminal events instead.
+// Exactly one per run that finished on its own. Stopped, failed and suspended
+// runs end on their own terminal events instead.
 export interface FrontendRunFinished extends FrontendEnvelope {
   type: "RUN_FINISHED";
   payload: {
@@ -88,9 +87,8 @@ export interface FrontendRunStopped extends FrontendEnvelope {
   };
 }
 
-// Sandbox provisioning progress (clone, container start, dependency install)
-// so the first repo tool call never looks hung. Ephemeral status only -
-// nothing is persisted.
+// Sandbox provisioning progress, so the first repo tool call never looks hung.
+// Ephemeral: nothing here is persisted.
 export interface FrontendSandboxStatus extends FrontendEnvelope {
   type: "SANDBOX_STATUS";
   payload: {
@@ -132,9 +130,8 @@ export interface FrontendSessionTitleUpdated extends FrontendEnvelope {
   };
 }
 
-// The session's stored report changed (agent update mid-run, or the finish gate
-// finalized it). Content event like MESSAGE, fires many times per run; carries
-// only the id - the frontend refetches the report.
+// The stored report changed. Fires many times per run and carries only the id,
+// so the frontend refetches.
 export interface FrontendReportUpdated extends FrontendEnvelope {
   type: "REPORT_UPDATED";
   payload: {

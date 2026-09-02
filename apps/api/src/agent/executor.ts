@@ -13,8 +13,7 @@ import type {
 } from "./tools/types.js";
 
 /* Unreachable may answer next time; a routing mistake will not. A service the
-   runner cannot find is neither: the container is not running, which is a
-   finding rather than a broken tool. */
+   runner cannot find is neither, but a finding: the container is not running. */
 function classifyRunnerError(err: unknown): ToolOutcome {
   if (
     err instanceof RunnerUnreachableError ||

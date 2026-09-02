@@ -134,9 +134,8 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
   },
 };
 
-// Appended to the system prompt of a session under investigation only. Short on
-// purpose: the tool description sits next to the decision, while this competes
-// with a long context by turn fifteen.
+// Short on purpose: the tool description sits next to the decision, while this
+// competes with a long context by turn fifteen.
 export const REPORT_PROTOCOL = `
 
 You are also keeping a record of this investigation.
@@ -204,9 +203,8 @@ function writeLine(call: GatedCall): string {
   return `${call.at}  ${call.toolName}${target}  ${call.decision}`;
 }
 
-/* Asked before the write-up rather than left to the field descriptions to
-   imply. Each says nothing found is a real answer, because a heading a model
-   must fill is one it will invent for. */
+/* Each says that nothing found is a real answer, because a heading a model must
+   fill is one it will invent for. */
 const REPORT_RUBRIC = `Account for each of these. "None found" is a complete answer to any of them, and an honest one; never invent something to fill a line.
 
 - The root cause: the underlying condition that made this possible.

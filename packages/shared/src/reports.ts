@@ -39,8 +39,7 @@ const VERDICT_ORDER: readonly Verdict[] = [
 ];
 
 /* One ordering, so the queue row and the report cannot name different leading
-   claims. Equal confidence breaks on recording order, newest first: that is the
-   conclusion the run reached after the most work. */
+   claims. Equal confidence breaks newest first, after the most work. */
 export function rankHypotheses(hypotheses: Hypothesis[]): Hypothesis[] {
   return hypotheses
     .map((hypothesis, recorded) => ({ hypothesis, recorded }))
@@ -73,14 +72,12 @@ export function leadingHypothesis(hypotheses: Hypothesis[]): Hypothesis | null {
   );
 }
 
-// Which strand of the incident a moment belongs to. `action` is absent here
-// because it is not the model's to claim: a released write is contributed by the
-// system, and carries `action` below instead.
+// `action` is absent because it is not the model's to claim: the system
+// contributes a released write, carrying `action` below.
 export type TimelineLane = "change" | "signal" | "agent";
 
-// One moment in what happened. The model authors these; the system contributes
-// a row for every released write, so an action cannot be left off a timeline
-// the model did not author in full.
+// The model authors these; the system adds a row per released write, so an
+// action cannot be left off a timeline the model did not author in full.
 export interface TimelineEntry {
   at: string;
   what: string;
@@ -115,9 +112,8 @@ export interface SubmittedReport {
   // what ran is the released-write log, which the model cannot write to.
   recommendation: string;
   submittedAt: string;
-  // How far the record had got when this was written, so a later run can ask
-  // whether it is behind without consulting a clock. Stamped by the same write
-  // that stores the report, so it cannot claim coverage the report lacks.
+  // Lets a later run ask whether the report is behind without reading a clock.
+  // Stamped by the write that stores it, so it cannot overstate its coverage.
   hypothesesCoveredUpTo: string;
   writesCoveredUpTo: number;
 }
@@ -177,9 +173,8 @@ export interface GatedCall {
   result: string | null;
 }
 
-// The report route's response. Three authors, deliberately: the model writes
-// `record`, the transcript answers `decisions` and `evidence`, the system
-// computes `conviction`.
+// Three authors: the model writes `record`, the transcript answers `decisions`
+// and `evidence`, and the system computes `conviction`.
 export interface SessionReportResponse {
   record: InvestigationRecord;
   decisions: GatedCall[];

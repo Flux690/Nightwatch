@@ -42,9 +42,8 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-// Routes the two query endpoints the tools touch; anything else fails loudly.
-// A signed AMP request arrives as a Request object (metricsFetch calls
-// fetch(signedRequest) with no second argument), everything else as (url, init).
+// Routes the two query endpoints the tools touch, failing loudly on any other.
+// A signed AMP request arrives as a Request object, everything else as url+init.
 function installPromMock(mock: PromMock): void {
   vi.stubGlobal(
     "fetch",
@@ -448,9 +447,8 @@ describe("metrics tools through the tool dispatch", () => {
       expect(content.rules[1]!.firingCount).toBe(0);
     });
 
-    /* An empty answer the agent reads as "nothing is wrong" is the failure the
-       whole result discipline exists against, and three of the sources we
-       support cannot answer questions the tools ask. */
+    /* An empty answer the agent reads as healthy is what the result discipline
+       exists against, and three supported sources cannot answer some calls. */
     describe("what a source cannot answer, said rather than shown as absence", () => {
       it("names VictoriaMetrics' missing metadata API instead of reporting the metric as undeclared", async () => {
         await connect({ kind: "victoriametrics", label: "vm" });

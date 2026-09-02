@@ -378,9 +378,8 @@ export const METRICS_TOOLS: Tool[] = [
           toolOutcome: "system",
         };
       }
-      /* Stated, not discovered: VictoriaMetrics answers this endpoint with an empty
-         object for every metric, so reporting the emptiness would be a fact about
-         VictoriaMetrics dressed as a fact about the metric. */
+      /* VictoriaMetrics answers this endpoint empty for every metric, so reporting
+         the emptiness states a fact about the server, not about the metric. */
       if (!source.capabilities.metricMetadata) {
         return {
           content: `${source.label} does not implement the metric metadata API - it answers with an empty result for every metric, so nothing here can tell you the type or unit of "${metric.trim()}". This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,

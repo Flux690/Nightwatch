@@ -11,9 +11,8 @@ import { AuthProvider } from "../features/auth/AuthContext.js";
 import { AuthGate } from "./AuthGate.js";
 import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
-/* Every page is fetched when its route is first visited, never before. Loaded
-   eagerly they were one bundle, so signing in paid for the report renderer and
-   the markdown pipeline it will not draw. */
+/* Each page is fetched when its route is first visited. Loaded eagerly they
+   were one bundle, so signing in paid for a report renderer it never draws. */
 const LAZY = {
   LoginPage: lazyRouteComponent(
     () => import("../features/auth/LoginPage.js"),
@@ -155,9 +154,8 @@ const githubConnectRoute = createRoute({
   component: LAZY.GitHubConnectPage,
 });
 
-// Docker hosts and Kubernetes clusters are two integrations, not one: they install
-// differently and are addressed differently. One list and one wizard serve both,
-// parameterized by the platform the route names.
+// Docker hosts and Kubernetes clusters install and address differently, so they
+// are two integrations served by one list and wizard, keyed on the route.
 const dockerHostsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/docker",
@@ -194,9 +192,8 @@ const grafanaAlertingRoute = createRoute({
   component: () => <LAZY.AlertSourcePage kind="grafana" />,
 });
 
-/* One page serves every metrics source, parameterized by the product the
-   route names - the shape the two alert sources already use. What differs
-   between them is words, which live in METRICS_SOURCE_CONTENT. */
+/* One page serves every metrics source, keyed on the product the route names.
+   What differs between them is words, which live in METRICS_SOURCE_CONTENT. */
 const metricsRoutes = METRICS_SOURCE_KINDS.map((kind) =>
   createRoute({
     getParentRoute: () => appRoute,

@@ -3,9 +3,8 @@
 
 import type { MetricsSourceKind } from "@nightwarden/shared";
 
-/* One credential reaches the source, never two: the API returns the header and
-   discards the basic pair when both are sent, so offering both at once would
-   promise something that has never been true. */
+/* One credential reaches the source, never two: the API keeps the header and
+   discards the basic pair, so offering both would promise what never happens. */
 export type AuthMethod = "none" | "bearer" | "basic" | "aws";
 
 export const AUTH_LABEL: Record<AuthMethod, string> = {

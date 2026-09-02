@@ -35,8 +35,7 @@ interface ToolCallIdentity {
 export interface ToolDispatchContext extends ToolCallIdentity {
   toolCallCeilingMs: number;
   /* The handle this call is cited by, rendered into its own result so the model
-     can copy it. Assigned by position in the transcript, so it is arithmetic
-     rather than stored state. */
+     can copy it. Stamped once on the way to disk and stored on the call. */
   evidenceId?: string;
 }
 
@@ -65,9 +64,8 @@ interface ToolCommon {
   timeoutMs?: number;
 }
 
-// Where a tool executes is declared, never inferred. A service-routed command finds its
-// owner from the target key; a server-routed one names its platform, so a fan-out
-// reaches only servers of that platform.
+// Where a tool executes is declared, never inferred. A service-routed command
+// finds its owner from the target key; a server-routed one names its platform.
 export type Tool = ToolCommon &
   (
     | {

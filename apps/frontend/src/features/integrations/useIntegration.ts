@@ -4,9 +4,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { ApiError, apiFetch } from "@/shared/api/client";
 import { toast } from "@/shared/lib/toast";
 
-/* What every integration page says when a connect attempt never reached us.
-   A failure the API answered carries its own words; only the silence needs
-   supplying. */
+/* What a page says when a connect attempt never reached us. A failure the API
+   answered carries its own words, so only the silence needs supplying. */
 export function connectMessage(err: unknown): string {
   return err instanceof ApiError ? err.message : "Could not reach the API";
 }

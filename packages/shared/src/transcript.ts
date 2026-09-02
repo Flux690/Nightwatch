@@ -1,6 +1,5 @@
-// What the frontend renders, built server-side from the stored transcript joined
-// with whatever the session is suspended on. The browser draws these; it never
-// works out what state a tool call is in.
+// Built server-side from the stored transcript joined with whatever the session
+// is suspended on. The browser draws these and never derives a call's state.
 
 import type { ApprovalStatus } from "./approvals.js";
 import type { ToolOutcome } from "./messages.js";

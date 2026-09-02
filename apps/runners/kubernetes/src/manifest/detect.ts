@@ -52,9 +52,8 @@ async function listWorkloads(): Promise<KubernetesWorkloadEntry[]> {
       const namespace = item.metadata?.namespace ?? "default";
       const workload = item.metadata?.name ?? "";
       if (!workload) continue;
-      // A workload with nothing ready is advertised as stopped, not running, so
-      // routing and the snapshot don't treat a scaled-to-0 service as up. A
-      // DaemonSet counts nodes, so its readiness lives under another name.
+      // Nothing ready is advertised as stopped, so routing and the snapshot never
+      // read a scaled-to-0 service as up. A DaemonSet names its readiness apart.
       const ready =
         (item.status?.readyReplicas ?? item.status?.numberReady ?? 0) > 0;
       const identity = { namespace, workload };

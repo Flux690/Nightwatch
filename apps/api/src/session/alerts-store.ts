@@ -83,9 +83,8 @@ export async function appendSessionAlert(
     .execute();
 }
 
-/* Keyed the way dedup keys, so a recovery clears the firing it names rather
-   than an older one that shares the fingerprint. Queued rows included: an alert
-   that recovers while waiting for a seat is never promoted. */
+/* Keyed the way dedup keys, so a recovery clears the firing it names rather than
+   an older one sharing the fingerprint. Queued rows are included. */
 export async function markAlertCleared(
   sourceAlertId: string,
   firedAt: string,

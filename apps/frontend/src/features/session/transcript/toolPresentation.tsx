@@ -26,9 +26,8 @@ import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
 
-// Beyond this the body scrolls behind an explicit opt-in. The runner already
-// caps its output at 64KB for safety; this is the separate, much tighter cap
-// for something a person is meant to read.
+// Beyond this the body scrolls behind an explicit opt-in. The runner's own 64KB
+// cap is for safety; this much tighter one is for reading.
 const BODY_MAX_LINES = 8;
 
 // Shared with the approval card, which labels the same three as one action.

@@ -208,9 +208,8 @@ describe("AnthropicProvider", () => {
         content: [{ type: "text", text: "done", citations: null }],
         usage: makeUsage(),
       });
-      /* Captured as the call is made, not read back afterwards: the params hold
-         the provider's own message array by reference, and the turn's reply is
-         pushed onto it before the await returns. */
+      /* Captured as the call is made: the params hold the provider's own array
+         by reference, and the reply is pushed onto it before the await returns. */
       let captured: Record<string, unknown> = {};
       mockMessagesStream.mockImplementationOnce(
         (params: { messages: unknown[] }) => {
@@ -305,8 +304,7 @@ describe("AnthropicProvider", () => {
     });
 
     /* The block summarises turns this transcript still holds in full, so dropping
-       it costs the model a shortcut and nothing else - and a model that cannot
-       accept one must never be sent it. */
+       it costs a shortcut and nothing else. */
     it("drops a stored compaction block when the model can no longer compact", async () => {
       const sent = await sentFor(BASE_CONFIG, compactedTurn());
 

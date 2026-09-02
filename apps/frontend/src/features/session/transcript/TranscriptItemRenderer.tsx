@@ -192,9 +192,8 @@ export function TranscriptItemRenderer({
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
     case "error_text":
-      // The text is already status-specific: 401 says the key was rejected,
-      // 429 says rate-limited. Rendering it as prose would erase that and make
-      // a provider outage read as the agent reasoning badly.
+      // The text is already status-specific, and rendering it as prose would
+      // make a provider outage read as the agent reasoning badly.
       return <ErrorNotice text={item.text} />;
     case "alert_arrived":
       return <AlertArrived item={item} />;

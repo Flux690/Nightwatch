@@ -8,9 +8,8 @@ export function isAlertSourceKind(value: string): value is AlertSourceKind {
   return (ALERT_SOURCE_KINDS as readonly string[]).includes(value);
 }
 
-// No target: an alert names no service on its own. `labels` is the whole input, and
-// resolution asks the live fleet which advertised service they describe, so nothing
-// speculative is ever stored.
+// No target: an alert names no service on its own. Resolution asks the live fleet
+// which advertised service the labels describe, so nothing speculative is stored.
 export interface NormalizedAlert {
   sourceAlertId: string;
   labels: Record<string, string>;

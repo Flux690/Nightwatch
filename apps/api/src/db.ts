@@ -8,9 +8,8 @@ import type { Database as Schema } from "./schema.js";
 
 export type Db = Kysely<Schema>;
 
-/* Applied against the raw handle before Kysely sees it, so a migration is one
-   synchronous transaction. SQLite has transactional DDL, so a failure leaves
-   nothing half-applied and its version unrecorded for the next boot to retry. */
+/* Applied against the raw handle so a migration is one synchronous transaction.
+   SQLite has transactional DDL, so a failure leaves nothing half-applied. */
 function migrate(handle: Database.Database): void {
   handle.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (

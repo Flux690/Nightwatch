@@ -356,9 +356,8 @@ describe("IntegrationsPage", () => {
       expect(receiving).toHaveClass("text-ok");
     });
 
-    /* Two senders are two credentials and two deliveries. A shared status would
-       report one sender's first alert on the other's card, which is the one
-       thing this line exists to tell the truth about. */
+    /* Two senders are two credentials and two deliveries, so a shared status
+       would report one sender's first alert on the other's card. */
     it("reports each sender's own delivery, not the other's", async () => {
       setup({
         ingestConfigured: true,

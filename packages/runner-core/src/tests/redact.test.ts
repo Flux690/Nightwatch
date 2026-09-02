@@ -50,9 +50,8 @@ describe("redactSecrets", () => {
     });
   });
 
-  /* The corpus: one shape per row, all asserting the only thing that matters -
-     the secret is gone and something says so. A row is a pattern the rules have
-     to know, so a new secret shape is a line rather than a block. */
+  /* One shape per row, each asserting the secret is gone and something says so.
+     A row is a pattern the rules must know, so a new shape is one line. */
   it.each([
     [
       "a JWT in a Bearer header",

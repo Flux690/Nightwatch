@@ -486,9 +486,8 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    // The layout is the route's and nothing else's. A session flipping to an
-    // investigation does not rearrange the page under a user mid-read;
-    // the promotion replaces the address, and the address decides.
+    // The layout is the route's alone, so a session becoming an investigation
+    // replaces the address rather than rearranging the page mid-read.
     it("morphs on the address, not on the session's own flag", async () => {
       const user = userEvent.setup();
       const { router, setInvestigation, fetchMock } = setup();

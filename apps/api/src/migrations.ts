@@ -1,6 +1,5 @@
-// Applied in order and never edited once applied: a version is a fact about
-// every install. What each column is for lives in `schema.ts`, which describes
-// the database as it is now rather than the steps that produced it.
+// Applied in order and never edited once applied, because a version is a fact
+// about every install. What each column is for lives in `schema.ts`.
 
 export interface Migration {
   version: number;

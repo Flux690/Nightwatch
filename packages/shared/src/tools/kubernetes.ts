@@ -33,9 +33,8 @@ export interface K8sWorkloadListResult {
   workloads: K8sWorkloadInstance[];
 }
 
-// No stderrOnly: the Kubernetes log API merges the streams. No `until` either -
-// it has no end-time parameter, so offering one would be a filter pretending to
-// be a query.
+// No stderrOnly, because the Kubernetes log API merges the streams. No `until`
+// either: it has no end-time parameter, so one would be a filter posing as a query.
 export interface K8sLogsInput {
   service: KubernetesWorkloadIdentity;
   tailLines?: number;

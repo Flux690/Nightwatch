@@ -480,9 +480,8 @@ export function GitHubConnectPage(): React.JSX.Element {
               an organization, an admin has to approve the token first.
             </FieldDescription>
           ) : (
-            /* The Field holds the control and the words about it. The two
-               buttons are actions on the page, and a Field stretches
-               whatever it holds to the width of the column. */
+            /* The two buttons sit outside the Field: it is for a control and its
+               words, and it stretches whatever it holds to the column width. */
             <div className="flex flex-col gap-4">
               <RepoCombobox
                 repos={repos}

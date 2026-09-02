@@ -268,8 +268,7 @@ describe("Loki tools through the tool dispatch", () => {
   });
 
   /* The window is anchored on the alert and lookforwardMinutes cannot go
-     negative, so without this the end never moves and every repeat of a
-     budget-capped call returns the same newest lines. */
+     negative, so without this every repeat returns the same newest lines. */
   it("QueryLogs aims the window at until instead of the alert", async () => {
     await connect();
     await executeTool(

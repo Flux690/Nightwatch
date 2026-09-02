@@ -7,9 +7,8 @@ import { logger } from "../logger.js";
 import { initSecrets } from "../secrets.js";
 import { deriveStatus } from "../session/status-store.js";
 
-/* Suite-wide, before anything can open a database: a test that reaches getDb
-   without its own useTempDb would otherwise create one in the developer's real
-   ~/.nightwarden. Structural, so remembering it is not a per-file duty. */
+/* Suite-wide, so a test reaching getDb without its own useTempDb cannot create
+   a database in the developer's real ~/.nightwarden. */
 process.env["NIGHTWARDEN_DIR"] = mkdtempSync(join(tmpdir(), "nw-suite-"));
 
 // A fixed key keeps the suite off the developer's .env, and the suite runs the
@@ -37,9 +36,8 @@ export function expectDuplicateAlert(): void {
   expectingDuplicate = true;
 }
 
-/* A stored status that a fresh derivation disagrees with means a transition
-   wrote its column and forgot to refresh. `running` is exempt: it is claimed by
-   a process rather than derived, so no stored row can confirm it. */
+/* A stored status a fresh derivation disagrees with means a transition forgot
+   to refresh. `running` is exempt, being claimed rather than derived. */
 async function assertStatusesDerivable(): Promise<void> {
   // openDb, not getDb: a test file with no database of its own must not have
   // one created for it here.

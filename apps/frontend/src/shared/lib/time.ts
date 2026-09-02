@@ -40,8 +40,7 @@ export function dayClock(at: string | number): string {
 }
 
 /* A Date is an instant, so both of the above already read in the viewer's own
-   zone. Naming it is what stops a quoted time meaning two things to two
-   people. */
+   zone. Naming it stops a quoted time meaning two things to two people. */
 export function zoneName(): string {
   const parts = new Intl.DateTimeFormat([], {
     timeZoneName: "short",

@@ -60,9 +60,8 @@ function rowValues(m: TranscriptRow) {
   };
 }
 
-// Append a turn's rows atomically: the (session_id, seq) primary key forbids a
-// duplicate seq, and the transaction makes the turn all-or-nothing so the
-// transcript checkpoint never holds a hole.
+// The (session_id, seq) primary key forbids a duplicate seq and the transaction
+// makes the turn all-or-nothing, so the checkpoint never holds a hole.
 export async function appendTranscriptRows(
   messages: TranscriptRow[],
 ): Promise<void> {
@@ -161,9 +160,8 @@ export async function appendRowsAndPark(
     });
 }
 
-/* The other half of appendRowsAndPark: the answered turn and the cleared
-   gate in one transaction, so a crash between them cannot lose the result of a
-   command that has already run. False when another request cleared it first. */
+/* The answered turn and the cleared gate in one transaction, so a crash between
+   them cannot lose the result of a command that already ran. */
 export async function appendRowsAndResolve(
   sessionId: string,
   messages: TranscriptRow[],

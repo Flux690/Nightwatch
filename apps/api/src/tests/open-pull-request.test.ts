@@ -343,9 +343,8 @@ describe("OpenPullRequest", () => {
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
   });
 
-  // Crash recovery is branch identity, not a stored attempt: a retry finds the
-  // PR its own branch already opened and updates it, so a run that died after
-  // creating one cannot open a second.
+  // Crash recovery is branch identity rather than a stored attempt: a retry
+  // finds the PR its own branch opened and updates it instead of adding one.
   it("updates rather than duplicating when a retry follows a PR it already opened", async () => {
     prState.open = [
       {

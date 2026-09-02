@@ -14,14 +14,12 @@ export interface ProviderOption {
   defaultBaseUrl: string;
 }
 
-// Why a catalog could not be read. `needs_key` is the provider's own rule, not
-// a policy of ours: OpenRouter publishes its catalog to anyone, Anthropic
-// answers 401 without a key.
+// `needs_key` is the provider's rule, not ours: OpenRouter publishes its
+// catalog to anyone, Anthropic answers 401 without a key.
 export type CatalogError = "needs_key" | "bad_key" | "unreachable";
 
-// Listing a provider's catalog is also how its setup is verified: models coming
-// back proves the endpoint is reachable and the key works, so there is nothing
-// separate to press.
+// Listing the catalog is also how setup is verified: models coming back prove
+// the endpoint is reachable and the key works, so nothing separate is pressed.
 export type ModelCatalog =
   { ok: true; models: ModelOption[] } | { ok: false; error: CatalogError };
 
@@ -53,9 +51,8 @@ export interface ModelOption {
   // The model's context window, null when its catalog does not publish one.
   // Read rather than assumed: it is what a compaction trigger is derived from.
   maxInputTokens: number | null;
-  // Whether the provider summarises a conversation that outgrows the window
-  // rather than refusing it. Stated by the catalog or false - a provider that
-  // truncates instead is not this, and never claims it.
+  // Whether the provider summarises a conversation that outgrows the window.
+  // Stated by the catalog or false: one that truncates instead is not this.
   compaction: boolean;
 }
 
@@ -77,9 +74,8 @@ export interface ProviderSettings {
   // Captured with it, on the same terms.
   maxInputTokens: number | null;
   compaction: boolean;
-  // The chosen model's ladder, captured with it rather than looked up again, so the
-  // settings form draws its reasoning control from the config it already has.
-  // Null when the model exposes no reasoning control.
+  // Captured with the model rather than looked up again, so the settings form
+  // draws its reasoning control from the config it already has. Null when none.
   reasoning: ReasoningDescriptor | null;
 }
 

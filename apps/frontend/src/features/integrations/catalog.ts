@@ -1,8 +1,7 @@
 import { ALERT_SOURCE_KINDS, METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
-/* What an integration is called, what it looks like, and what it gives an
-   investigation. One description serves the grid card and the page header, so
-   the two can never drift apart. */
+/* One description serves the grid card and the page header, so the two can
+   never drift apart. */
 
 export const INTEGRATION_SLUGS = [
   "docker",

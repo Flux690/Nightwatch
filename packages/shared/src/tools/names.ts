@@ -80,9 +80,8 @@ export function isTool(actual: string, ...names: readonly ToolName[]): boolean {
   return names.some((name) => name === actual);
 }
 
-/* Whether the build declares this name at all, which is not whether a turn
-   offered it. A tool withheld for want of a runner and a name the model invented
-   need different answers. */
+/* Whether the build declares this name, which is not whether a turn offered it:
+   a tool withheld for want of a runner and an invented name answer differently. */
 export function isToolName(actual: string): actual is ToolName {
   return TOOL_NAMES.some((name) => name === actual);
 }

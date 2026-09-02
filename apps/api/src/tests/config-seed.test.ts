@@ -34,9 +34,8 @@ const PROVIDER_FAMILIES = [
   },
 ] as const;
 
-// Env provisions an install once, on first boot, and is never a live source
-// afterwards. Each provider reads only its own prefix, so a block can never be
-// filled from another provider's variables.
+// Env provisions an install once on first boot and is never a live source after.
+// Each provider reads only its own prefix, so no block borrows another's.
 describe("first-boot config seed from the environment", () => {
   let cleanupDb: () => void;
 

@@ -72,8 +72,7 @@ export async function deleteAlertSource(kind: AlertSourceKind): Promise<void> {
 }
 
 /* Compared in constant time against every sender rather than looked up by
-   index: an indexed lookup on a secret leaks timing. Only the hash is read,
-   never a stored credential. */
+   index, because an indexed lookup on a secret leaks timing. */
 export async function findAlertSourceKindByToken(
   plaintext: string,
 ): Promise<string | null> {

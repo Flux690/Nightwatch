@@ -1,9 +1,8 @@
 import { transcriptItemKey } from "@nightwarden/shared";
 import type { TranscriptItem } from "./types.js";
 
-/* One list from the two the session holds. Lifted out of the column because the
-   parent decides which items dock above the input, and it cannot pick from a
-   list it never sees. */
+/* Lifted out of the column because the parent decides which items dock above
+   the input, and it cannot pick from a list it never sees. */
 
 export interface MergeInput {
   persisted: TranscriptItem[];

@@ -28,9 +28,8 @@ export interface SandboxLog {
   warn(fields: Record<string, unknown>, message: string): void;
 }
 
-// Provisioning progress for the frontend: creation is slow (clone, image pull,
-// container start, dependency install) and would otherwise look like a hang on
-// the first repo tool.
+// Provisioning progress for the frontend: creation is slow enough to look like
+// a hang on the first repo tool without it.
 type SandboxStage = "cloning" | "starting" | "installing" | "ready" | "failed";
 
 interface PullRequestRef {
@@ -419,9 +418,8 @@ export async function teardownAll(reason: TeardownReason): Promise<void> {
   );
 }
 
-/* The same rule from the other side: nothing is dropped, so nothing needs
-   pushing. Containers cannot outlive the process, and the git work belongs to
-   the next boot's salvage, which has time for it. */
+/* Nothing is dropped, so nothing needs pushing here: containers cannot outlive
+   the process, and the git work belongs to the next boot's salvage. */
 export async function releaseContainers(): Promise<void> {
   const entries = [...sessions.values()];
   sessions.clear();

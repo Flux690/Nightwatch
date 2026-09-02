@@ -38,9 +38,8 @@ export async function createSession(
     .execute();
 }
 
-/* Creates the session and takes the group's queued alerts in one transaction. A
-   crash between the two would otherwise leave alerts pointing at a session
-   nothing wrote, or a session covering nothing. */
+/* One transaction, so a crash between the two cannot leave alerts pointing at a
+   session nothing wrote, or a session covering nothing. */
 export async function openSessionForGroup(
   meta: SessionMeta,
   groupKey: string,
@@ -90,9 +89,8 @@ export async function deleteSession(sessionId: string): Promise<void> {
     .execute();
 }
 
-// Raw material for the sessions queue: one row per session, its record and the
-// transcript's tail. The status is read, not computed - session/status.ts wrote
-// it on the transition that made it true.
+// Raw material for the sessions queue. The status is read rather than computed:
+// the transition that made it true wrote it.
 export interface SessionListFacts {
   sessionId: string;
   title: string;

@@ -38,9 +38,8 @@ interface CatalogSource {
   url: string;
   headers: Record<string, string>;
   describe: (data: unknown) => ModelOption[];
-  // Whether the provider serves its catalog to anyone. OpenRouter publishes
-  // its list; Anthropic answers 401 without a key. Asking anyway would report
-  // a rejected key where the truth is that none was given.
+  // OpenRouter publishes its list; Anthropic answers 401 without a key. Asking
+  // anyway would report a rejected key where none was given.
   needsKey: boolean;
 }
 
@@ -66,8 +65,7 @@ function catalogSource(
 }
 
 // Reading the catalog is also how a provider block is verified: a list coming
-// back proves the endpoint answered and, where one was needed, that the key was
-// accepted.
+// back proves the endpoint answered and that any required key was accepted.
 export async function fetchCatalog(
   provider: LLMProviderName,
   baseUrl: string | undefined,

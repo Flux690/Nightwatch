@@ -47,9 +47,8 @@ function refine(raw: string): string {
   );
 }
 
-// Fire-and-forget on its own provider: never touches the investigation's stream,
-// so it can't block or corrupt it. Failures are swallowed - the session keeps
-// its temporary title.
+// Fire-and-forget on its own provider, so it cannot block or corrupt the
+// investigation's stream. A failure leaves the temporary title in place.
 export async function generateSessionTitle(
   sessionId: string,
   source: string,

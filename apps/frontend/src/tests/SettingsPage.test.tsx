@@ -260,9 +260,8 @@ const pickModel = async (
   await user.click(await screen.findByRole("option", { name: id }));
 };
 
-// Typing in the model field opens its suggestion list over the rest of the
-// form. A real user moves on to another field, which dismisses it and leaves
-// the typed id in place.
+// Typing in the model field opens its suggestion list over the form. Moving to
+// another field dismisses it and leaves the typed id in place.
 const dismissModelList = (
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<void> => user.click(screen.getByLabelText(/^base url$/i));
@@ -721,9 +720,8 @@ describe("SettingsPage", () => {
       ).toEqual(["Select a provider", "Anthropic", "OpenRouter"]);
     });
 
-    /* A real value, not ghost text. As a placeholder it read as filled in
-       while the stored value was empty, which is how an OpenRouter key ended
-       up being sent to OpenAI's own endpoint. */
+    /* A real value, not ghost text: as a placeholder it read as filled while the
+       stored value was empty, sending an OpenRouter key to OpenAI. */
     it("fills the Base URL with the provider's own default", async () => {
       const user = userEvent.setup();
       setup();

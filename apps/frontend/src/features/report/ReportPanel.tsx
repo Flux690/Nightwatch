@@ -382,9 +382,8 @@ export function ReportPanel({
   );
   const approved = decisions.filter((call) => call.decision === "approved");
 
-  /* Drawn once per report: a second claim citing the same call names it in its
-     own sources row and redraws nothing, because one measurement read twice
-     down the page reads as two. */
+  /* Drawn once per report: a second claim citing the same call names it and
+     redraws nothing, because one measurement read twice reads as two. */
   const drawn = new Set<string>();
   const evidenceUnder = (ids: string[]): React.JSX.Element[] => {
     const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);

@@ -218,9 +218,8 @@ function makeProvider(
         signal?: AbortSignal,
         forceTool?: string,
       ): Promise<ChatResponse> => {
-        /* Checked here and not only in seed(): seed sees what the caller hands
-           over, while this is the state a real request would be built from,
-           after every appendToolResults the run has made since. */
+        /* Checked here as well as in seed(): seed sees what the caller handed
+           over, while this is the state a real request would be built from. */
         validateTranscript(messages);
         // Optional gate: park here until the test releases this turn, so timing tests
         // can act (e.g. inject an alert) mid-chat. No gate means immediate resolution.

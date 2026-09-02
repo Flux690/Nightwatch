@@ -8,8 +8,7 @@ import { findTool, executeTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 
 /* One value, so the transcript cannot say "failed" where the model was told
-   otherwise. Never throws: any fault becomes a failure result, so the run resumes
-   instead of the card wedging. */
+   otherwise. Never throws: a fault becomes a result, so the card never wedges. */
 export async function executeApprovedTool(
   pending: PendingHumanInput,
   call: { name: string; input: Record<string, unknown> },

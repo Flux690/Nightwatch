@@ -2,9 +2,8 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 
-// shared has no build of its own, so it must be inlined here. npm dependencies
-// stay external: native modules cannot be bundled, and pino resolves its
-// transports from node_modules at runtime.
+// shared has no build of its own, so it is inlined here. npm dependencies stay
+// external: native modules cannot be bundled, and pino resolves at runtime.
 const appDir = resolve(process.argv[2] ?? process.cwd());
 const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8"));
 

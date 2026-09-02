@@ -44,9 +44,8 @@ export function Shell({
   );
 }
 
-/* Navigation and the stage it pushes. What a page is made of is the route's
-   business, so nothing here reads the pathname for anything but which nav item
-   is lit. */
+/* What a page is made of is the route's business, so nothing here reads the
+   pathname for anything but which nav item is lit. */
 function ShellContent({
   children,
 }: {

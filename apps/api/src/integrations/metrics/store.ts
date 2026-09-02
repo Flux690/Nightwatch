@@ -55,9 +55,8 @@ function isMetricsRow(row: IntegrationRow): boolean {
   return (METRICS_SOURCE_KINDS as readonly string[]).includes(row.kind);
 }
 
-/* One source, whatever product it is: the kind stays one of five, so this
-   filters the kind set rather than reading a single fixed kind the way Loki
-   does. The connect route is what refuses a second. */
+/* One source whatever the product, so this filters the set of five kinds rather
+   than reading one fixed kind. The connect route refuses a second. */
 export async function metricsSourceRow(): Promise<MetricsSourceRow | null> {
   const row = (await allIntegrations()).find(isMetricsRow);
   return row === undefined ? null : toSource(row);

@@ -1,5 +1,4 @@
-// The stored form of a conversation turn, ours rather than any vendor's.
-// Adapters translate here only at the seed/snapshot boundary: in memory each
+// Adapters translate only at the seed/snapshot boundary: in memory each turn
 // keeps its native shape, which Anthropic's cache breakpoint needs stable.
 
 export interface TextPart {
@@ -69,8 +68,7 @@ export interface ToolResultPart {
   humanDecision?: HumanDecision;
 }
 
-/* Where the provider summarised the conversation to fit its window. Drawn,
-   never replayed: the block rides in the message's `native` envelope, so
+/* Drawn, never replayed: the block rides in the message's `native` envelope, so
    rebuilding from parts drops it, which is what a foreign provider needs. */
 export interface CompactionPart {
   type: "compaction";
@@ -92,9 +90,8 @@ export interface NativeEnvelope {
 export interface CanonicalMessage {
   role: "user" | "assistant";
   parts: MessagePart[];
-  // Replayed verbatim on a same-dialect resume, since signed reasoning blocks are
-  // rejected if altered. A dialect change drops it: the conversation survives a
-  // provider switch, the reasoning continuity cannot.
+  // Replayed verbatim on a same-dialect resume, since signed reasoning blocks
+  // are rejected if altered. A dialect change drops it and keeps the messages.
   native?: NativeEnvelope;
 }
 

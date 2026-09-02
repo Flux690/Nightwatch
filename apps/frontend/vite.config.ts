@@ -11,9 +11,8 @@ import { defineConfig, type Plugin } from "vite";
 
 const compress = promisify(brotliCompress);
 
-// Brotli here rather than per request: the API serves the .br beside each file,
-// so a megabyte of JS ships a quarter the size for no runtime cost. Fonts and
-// images are already compressed, and a small file gains nothing.
+// Brotli at build time rather than per request: the API serves the .br beside
+// each file, so a megabyte of JS ships a quarter the size at no runtime cost.
 function precompress(): Plugin {
   const text = /\.(?:js|css|html|svg|json)$/;
   return {

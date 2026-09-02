@@ -100,9 +100,8 @@ const start = async (): Promise<void> => {
     // Same first-boot rule for the evidence integrations, so a fresh install can
     // come up fully configured without anyone opening a browser.
     await seedIntegrationsFromEnv();
-    // Containers first (kills any still-running writer), then salvage: work orphaned
-    // by any death mode is committed and pushed here, before listen() lets a session
-    // provision over it. Best-effort throughout.
+    // Containers first, killing any still-running writer, then salvage: orphaned
+    // work is pushed here before listen() lets a session provision over it.
     try {
       const reaped = await reapOrphans();
       if (reaped > 0) {
@@ -138,9 +137,8 @@ const start = async (): Promise<void> => {
         `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed`,
       );
     }
-    /* Alerts queued when the process died are still queued, and the seats they
-       were waiting for were freed by recovery above. Nothing else would notice
-       until the next delivery arrived. */
+    /* Recovery above freed the seats these alerts were waiting for, and nothing
+       else would notice until the next delivery arrived. */
     await dispatcher.promoteQueued();
     // An alert usually clears minutes after the run that fixed it ended, so
     // something has to keep asking. Unref'd: the server holds the loop open.

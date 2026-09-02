@@ -83,9 +83,8 @@ async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
   return entries;
 }
 
-/* An id the model was issued, over a call that has answered. Both halves matter:
-   the provider's own id is never accepted, so a tool no claim may rest on cannot
-   be cited at all, and a call still running shows nothing anyone can have read. */
+/* Both halves matter: the provider's own id is never accepted, and a call still
+   running shows nothing anyone can have read. */
 async function knownCitations(
   sessionId: string,
   ids: string[],
@@ -228,9 +227,8 @@ export async function approvedWriteCount(sessionId: string): Promise<number> {
     .length;
 }
 
-/* Whether the write-up no longer covers the record. Compared against the record
-   itself rather than a clock: the stamp is written by the same transaction as the
-   report, so it cannot disagree with what the report was composed from. */
+/* Compared against the record rather than a clock: the stamp is written by the
+   same transaction as the report, so the two cannot disagree. */
 export function reportIsBehind(
   record: InvestigationRecord,
   approvedWrites: number,
@@ -244,9 +242,8 @@ export function reportIsBehind(
   );
 }
 
-/* The instant the last released write answered, which makes a later read a
-   confirmation. Only a call a person released starts that clock: a declined one
-   changed nothing and a refused one never ran. */
+/* Only a call a person released starts the clock that makes a later read a
+   confirmation: a declined one changed nothing and a refused one never ran. */
 function lastExecutedAt(calls: Map<string, ToolCall>): string | null {
   let latest: string | null = null;
   for (const entry of calls.values()) {
@@ -280,9 +277,8 @@ export async function computeConviction(
 export type RecordGap =
   { kind: "empty_record" } | { kind: "unaccounted_calls"; calls: number };
 
-/* `unaccounted` is the run's own count of evidence calls answered since its last
-   claim: the record cannot say, because a claim carries no mark of what it was
-   recorded over. */
+/* The run's own count, because the record cannot say: a claim carries no mark of
+   what it was recorded over. */
 export async function recordGaps(
   sessionId: string,
   unaccounted: number,
@@ -327,9 +323,8 @@ export async function recordHypothesis(
     sessionId,
     input.evidenceIds,
   );
-  /* All of them or none: recording what survives silently changes the claim the
-     model made, and drops a conviction from corroborated to cited without ever
-     saying so. */
+  /* All of them or none: recording what survives changes the claim the model made
+     and drops its conviction from corroborated to cited, silently. */
   if (pending.length > 0 || invented.length > 0 || kept.length === 0) {
     return {
       recorded: false,

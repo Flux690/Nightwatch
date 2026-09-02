@@ -41,9 +41,8 @@ async function seedPrometheus(): Promise<void> {
     return;
   }
 
-  /* Seeded as its own rules endpoint, which is true of Prometheus and of
-     nothing else: every other source serves rules elsewhere, and there is no
-     second environment variable to guess one from. */
+  /* Seeded as its own rules endpoint, true of Prometheus alone: every other
+     source serves rules elsewhere, and no second variable names it. */
   await saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",

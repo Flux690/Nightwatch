@@ -44,9 +44,8 @@ export interface LokiIntegrationStatus {
   validatedAt: string | null;
 }
 
-/* `forbidden` is separate from `unauthorized` because Sentry answers 403 for a
-   live token missing a scope, which the user fixes on the token rather than by
-   pasting a new one. */
+/* Separate from `unauthorized` because Sentry answers 403 for a live token
+   missing a scope, which the user fixes on the token rather than by replacing it. */
 export type SentryErrorCode =
   "network" | "unauthorized" | "forbidden" | "not_found" | "bad_response";
 

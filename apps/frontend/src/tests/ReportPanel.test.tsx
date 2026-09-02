@@ -310,9 +310,8 @@ describe("ReportPanel", () => {
       }),
     );
 
-    // The model wrote two entries and the system contributed the write between
-    // them: an action cannot be missing from a timeline the model did not
-    // author in full.
+    // The model wrote two entries and the system added the write between them,
+    // so an action cannot be missing from a timeline it did not author in full.
     expect(screen.getByText("What happened")).toBeInTheDocument();
     expect(screen.getByText("PR #482 merged")).toBeInTheDocument();
     expect(screen.getByText("RestartDockerService")).toBeInTheDocument();
@@ -380,9 +379,8 @@ describe("ReportPanel", () => {
 
     // Every claim says what it rests on, so none of them reads as unbacked.
     expect(screen.getAllByText("GetDockerStats")).toHaveLength(2);
-    // One call is one measurement: read three times down the page it reads as
-    // three, and a report that looks like more evidence than it has is worse
-    // than one that looks like less.
+    // One call is one measurement: drawn three times it reads as three, and a
+    // report looking like more evidence than it has is the worse failure.
     expect(screen.getAllByText("511 MB")).toHaveLength(1);
   });
 

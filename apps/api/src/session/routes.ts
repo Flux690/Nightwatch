@@ -98,9 +98,8 @@ export async function registerSessionRoutes(
     return await listSessionPage(limit, offset, kind);
   });
 
-  // The session answers what it is. Returning a bare transcript meant an
-  // unknown id came back as `200 []`, which the frontend drew as a real but
-  // empty session.
+  // The session answers what it is. A bare transcript returned `200 []` for an
+  // unknown id, which the frontend drew as a real but empty session.
   fastify.get<{ Params: { id: string } }>(
     "/sessions/:id",
     { preHandler: requireSession },
@@ -131,9 +130,8 @@ export async function registerSessionRoutes(
       if (record === undefined) {
         return reply.code(404).send({ error: "no report for session" });
       }
-      // Everything beside `record` is joined here rather than stored, so what
-      // the model wrote cannot disagree with what ran, what was quoted, or how
-      // well a claim is backed.
+      // Everything beside `record` is joined rather than stored, so what the
+      // model wrote cannot disagree with what ran or how well a claim is backed.
       const response: SessionReportResponse = {
         record,
         decisions: await gatedCalls(request.params.id),

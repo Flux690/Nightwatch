@@ -93,9 +93,8 @@ async function ensureDeleted(sessionId: string): Promise<void> {
   }
 }
 
-// The whole turn's results as one row, since the wire needs one message for it.
-// Written rather than left to the resumed run: the result of a command that has
-// already run is the one thing a crash must not lose.
+// The whole turn's results as one row, since the wire needs one message. Written
+// here because the result of a command that already ran must survive a crash.
 async function answeredTurn(
   sessionId: string,
   results: ToolResult[],

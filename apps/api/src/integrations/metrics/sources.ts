@@ -10,8 +10,7 @@ import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
 
 /* One stored row resolved into the addresses the API dials. Every caller asks
-   here, so nowhere else decrypts a credential or decides whether a rules API
-   exists. */
+   here, so nowhere else decrypts a credential or looks for a rules API. */
 export interface MetricsSource {
   kind: MetricsSourceKind;
   label: string;

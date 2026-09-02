@@ -86,8 +86,7 @@ export interface LLMProvider {
     forceTool?: ToolName,
   ): Promise<ChatResponse>;
   appendToolResults(results: ToolResult[]): void;
-  // A user turn that is not a tool result: the user's own message, or
-  // anything NightWarden says to the model. Distinct from a tool_result because
-  // add_context mid-approval must stay one.
+  // A user turn that is not a tool result. Distinct from one because
+  // add_context mid-approval must stay a single turn.
   appendUserMessage(message: string): void;
 }

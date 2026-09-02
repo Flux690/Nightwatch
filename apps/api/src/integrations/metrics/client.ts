@@ -2,9 +2,8 @@ import type { AmpCredential, MetricsErrorCode } from "@nightwarden/shared";
 import { describeNetworkFailure } from "../reachability.js";
 import { signedRequest } from "./sigv4.js";
 
-/* The Prometheus HTTP API, and nothing else. Every source we support speaks
-   it, so there is one client here and no per-product adapter; what varies is
-   the endpoint it is handed. */
+/* The Prometheus HTTP API and nothing else. Every source speaks it, so there is
+   one client and no per-product adapter; only the endpoint varies. */
 
 export class MetricsApiError extends Error {
   constructor(
@@ -17,9 +16,8 @@ export class MetricsApiError extends Error {
   }
 }
 
-/* One address the API dials, with its credential already resolved. `name` is
-   the product's own, used only in error text so a failure names the thing the
-   user configured rather than "the metrics source". */
+/* One address the API dials, credential already resolved. `name` appears only in
+   error text, so a failure names the product the user configured. */
 export interface MetricsEndpoint {
   url: string;
   authorization: string | null;

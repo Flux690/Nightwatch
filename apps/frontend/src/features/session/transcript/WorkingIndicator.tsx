@@ -1,8 +1,7 @@
 import React from "react";
 
-// Shown when a run is active but nothing is streaming yet, as a content-free
-// "working" signal distinct from a thinking block. The motion lives in styles.css
-// so reduced-motion can hold the dots static.
+// Shown when a run is active but nothing is streaming yet. The motion lives in
+// styles.css, so reduced-motion can hold the dots static.
 export function WorkingIndicator(): React.JSX.Element {
   return (
     <div

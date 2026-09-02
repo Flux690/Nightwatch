@@ -1,6 +1,5 @@
-// One definition for all four write tools, so the sentence the user reads on
-// the approval card cannot drift between them. `ask` tools never carry this:
-// AskUserQuestion's `question` already is the reason.
+// One definition for all four write tools, so the sentence on the approval card
+// cannot drift. AskUserQuestion carries none: its `question` is the reason.
 export const REASON_PROPERTY = {
   type: "string",
   description:

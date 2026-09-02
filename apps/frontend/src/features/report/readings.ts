@@ -1,6 +1,5 @@
-/* What a cited result holds, read from its shape rather than its tool name. A
-   tool that answers something else reads as nothing, and the caller falls back
-   to its one-line reading. */
+/* Read from a result's shape rather than its tool name. One that answers
+   something else reads as nothing, and the caller quotes its one line. */
 
 import { asRecord, numberAt, stringAt } from "@/shared/lib/toolResult";
 import { compact } from "./format.js";
@@ -38,9 +37,8 @@ function readingOf(key: string, value: number): string {
   return compact.format(value);
 }
 
-/* A content-addressed digest, whatever field it arrives in. Shown the length
-   `docker images` shows it: enough to tell two builds apart, and the rest is
-   sixty characters nobody reads dominating every row beside it. */
+/* Shown at the length `docker images` shows it: enough to tell two builds apart,
+   where the full sixty characters would dominate every row beside it. */
 const DIGEST = /^([a-z0-9]+):([0-9a-f]{32,})$/;
 
 // Carried with its date rather than a bare clock: a config table holds when
@@ -101,9 +99,8 @@ export function stateGroups(result: unknown): ReadingGroup[] {
   });
 }
 
-/* A result that carries a series has said where its measurement is, so an empty
-   one means the query matched nothing - not that the window and step it echoes
-   back are the reading. */
+/* A result carrying a series has said where its measurement is, so an empty one
+   means the query matched nothing rather than that the echo is the reading. */
 export function carriesSeries(result: unknown): boolean {
   const record = asRecord(result);
   return record !== null && Array.isArray(record["series"]);
@@ -129,9 +126,8 @@ export function isWarning(line: string): boolean {
   return !SEVERE.test(line) && WARNING.test(line);
 }
 
-// The shapes a logs result comes in: a runner's timestamped pairs, the kernel's
-// levelled records, and Loki's streams. Plain strings are a runner before it
-// stamped them, and a stored transcript still holds those.
+// Timestamped pairs, the kernel's levelled records, and Loki's streams. Plain
+// strings predate the runner stamping them, and stored transcripts hold those.
 function logLines(result: Record<string, unknown>): string[] {
   const lines = result["lines"];
   if (Array.isArray(lines)) {

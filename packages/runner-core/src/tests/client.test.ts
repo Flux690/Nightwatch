@@ -200,9 +200,8 @@ describe("runner WS client", () => {
   });
 
   describe("reconnect backoff", () => {
-    // A runner the API accepts and then rejects opens successfully every time, so
-    // clearing the backoff on open would pin it to the first rung and retry every
-    // two seconds forever.
+    // A runner the API accepts then rejects opens every time, so clearing backoff
+    // on open would pin it to the first rung and retry every two seconds forever.
     it("escalates when the API keeps closing an opened connection", async () => {
       const { wss, port } = await listen();
       let opened = 0;

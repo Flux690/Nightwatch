@@ -69,8 +69,7 @@ function MessageScrollerItem({
       data-slot="message-scroller-item"
       scrollAnchor={scrollAnchor}
       /* No content-visibility: a placeholder height collapses when the item
-         scrolls in and drags the viewport with it. Thousands of rows would want
-         real virtualization, never a fabricated size. */
+         scrolls in and drags the viewport with it. */
       className={cn("min-w-0 shrink-0", className)}
       {...props}
     />

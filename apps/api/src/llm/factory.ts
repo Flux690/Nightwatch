@@ -24,9 +24,8 @@ export function createProvider(
   }
 }
 
-// Same provider as createProvider, named distinctly so tests can mock the
-// one-shot title call independently; a test that stubs only createProvider
-// leaves title generation a harmless no-op.
+// Named apart from createProvider so a test can mock the one-shot title call on
+// its own, leaving title generation a harmless no-op when it does not.
 export function createTitleProvider(
   system: string,
   config: ResolvedLLMConfig,

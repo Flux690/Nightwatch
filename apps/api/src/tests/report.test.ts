@@ -638,9 +638,8 @@ describe("the investigation record", () => {
       expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
     });
 
-    /* The other half of the same contract: the id a result carries is the id the
-       record resolves that call by, and a tool no claim may rest on carries no
-       id at all - so three calls made leave only two that can be cited. */
+    /* The id a result carries is the id the record resolves that call by, and a
+       tool no claim may rest on carries none, so three calls leave two citable. */
     it("numbers a citable result, and leaves a recording call unnumbered", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
@@ -1079,9 +1078,8 @@ describe("the investigation record", () => {
       );
     }
 
-    /* Two turns, because a claim cites a call whose result it has read, and a
-       call is only read on the turn after the one that made it. The read fails
-       with no runner connected, which still answers and so is still citable. */
+    /* Two turns, because a call is only read on the turn after the one that made
+       it. The read fails with no runner connected, which still answers. */
     function recordTurn(verdict: string, statement: string) {
       const n = randomUUID();
       return [
@@ -1195,9 +1193,8 @@ describe("the investigation record", () => {
       expect(drawn).not.toContain("<alert>");
     });
 
-    /* Refused where the claim is made rather than caught at the finish line: a
-       call that has not answered shows nothing the model can have read, and by
-       the time the gate ran the turn that could fix it was over. */
+    /* Refused where the claim is made rather than at the finish line, because by
+       the time the gate runs the turn that could fix it is over. */
     it("refuses a claim citing a call that has not answered", async () => {
       const sessionId = randomUUID();
       await seedAlertSession(
@@ -1290,9 +1287,8 @@ describe("the investigation record", () => {
       expect((await getRecord(sessionId))!.hypotheses).toHaveLength(1);
       expect((await getRecord(sessionId))!.report).toBeNull();
 
-      /* One report turn, not two. The same request against the same ceiling
-         truncates identically, so a second attempt only writes a second failure
-         for the reader to scroll past. */
+      /* One report turn, not two: the same request against the same ceiling
+         truncates identically, so a retry only writes a second failure. */
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
@@ -1381,9 +1377,8 @@ describe("the investigation record", () => {
       });
     });
 
-    /* What a report covers is stamped by the same write that stores it, so a
-       turn that failed to write leaves the last good one's coverage standing -
-       and the next run sees the record has moved past it. */
+    /* Coverage is stamped by the write that stores the report, so a failed turn
+       leaves the last good one standing and the next run sees the gap. */
     it("rewrites for a follow-up run whose own write-up was refused", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>

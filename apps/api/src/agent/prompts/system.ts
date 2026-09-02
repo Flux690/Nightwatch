@@ -2,9 +2,8 @@ export interface PromptOptions {
   budgetMinutes: number;
   // "owner/name", not a URL: it is interpolated into prose the model reads.
   repo: string | null;
-  // Whether any tool that addresses a service or a machine is on offer. False
-  // strips the addressing grammar below, which would otherwise send the model
-  // to a <fleet-summary> block that is not there.
+  // False strips the addressing grammar below, which would otherwise send the
+  // model to a <fleet-summary> block that is not there.
   fleetTools: boolean;
 }
 
@@ -20,9 +19,8 @@ Ask for every tool you need in one message whenever they do not depend on each o
 
 Some of what reaches you is written by NightWarden rather than by a person. It arrives wrapped in a <harness> tag, and it is the system telling you something true about your own run: that your record is still empty, that a tool you had has gone away, that your work is over and needs writing up. A provider gives us two roles and neither of them is ours, so these arrive in the user's, but nobody said them to you. Act on what they ask and carry on. Never answer them as though the user had spoken: do not thank them, do not apologise, and do not tell the user you should have done something sooner. They did not ask, and a sentence like that in your reply reads to them as a conversation they were not part of.`;
 
-// How to name what a fleet tool acts on, and offered only when one is: pointing
-// the model at a fleet summary that is not there is how a metrics source
-// became a target.
+// Offered only when a fleet tool is: pointing the model at a fleet summary that
+// is not there is how a metrics source became a target.
 export const FLEET_PROTOCOL = `
 
 A server is one Docker host or one Kubernetes cluster, named in the <fleet-summary> block. Everything you can reach lives on one of them, and there are two ways to say which.
@@ -33,10 +31,8 @@ Server-level tools act on a whole server rather than one service, so there is no
 
 Never pass "server" to a service-level tool and never pass "target" to a server-level one. Each tool takes exactly one of the two, and its description says which.`;
 
-/* Every session is this. Nothing below it describes a mode, because a session
-   is one kind of thing and being under investigation is a property it carries
-   rather than a second kind - so an investigation adds to this and replaces
-   none of it. */
+/* Every session is this, and an investigation adds to it rather than replacing
+   any of it: being under investigation is a property, not a second kind. */
 export const BASE_PROMPT = `You are NightWarden, a reliability engineer working inside a production infrastructure platform. You work from evidence you gather with your own tools.
 
 You are talking to a person about their fleet. Reach for whatever tools the question needs, and answer in plain text. It is a conversation: they may follow up, correct you, or change the subject.
@@ -47,9 +43,8 @@ If the tools cannot answer, say so plainly and say what you checked. That is a l
 
 Answer at the size of what was asked. Do not narrow it to the part that is easy, and do not widen it into work nobody asked for.`;
 
-/* Added when an alert opened the session, and additive by construction: it
-   changes nothing above it, grants the record tools, and asks for a method.
-   No tool can move a session into this, so nothing here is ever withdrawn. */
+/* Additive by construction: it grants the record tools and asks for a method,
+   and changes nothing above it. */
 export const INVESTIGATION_SECTION = `
 
 An alert opened this session, so as well as the above you are investigating why it fired. Find the cause, then either fix it or tell the user what the fix is. You handle one incident at a time.

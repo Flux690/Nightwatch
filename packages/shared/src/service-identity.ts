@@ -16,9 +16,8 @@ export interface KubernetesWorkloadIdentity {
 
 export type K8sWorkloadKind = "Deployment" | "StatefulSet" | "DaemonSet";
 
-// The Compose labels naming a durable service, or null when absent. Docker sets the
-// dotted form; cAdvisor and Prometheus each re-render the same two labels their own
-// way, so all three spellings are read.
+// Docker sets the dotted form, and cAdvisor and Prometheus each re-render the
+// same two labels their own way, so all three spellings are read.
 export function composeServiceLabels(
   labels: Record<string, string | undefined> | undefined,
 ): { project: string; service: string } | null {

@@ -108,9 +108,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
   /* A count rather than a flag: the card is still clickable once the report is
      already the view, where the swap is a no-op and re-aiming is the answer. */
   const [openRequests, setOpenRequests] = useState(0);
-  /* Latched at the first load and never re-read: the run ending must not move the
-     reader. Set during render rather than from an effect, so the first painted
-     frame is already the right one. */
+  /* Latched at first load and never re-read, because a run ending must not move
+     the reader. Set during render, so the first painted frame is right. */
   const followedRun = useRef<boolean | null>(null);
   if (followedRun.current === null && session !== null) {
     followedRun.current = session.running;
@@ -216,10 +215,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <QueueStepper sessionId={sessionId} />
-            {/* The stepper moves between records and this pair changes the shape
-                of the one on screen, so a gap separates them rather than reading
-                as a third stepper button. It cannot sit in the rail: closed, the
-                rail is zero wide and has nothing to click. */}
+            {/* A gap separates this pair from the stepper, which moves between
+                records rather than reshaping the one on screen. */}
             {!working && chatRailOpen && (
               <Button
                 variant="ghost"
@@ -237,10 +234,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
                 )}
               </Button>
             )}
-            {/* Ghost lights itself on aria-expanded so a menu trigger stays lit
-                while its menu is open. This one is not a trigger: expanded means
-                the rail is open, which is the resting state, so the light would
-                never go out. The attribute stays, the fill does not. */}
+            {/* Ghost lights itself on aria-expanded, which here means the rail is
+                open and resting, so the attribute stays and the fill does not. */}
             {/* Hidden while the chat covers the stage: there is no rail to
                 collapse then, so Minimize is the one exit. */}
             {!working && !chatExpanded && (

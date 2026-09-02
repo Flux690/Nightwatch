@@ -58,9 +58,8 @@ async function write(
     .execute();
 }
 
-// One recorded act, read-modify-write in a transaction so two calls in the same
-// turn cannot lose each other's write. `value` carries back whatever the caller
-// needs to know about the row it just appended.
+// Read-modify-write in a transaction, so two calls in the same turn cannot lose
+// each other's write.
 export function appendHypothesis<T>(
   sessionId: string,
   apply: (record: InvestigationRecord) => {

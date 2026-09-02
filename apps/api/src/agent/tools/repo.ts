@@ -157,9 +157,8 @@ async function workspaceOptionsFor(
   }
 }
 
-// The sentence the model reads and the class the frontend renders are decided
-// together: a message that says "reconnect the token" while the class says
-// "expected miss" would be two answers to one question.
+// Decided together, because a message saying "reconnect the token" beside a
+// class saying "expected miss" gives two answers to one question.
 function corrective(err: unknown): {
   content: string;
   toolOutcome: ToolOutcome;
@@ -240,9 +239,8 @@ function badInput(message: string): ToolExecuteResult {
   return { content: message, toolOutcome: "system" };
 }
 
-// PR body section order (model text, then incident context, files) is host
-// policy. The session reference is plain text: a link would have to be built
-// from PUBLIC_URL, which is the operator's address and not GitHub's to reach.
+// The session reference stays plain text: a link would come from PUBLIC_URL,
+// which is the operator's address and not GitHub's to reach.
 async function composePrBody(
   sessionId: string,
   branch: string,

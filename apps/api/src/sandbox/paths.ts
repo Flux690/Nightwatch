@@ -2,9 +2,8 @@ import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { PathEscapeError } from "./errors.js";
 
-/* The canonical name for a file in the repository: validated, normalized, still
-   relative. Security-critical - file handlers run on the API host against the
-   bind-mounted workspace, so an escaping path would reach the host. */
+/* Security-critical: file handlers run on the API host against the bind-mounted
+   workspace, so a path that escapes would reach the host. */
 export function repoKey(repoRelative: string): string {
   if (repoRelative.length === 0 || repoRelative.includes("\0")) {
     throw new PathEscapeError(repoRelative);

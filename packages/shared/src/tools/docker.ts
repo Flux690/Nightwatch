@@ -23,9 +23,8 @@ export interface DockerServiceListResult {
   containers: DockerContainerInstance[];
 }
 
-// since/until are ISO 8601, named as the Docker API and kubectl name them;
-// absent means the engine's default. contains/excludes are the caller's filter
-// against whole lines, because neither engine can filter server-side.
+// since/until are ISO 8601 and absent means the engine's default.
+// contains/excludes filter whole lines, because no engine filters server-side.
 export interface DockerLogsInput {
   service: DockerServiceIdentity;
   tailLines?: number;
