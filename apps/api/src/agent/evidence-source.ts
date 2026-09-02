@@ -5,6 +5,7 @@ import { K8S_TOOLS } from "./tools/kubernetes.js";
 import { LOKI_TOOLS } from "./tools/loki.js";
 import { METRICS_TOOLS } from "./tools/metrics.js";
 import { REPO_TOOLS } from "./tools/repo.js";
+import { SENTRY_TOOLS } from "./tools/sentry.js";
 import type { Tool } from "./tools/types.js";
 import type { EvidenceKind } from "@nightwarden/shared";
 
@@ -18,6 +19,7 @@ const EVIDENCE_SOURCES: ReadonlyArray<readonly [string, Tool[]]> = [
   ["github", GITHUB_TOOLS],
   ["metrics", METRICS_TOOLS],
   ["loki", LOKI_TOOLS],
+  ["sentry", SENTRY_TOOLS],
 ];
 
 const BY_TOOL = new Map(

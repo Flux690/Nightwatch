@@ -47,6 +47,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Fixed
 
+- **A Sentry result can be cited, so an exception or a release can support a claim.** The five Sentry tools answered and were rendered, but were never issued an evidence id, and a hypothesis needs at least one citation - so a cause found in a stack trace or a release timeline could not be recorded at all unless something else happened to back it. Sentry also now counts as its own evidence family, so a claim resting on Sentry plus metrics or logs reads as corroborated rather than cited. — `0.4.2`
+
 - The log tools no longer claim to filter down to error and warning lines. They never did: the newest lines are read and only your own `contains` and `excludes` narrow them. An agent told otherwise read a thin result as a quiet service. — `0.3.171` (`f49f9c8`)
 - `warningsOnly` on `GetK8sEvents` now reaches the cluster. The runner's dispatch dropped it, so asking for Normal events silently returned Warnings only. — `0.3.171` (`f49f9c8`)
 - `filterLevel` on `GetHostDmesg` now selects a severity: `err` returns errors alone and `warn` returns errors and warnings. Both returned the same two levels before. — `0.3.171` (`f49f9c8`)
