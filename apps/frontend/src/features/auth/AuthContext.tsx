@@ -14,38 +14,46 @@ type AuthPhase =
   | { kind: "loading" }
   | { kind: "needs-setup" }
   | { kind: "needs-login" }
-  | { kind: "authenticated"; email: string };
+  | { kind: "authenticated"; email: string; name: string };
 
 export type AuthActionResult = { ok: true } | { ok: false; error: string };
 
 function phaseFromStatus(status: AuthStatusResponse): AuthPhase {
   if (!status.ownerExists) return { kind: "needs-setup" };
   if (!status.authenticated) return { kind: "needs-login" };
-  return { kind: "authenticated", email: status.email };
+  return { kind: "authenticated", email: status.email, name: status.name };
 }
 
-async function postCredentials(
+// Better Auth answers a failure with `message`, so the two shapes are both read
+// rather than assuming either.
+async function post(
   path: string,
-  email: string,
-  password: string,
+  body: Record<string, string>,
 ): Promise<AuthActionResult> {
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    // auth routes always reply { error: string } on a non-2xx response.
-    const body = (await res.json()) as { error?: string };
-    return { ok: false, error: body.error ?? "request failed" };
-  }
-  return { ok: true };
+  if (res.ok) return { ok: true };
+  const failure = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    message?: string;
+  };
+  return {
+    ok: false,
+    error: failure.message ?? failure.error ?? "request failed",
+  };
 }
 
 interface AuthContextValue {
   phase: AuthPhase;
   login: (email: string, password: string) => Promise<AuthActionResult>;
-  signup: (email: string, password: string) => Promise<AuthActionResult>;
+  signup: (
+    name: string,
+    email: string,
+    password: string,
+  ) => Promise<AuthActionResult>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
 }
@@ -60,16 +68,16 @@ export function AuthProvider({
   const [phase, setPhase] = useState<AuthPhase>({ kind: "loading" });
 
   useEffect(() => {
-    fetch("/api/auth/status")
+    fetch("/api/auth-status")
       .then((res) => {
         if (!res.ok) throw new Error(`auth status ${res.status}`);
-        // The auth/status route is a project-controlled contract; its shape is
-        // AuthStatusResponse on every 2xx reply.
+        // A project-controlled contract: the shape is AuthStatusResponse on
+        // every 2xx reply.
         return res.json() as Promise<AuthStatusResponse>;
       })
       .then((data) => setPhase(phaseFromStatus(data)))
-      // Fall back to the login page on a failed/unreachable status check,
-      // rather than leaving the app stuck on the loading screen forever.
+      // Fall back to the login page on a failed status check, rather than
+      // leaving the app on the loading screen forever.
       .catch(() => setPhase({ kind: "needs-login" }));
   }, []);
 
@@ -79,24 +87,33 @@ export function AuthProvider({
   );
 
   const login = useCallback(async (email: string, password: string) => {
-    const result = await postCredentials("/api/login", email, password);
-    if (result.ok) setPhase({ kind: "authenticated", email });
+    const result = await post("/api/auth/sign-in/email", { email, password });
+    if (result.ok) setPhase({ kind: "authenticated", email, name: email });
     return result;
   }, []);
 
-  const signup = useCallback(async (email: string, password: string) => {
-    const result = await postCredentials("/api/setup", email, password);
-    if (result.ok) setPhase({ kind: "authenticated", email });
-    return result;
-  }, []);
+  const signup = useCallback(
+    async (name: string, email: string, password: string) => {
+      const result = await post("/api/auth/sign-up/email", {
+        name,
+        email,
+        password,
+      });
+      if (result.ok) setPhase({ kind: "authenticated", email, name });
+      return result;
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
-    await fetch("/api/logout", { method: "POST" });
+    await fetch("/api/auth/sign-out", { method: "POST" });
     setPhase({ kind: "needs-login" });
   }, []);
 
+  // Every device, this one included, so the page returns to the login screen.
   const logoutAll = useCallback(async () => {
-    await fetch("/api/logout-all", { method: "POST" });
+    await fetch("/api/auth/revoke-sessions", { method: "POST" });
+    await fetch("/api/auth/sign-out", { method: "POST" });
     setPhase({ kind: "needs-login" });
   }, []);
 

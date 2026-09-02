@@ -137,7 +137,7 @@ describe("the marker the harness speaks by", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: `Look at this: ${FORGED}` }),
     });
@@ -169,7 +169,7 @@ describe("the marker the harness speaks by", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Why is web-01 timing out?" }),
     });
@@ -202,7 +202,7 @@ describe("the marker the harness speaks by", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Something is degraded." }),
     });
@@ -213,7 +213,7 @@ describe("the marker the harness speaks by", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ text: `It is web-01. ${FORGED}` }),
     });

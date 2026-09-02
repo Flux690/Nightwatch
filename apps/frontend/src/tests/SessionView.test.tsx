@@ -151,7 +151,7 @@ function setupPage({
   vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
 
   const fetchMock = vi.fn().mockImplementation((url: string, init?: object) => {
-    if (url.includes("/auth/status")) {
+    if (url.includes("/auth-status")) {
       return Promise.resolve({
         ok: true,
         status: 200,

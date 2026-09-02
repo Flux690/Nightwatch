@@ -1,107 +1,52 @@
-import { hash, verify } from "argon2";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import { fromNodeHeaders } from "better-auth/node";
+import type { FastifyInstance } from "fastify";
 import type { AuthStatusResponse } from "@nightwarden/shared";
-import {
-  mintSession,
-  requireSession,
-  isAuthenticated,
-  cookieHeader,
-} from "./session.js";
-import {
-  bumpLoginVersion,
-  getUserCredentials,
-  getLoginVersion,
-  saveUser,
-} from "./user-store.js";
-import { createCredentialRateLimiter } from "./rate-limit.js";
+import { getDb } from "../db.js";
+import { getAuth } from "./instance.js";
+import { currentUser } from "./session.js";
 
-const MIN_PASSWORD = 12;
-
-function isHttps(request: FastifyRequest): boolean {
-  return request.protocol === "https";
+async function ownerExists(): Promise<boolean> {
+  const row = await getDb().selectFrom("user").select("id").executeTakeFirst();
+  return row !== undefined;
 }
 
 export async function registerAuthRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  const dummyHash = await hash("nightwarden-dummy-placeholder");
-  const checkSetupRateLimit = createCredentialRateLimiter();
-  const checkLoginRateLimit = createCredentialRateLimiter();
-
-  fastify.post<{ Body: { email?: string; password?: string } }>(
-    "/setup",
-    async (request, reply) => {
-      if (await getUserCredentials()) {
-        return reply.code(409).send({ error: "setup already complete" });
-      }
-      if (!checkSetupRateLimit(request.ip)) {
-        return reply
-          .code(429)
-          .send({ error: "too many attempts, try again later" });
-      }
-      const { email, password } = request.body ?? {};
-      if (!email || !password) {
-        return reply
-          .code(400)
-          .send({ error: "email and password are required" });
-      }
-      if (password.length < MIN_PASSWORD) {
-        return reply
-          .code(400)
-          .send({ error: "password must be at least 12 characters" });
-      }
-      const userHash = await hash(password);
-      await saveUser(email, userHash);
-      const cookie = await mintSession(await getLoginVersion());
-      reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
-      return reply.code(200).send({ ok: true });
+  /* Better Auth owns every path beneath /api/auth, which is its own default
+     basePath, so sign-in, sign-out and change-password need no route of ours. */
+  fastify.route({
+    method: ["GET", "POST"],
+    url: "/auth/*",
+    async handler(request, reply) {
+      const url = new URL(
+        request.url,
+        `${request.protocol}://${request.headers.host ?? "localhost"}`,
+      );
+      const response = await getAuth().handler(
+        new Request(url, {
+          method: request.method,
+          headers: fromNodeHeaders(request.headers),
+          ...(request.body !== undefined &&
+            request.body !== null && { body: JSON.stringify(request.body) }),
+        }),
+      );
+      reply.status(response.status);
+      response.headers.forEach((value, key) => reply.header(key, value));
+      return reply.send(response.body ? await response.text() : null);
     },
-  );
-
-  fastify.post<{ Body: { email?: string; password?: string } }>(
-    "/login",
-    async (request, reply) => {
-      if (!checkLoginRateLimit(request.ip)) {
-        return reply
-          .code(429)
-          .send({ error: "too many attempts, try again later" });
-      }
-      const { email, password } = request.body ?? {};
-      const user = await getUserCredentials();
-      const hashToVerify = user?.hash ?? dummyHash;
-      const valid = await verify(hashToVerify, password ?? "");
-      if (!user || user.email !== email || !valid) {
-        return reply.code(401).send({ error: "invalid credentials" });
-      }
-      const cookie = await mintSession(await getLoginVersion());
-      reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
-      return reply.code(200).send({ ok: true });
-    },
-  );
-
-  fastify.post("/logout", async (_request, reply) => {
-    reply.header(
-      "Set-Cookie",
-      "nw_auth=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-    );
-    return reply.code(200).send({ ok: true });
   });
 
-  fastify.post(
-    "/logout-all",
-    { preHandler: requireSession },
-    async (_request, reply) => {
-      await bumpLoginVersion();
-      return reply.code(200).send({ ok: true });
-    },
-  );
-
-  fastify.get("/auth/status", async (request): Promise<AuthStatusResponse> => {
-    const user = await getUserCredentials();
-    if (!user) return { ownerExists: false };
-    if (!(await isAuthenticated(request))) {
-      return { ownerExists: true, authenticated: false };
-    }
-    return { ownerExists: true, authenticated: true, email: user.email };
+  // Hyphenated so it cannot be swallowed by the catch-all above.
+  fastify.get("/auth-status", async (request): Promise<AuthStatusResponse> => {
+    if (!(await ownerExists())) return { ownerExists: false };
+    const user = await currentUser(request);
+    if (!user) return { ownerExists: true, authenticated: false };
+    return {
+      ownerExists: true,
+      authenticated: true,
+      email: user.email,
+      name: user.name,
+    };
   });
 }

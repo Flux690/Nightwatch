@@ -23,16 +23,15 @@ import { useTempDb } from "./temp-db.js";
 // named below has to refuse an anonymous caller.
 const PUBLIC: ReadonlyArray<{ route: string; why: string }> = [
   {
-    route: "POST /api/setup",
-    why: "creates the first owner, before any session",
-  },
-  { route: "POST /api/login", why: "is how a session is obtained" },
-  {
-    route: "POST /api/logout",
-    why: "clears a cookie and must work without one",
+    route: "GET /api/auth/*",
+    why: "Better Auth's own surface, which sign-in must reach without a session",
   },
   {
-    route: "GET /api/auth/status",
+    route: "POST /api/auth/*",
+    why: "the same, and where sign-up and sign-in are answered",
+  },
+  {
+    route: "GET /api/auth-status",
     why: "answers whether an owner exists at all",
   },
   { route: "POST /api/alerts/ingest", why: "verifies its own minted token" },

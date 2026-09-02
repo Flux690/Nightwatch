@@ -65,7 +65,7 @@ describe("continue-request interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "Take your time." }),
       });
@@ -87,7 +87,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "end" }),
     });
@@ -104,7 +104,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Investigate the service." }),
     });
@@ -146,7 +146,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });
@@ -163,7 +163,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Continue test." }),
     });
@@ -190,7 +190,7 @@ describe("continue-request interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({}),
       },
@@ -228,7 +228,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "End test." }),
     });
@@ -250,7 +250,7 @@ describe("continue-request interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "reject" }),
       },
@@ -287,7 +287,7 @@ describe("continue-request interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Durability test." }),
     });
@@ -316,7 +316,7 @@ describe("continue-request interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({}),
       },

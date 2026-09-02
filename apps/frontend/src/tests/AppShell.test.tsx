@@ -132,7 +132,7 @@ function setup({
   };
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (url.includes("/auth/status")) {
+    if (url.includes("/auth-status")) {
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -141,6 +141,7 @@ function setup({
             ownerExists: true,
             authenticated: true,
             email: OWNER_EMAIL,
+            name: "Admin",
           }),
       });
     }

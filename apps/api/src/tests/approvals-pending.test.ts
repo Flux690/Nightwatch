@@ -97,7 +97,7 @@ describe("a suspended session serves its pending row with its transcript", async
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message }),
     });
@@ -106,14 +106,14 @@ describe("a suspended session serves its pending row with its transcript", async
 
   async function listSessions(): Promise<SessionListRow[]> {
     const r = await fetch(`http://127.0.0.1:${port}/api/sessions?kind=chat`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
+      headers: { Cookie: `${SESSION}` },
     });
     return ((await r.json()) as SessionListPage).rows;
   }
 
   async function getTranscript(id: string): Promise<TranscriptItem[]> {
     const r = await fetch(`http://127.0.0.1:${port}/api/sessions/${id}`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
+      headers: { Cookie: `${SESSION}` },
     });
     return ((await r.json()) as SessionDetail).transcript;
   }
@@ -131,7 +131,7 @@ describe("a suspended session serves its pending row with its transcript", async
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });

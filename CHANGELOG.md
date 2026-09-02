@@ -12,6 +12,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Added
 
+- **You can change your password in the app, and see which devices are signed in.** Settings → Account now shows the account you are signed in as, a change-password form, and a list of signed-in browsers with a Revoke button on each. Changing your password signs out every other device. Previously there was no way to change a password at all: the only documented recovery was wiping the volume and setting the install up again. — `0.5.0`
+
 - **Sentry, as an evidence source.** Connect it under Integrations with a base URL, your organization slug and an auth token carrying `event:read` and `project:read`; both scopes are probed before the connection is saved, so a token missing one is refused with the scope named rather than failing mid-incident. Investigations gain five read-only tools: search the issues around the alert, read one issue's latest event with its stack trace, break an issue down by a tag such as `server_name`, list releases with how long before or after the alert each was deployed, and list the commits in a release with the pull request and Sentry's suspect-commit marker. Self-hosted Sentry and sentry.io both work. Nothing is written back to Sentry. — `0.4.0`
 
 - **Upgrading no longer deletes your database.** Schema changes now ship as migrations the API applies on boot, each in its own transaction, and it refuses to start rather than serve a half-migrated schema. Nothing to run by hand. — `0.3.174` (`c306689`)
@@ -19,6 +21,10 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - **The API image now carries the licence text of every package bundled into the frontend**, served at `/THIRD-PARTY-LICENSES.txt` and written at build time from what Vite actually bundles. Vite inlines those packages into the browser assets, so unlike an installed dependency their own licence files never reached the image. The README's License section now names where every set of terms lives. — `0.3.173` (`f9923f8`)
 
 ### Changed
+
+- **Sign-in is handled by Better Auth, and sessions are rows rather than signed cookies.** Signing out one device now ends that device's session alone, and a revoked session stops working immediately instead of when its cookie expires. The first-boot setup form asks for your name as well as an email and password, because that name is what an approval record will carry. **Your existing owner account does not survive this upgrade**: the schema for accounts changed, so an install that had one comes back to the setup screen and creates it again. Nothing else in the database is touched. — `0.5.0`
+
+- **The one secret is now two, and they fail apart.** `secret.key` encrypts stored credentials; a new `auth.key` beside it signs sessions. Previously a single value did both, so deleting it both signed everyone out and made every stored API key unreadable. Both are generated on first boot and can be set with `NIGHTWARDEN_SECRET_KEY` and `NIGHTWARDEN_AUTH_SECRET`. Existing installs keep their `secret.key`, so stored credentials are unaffected. — `0.5.0`
 
 - **The licence is the GNU Affero General Public License v3.0 again**, replacing FCL-1.0-ALv2. NightWarden is open source: you may run it for any purpose, including commercially, and the only obligation is the AGPL's own - if you run a modified version as a network service, its users may ask you for the source. The Fair Core License was adopted to prevent a competitor hosting NightWarden, which the AGPL does not prevent; it also excluded the project from the CNCF landscape and from every distribution that requires an OSI-approved licence, which is a real cost against a theoretical risk. — `0.4.1`
 

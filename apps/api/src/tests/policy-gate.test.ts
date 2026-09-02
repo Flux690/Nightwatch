@@ -161,7 +161,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "List containers." }),
     });
@@ -213,7 +213,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Restart the service." }),
     });
@@ -240,7 +240,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });
@@ -271,7 +271,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service degraded." }),
     });
@@ -298,7 +298,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
@@ -356,7 +356,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Investigate and fix." }),
     });
@@ -384,7 +384,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           text: "Yes, recurring daily",
@@ -412,7 +412,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },

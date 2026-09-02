@@ -166,7 +166,7 @@ export async function harness(options: HarnessOptions = {}): Promise<Harness> {
     server,
     port,
     session,
-    headers: { cookie: `nw_auth=${session}` },
+    headers: { cookie: `${session}` },
     runners,
     // The common case is one, and naming it saves every test an index.
     get runner() {

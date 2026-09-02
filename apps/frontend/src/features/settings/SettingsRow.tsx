@@ -1,5 +1,5 @@
 import { Card } from "@/shared/ui/card";
-import { FieldLabel } from "@/shared/ui/field";
+import { FieldLabel, FieldTitle } from "@/shared/ui/field";
 import { SectionHeading } from "@/shared/ui/Page";
 import { cn } from "@/shared/lib/utils";
 
@@ -12,6 +12,9 @@ interface SettingsRowProps {
   stacked?: boolean;
   // Drops the rule below, for a row the next one belongs to.
   joined?: boolean;
+  /* `label for` may only name a form control, so a row holding a fact, a list
+     or a disclosure titles itself and the content points at its id. */
+  titleOnly?: boolean;
   children: React.ReactNode;
 }
 
@@ -21,6 +24,7 @@ export function SettingsRow({
   description,
   stacked = false,
   joined = false,
+  titleOnly = false,
   children,
 }: SettingsRowProps): React.JSX.Element {
   return (
@@ -32,7 +36,11 @@ export function SettingsRow({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <FieldLabel htmlFor={controlId}>{title}</FieldLabel>
+        {titleOnly ? (
+          <FieldTitle id={`${controlId}-label`}>{title}</FieldTitle>
+        ) : (
+          <FieldLabel htmlFor={controlId}>{title}</FieldLabel>
+        )}
         {description !== undefined && (
           <p className="text-sm text-muted-foreground">{description}</p>
         )}

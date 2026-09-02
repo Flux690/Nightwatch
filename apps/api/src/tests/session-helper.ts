@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { NormalizedAlert, SessionMeta } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
-import { mintSession } from "../auth/session.js";
+import { getAuth } from "../auth/instance.js";
+import { getDb } from "../db.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { dispatcher } from "../dispatcher.js";
 import { enqueueAlerts } from "../session/alerts-store.js";
@@ -55,8 +56,25 @@ export async function seedChatSession(
   await createSession(buildSessionMeta(sessionId, null, message));
 }
 
-// Returns a valid nw_auth cookie for the given loginVersion (default 0, matching a fresh
-// temp DB). Usage: headers: { cookie: `nw_auth=${await mintTestSession()}` }.
-export async function mintTestSession(loginVersion = 0): Promise<string> {
-  return await mintSession(loginVersion);
+/* A real signed-in session, minted the way production does: the owner is created
+   through the signup door, so the cookie is one Better Auth actually issued. */
+export async function mintTestSession(): Promise<string> {
+  const auth = getAuth();
+  const body = {
+    email: "owner@example.test",
+    password: "a-long-enough-password",
+    name: "Owner",
+  };
+  const existing = await getDb()
+    .selectFrom("user")
+    .select("id")
+    .executeTakeFirst();
+  const response = existing
+    ? await auth.api.signInEmail({ body, asResponse: true })
+    : await auth.api.signUpEmail({ body, asResponse: true });
+  // Returned as a Cookie request header, which is what every caller sends back.
+  return response.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
 }

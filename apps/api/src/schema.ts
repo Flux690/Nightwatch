@@ -8,6 +8,9 @@ export interface Database {
   config: ConfigTable;
   provider_config: ProviderConfigTable;
   user: UserTable;
+  auth_session: AuthSessionTable;
+  account: AccountTable;
+  verification: VerificationTable;
   integrations: IntegrationsTable;
   sessions: SessionsTable;
   alerts: AlertsTable;
@@ -56,11 +59,65 @@ interface ProviderConfigTable {
   updated_at: string;
 }
 
+/* The four tables below are Better Auth's, shaped by what its own getMigrations
+   emits. It writes dates as ISO strings and booleans as 0/1. */
 interface UserTable {
   id: string;
-  email: string | null;
-  hash: string | null;
-  login_version: Generated<number>;
+  name: string;
+  email: string;
+  email_verified: number;
+  image: string | null;
+  created_at: string;
+  updated_at: string;
+  // The admin plugin's. It stamps 'user' on signup, so the first owner is
+  // raised to 'admin' by a create hook rather than by this column's default.
+  role: string | null;
+  banned: number | null;
+  ban_reason: string | null;
+  ban_expires: string | null;
+}
+
+// Renamed from Better Auth's `session`, which would otherwise sit one letter
+// from `sessions`, the agent's own.
+interface AuthSessionTable {
+  id: string;
+  expires_at: string;
+  token: string;
+  created_at: string;
+  updated_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  user_id: string;
+  impersonated_by: string | null;
+}
+
+// One row per authentication method on a user. Email and password is a row with
+// provider_id 'credential' holding the argon2id hash; SSO would add a second.
+interface AccountTable {
+  id: string;
+  issuer: string;
+  account_id: string;
+  provider_id: string;
+  user_id: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  id_token: string | null;
+  access_token_expires_at: string | null;
+  refresh_token_expires_at: string | null;
+  scope: string | null;
+  password: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Short-lived tokens: password resets and email verification today, and an
+// invite link when one is built.
+interface VerificationTable {
+  id: string;
+  identifier: string;
+  value: string;
+  expires_at: string;
+  created_at: string;
   updated_at: string;
 }
 

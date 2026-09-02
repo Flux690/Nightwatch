@@ -1,87 +1,39 @@
-import { SignJWT, jwtVerify } from "jose";
-import type { FastifyRequest, FastifyReply } from "fastify";
-import { getLoginVersion } from "./user-store.js";
-import { signingSecret } from "../secrets.js";
+import { fromNodeHeaders } from "better-auth/node";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { getAuth } from "./instance.js";
 
-const AUTH_COOKIE = "nw_auth";
-const SESSION_LIFETIME_S = 7 * 24 * 60 * 60;
-const REISSUE_THRESHOLD_S = 2 * 24 * 60 * 60;
-
-function signingKey(): Uint8Array {
-  return new TextEncoder().encode(signingSecret());
+export interface SignedInUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string | null;
 }
 
-export function cookieHeader(value: string, secure: boolean): string {
-  const parts = [
-    `${AUTH_COOKIE}=${value}`,
-    "HttpOnly",
-    "SameSite=Lax",
-    "Path=/",
-  ];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
-}
-
-export async function mintSession(loginVersion: number): Promise<string> {
-  const nowS = Math.floor(Date.now() / 1000);
-  return new SignJWT({ loginVersion })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt(nowS)
-    .setExpirationTime(nowS + SESSION_LIFETIME_S)
-    .sign(signingKey());
-}
-
-function extractCookieValue(header: string | undefined): string | undefined {
-  if (!header) return undefined;
-  for (const part of header.split(";")) {
-    const t = part.trim();
-    if (t.startsWith(`${AUTH_COOKIE}=`)) return t.slice(AUTH_COOKIE.length + 1);
-  }
-  return undefined;
-}
-
-// loginVersion is read once per call so a concurrent epoch bump can't be validated
-// against one value and reissued under another.
-async function verifySessionCookie(
-  cookieHeaderValue: string | undefined,
-): Promise<{ loginVersion: number; exp: number } | null> {
-  const value = extractCookieValue(cookieHeaderValue);
-  if (!value) return null;
-
-  try {
-    const { payload } = await jwtVerify(value, signingKey(), {
-      algorithms: ["HS256"],
-    });
-    const loginVersion = await getLoginVersion();
-    if (payload["loginVersion"] !== loginVersion) return null;
-    return { loginVersion, exp: payload.exp ?? 0 };
-  } catch {
-    return null;
-  }
+// Validated against the auth_session row rather than a signature alone, so a
+// revoked device stops working the moment its row is deleted.
+export async function currentUser(
+  request: FastifyRequest,
+): Promise<SignedInUser | null> {
+  const session = await getAuth().api.getSession({
+    headers: fromNodeHeaders(request.headers),
+  });
+  if (!session) return null;
+  const { id, email, name, role } = session.user;
+  return { id, email, name, role: typeof role === "string" ? role : null };
 }
 
 export async function isAuthenticated(
   request: FastifyRequest,
 ): Promise<boolean> {
-  return (await verifySessionCookie(request.headers.cookie)) !== null;
+  return (await currentUser(request)) !== null;
 }
 
+// The preHandler every authenticated route already names, so replacing what
+// backs it moved no call site.
 export async function requireSession(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const verified = await verifySessionCookie(request.headers.cookie);
-  if (!verified) {
-    await reply.code(401).send({ error: "authentication required" });
-    return;
-  }
-
-  const nowS = Math.floor(Date.now() / 1000);
-  if (verified.exp - nowS < REISSUE_THRESHOLD_S) {
-    const secure = request.protocol === "https";
-    reply.header(
-      "Set-Cookie",
-      cookieHeader(await mintSession(verified.loginVersion), secure),
-    );
-  }
+  if (await isAuthenticated(request)) return;
+  await reply.code(401).send({ error: "authentication required" });
 }

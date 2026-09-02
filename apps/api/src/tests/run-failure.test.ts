@@ -72,7 +72,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message }),
     });
@@ -220,7 +220,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "try again" }),
       },

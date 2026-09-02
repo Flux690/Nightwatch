@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
 import { getDb, resetDb } from "../db.js";
+import { resetAuth } from "../auth/instance.js";
 import {
   saveMetricsSource,
   type MetricsSourceInput,
@@ -16,6 +17,8 @@ export async function useTempDb(): Promise<() => void> {
   vi.stubEnv("NIGHTWARDEN_DIR", dir);
   await configureTestLLM();
   return () => {
+    // The auth instance holds the handle resetDb closes, so it goes with it.
+    resetAuth();
     resetDb();
     rmSync(dir, { recursive: true, force: true });
   };

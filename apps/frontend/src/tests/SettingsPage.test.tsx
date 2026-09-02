@@ -27,6 +27,7 @@ const AUTH_STATUS_RESPONSE = {
   ownerExists: true,
   authenticated: true,
   email: OWNER_EMAIL,
+  name: "Admin",
 };
 
 // The chosen model's ladder is stored with the model, so the settings form has
@@ -139,7 +140,7 @@ function makeFetchMock(
   models: ModelCatalog | Promise<ModelCatalog> = MODELS_RESPONSE,
 ) {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-    if (url.includes("/auth/status")) {
+    if (url.includes("/auth-status")) {
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -317,7 +318,7 @@ describe("SettingsPage", () => {
       const fetchMock = vi
         .fn()
         .mockImplementation((url: string, init?: RequestInit) => {
-          if (url.includes("/auth/status")) {
+          if (url.includes("/auth-status")) {
             return Promise.resolve({
               ok: true,
               status: 200,

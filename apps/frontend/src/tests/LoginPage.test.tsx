@@ -53,7 +53,7 @@ function setupWithMock(fetchMock: ReturnType<typeof vi.fn>) {
 
 function setup(statusResponse: object) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (url.endsWith("/auth/status")) {
+    if (url.endsWith("/auth-status")) {
       return Promise.resolve(jsonResponse(200, statusResponse));
     }
     return Promise.resolve(jsonResponse(200, { ok: true }));
@@ -67,11 +67,12 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  it("submits /api/setup with email and password (not confirmPassword) on valid setup", async () => {
+  it("submits the sign-up endpoint with email and password (not confirmPassword) on valid setup", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
     await screen.findByText(/create your account/i);
 
+    await user.type(screen.getByLabelText(/your name/i), "Admin");
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
     await user.type(
@@ -82,10 +83,11 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/setup",
+        "/api/auth/sign-up/email",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
+            name: "Admin",
             email: "admin@example.com",
             password: "correcthorsebattery",
           }),
@@ -94,7 +96,7 @@ describe("LoginPage", () => {
     });
   });
 
-  it("submits /api/login with email and password on valid login", async () => {
+  it("submits the sign-in endpoint with email and password on valid login", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: true, authenticated: false });
     await screen.findByRole("heading", { name: /^log in$/i });
@@ -105,7 +107,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/login",
+        "/api/auth/sign-in/email",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
@@ -139,14 +141,15 @@ describe("LoginPage", () => {
   it("shows the server's error message inline when login fails", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url.endsWith("/auth/status")) {
+      if (url.endsWith("/auth-status")) {
         return Promise.resolve(
           jsonResponse(200, { ownerExists: true, authenticated: false }),
         );
       }
-      if (url.endsWith("/login")) {
+      // Better Auth answers a failure with `message`, which is what the page reads.
+      if (url.endsWith("/sign-in/email")) {
         return Promise.resolve(
-          jsonResponse(401, { error: "invalid credentials" }),
+          jsonResponse(401, { message: "invalid credentials" }),
         );
       }
       return Promise.resolve(jsonResponse(200, { ok: true }));

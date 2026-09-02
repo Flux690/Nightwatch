@@ -92,7 +92,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service degraded." }),
     });
@@ -127,7 +127,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
@@ -158,7 +158,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Which container?" }),
     });
@@ -177,7 +177,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           text: "Database overloaded",
@@ -240,7 +240,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Factors?" }),
     });
@@ -262,7 +262,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           text: "Database overloaded, Memory leak",
@@ -308,7 +308,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Which one?" }),
     });
@@ -353,7 +353,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Test." }),
     });
@@ -374,7 +374,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },
@@ -387,7 +387,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ text: "cleanup" }),
     });
@@ -415,7 +415,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Is this recurring?" }),
     });
@@ -439,7 +439,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           text: "Yes, recurring daily",
@@ -508,7 +508,7 @@ describe("clarification interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Mixed gate test." }),
     });
@@ -532,7 +532,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ text: "Yes" }),
       },
@@ -557,7 +557,7 @@ describe("clarification interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },

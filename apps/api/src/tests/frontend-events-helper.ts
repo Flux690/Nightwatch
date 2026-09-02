@@ -18,7 +18,7 @@ export async function connectFrontendEvents<
   const res = await fetch(`http://127.0.0.1:${port}/api/frontend/events`, {
     headers: {
       Accept: "text/event-stream",
-      Cookie: `nw_auth=${session}`,
+      Cookie: `${session}`,
     },
     signal: controller.signal,
   });

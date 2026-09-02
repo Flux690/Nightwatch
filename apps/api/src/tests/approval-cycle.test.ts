@@ -97,7 +97,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -130,7 +130,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "approve" }),
     });
@@ -164,7 +164,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -183,7 +183,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },
@@ -228,7 +228,7 @@ describe("durable approval interrupts", () => {
     await seedCompleteReport(sessionId);
     const reportRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(reportRes.status).toBe(200);
     const { record, decisions } =
@@ -273,7 +273,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -292,7 +292,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           decision: "reject",
@@ -342,7 +342,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -363,7 +363,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ text: "maintenance window active" }),
       },
@@ -377,7 +377,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });
@@ -410,7 +410,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -429,7 +429,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },
@@ -442,7 +442,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },
@@ -480,7 +480,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -500,7 +500,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       }),
@@ -508,7 +508,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "reject" }),
       }),
@@ -556,7 +556,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -577,7 +577,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "what do you think?" }),
       },
@@ -590,7 +590,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });
@@ -622,7 +622,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -643,7 +643,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({}),
       },
@@ -655,7 +655,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ decision: "reject" }),
     });
@@ -688,7 +688,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
@@ -714,7 +714,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           decision: "approve",
@@ -762,7 +762,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Mixed turn test." }),
     });
@@ -788,7 +788,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },
@@ -850,7 +850,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "reject" }),
       },
@@ -903,7 +903,7 @@ describe("durable approval interrupts", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "No timeout test." }),
     });
@@ -936,7 +936,7 @@ describe("durable approval interrupts", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           decision: "approve",

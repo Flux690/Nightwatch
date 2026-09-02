@@ -48,7 +48,7 @@ describe("frontend SSE pipeline", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -89,7 +89,7 @@ describe("frontend SSE pipeline", () => {
 
     const transcriptRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(transcriptRes.status).toBe(200);
     const session = (await transcriptRes.json()) as SessionDetail;
@@ -124,7 +124,7 @@ describe("frontend SSE pipeline", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -141,7 +141,7 @@ describe("frontend SSE pipeline", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "Follow-up question." }),
       },

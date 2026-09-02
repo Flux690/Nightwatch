@@ -63,7 +63,7 @@ One SQLite file is the system of record. There is no second store, no cache to i
 
 **Access is through Kysely** on `better-sqlite3`, opened once in `db.ts` with `journal_mode = WAL` and `foreign_keys = ON`. Kysely serialises transactions on SQLite's single connection, which is why nothing here hand-rolls a write queue. Every query is async and every store is awaited.
 
-**Only files ending `store.ts` may obtain a `Db`.** `architecture.test.ts` enforces it, so persistence code has nowhere wrong to go. Today that is `session/{store,transcript-store,alerts-store,record-store,status-store,gate-store}.ts`, `integrations/{store,metrics/store}.ts`, `fleet/runners-store.ts`, `config/store.ts` and `auth/user-store.ts`.
+**Only files ending `store.ts` may obtain a `Db`.** `architecture.test.ts` enforces it, so persistence code has nowhere wrong to go. Today that is `session/{store,transcript-store,alerts-store,record-store,status-store,gate-store}.ts`, `integrations/{store,metrics/store}.ts`, `fleet/runners-store.ts` and `config/store.ts`. Better Auth reaches its own four tables through the same handle rather than a store of ours.
 
 **Schema changes ship as migrations.** `migrations.ts` is an ordered, frozen history applied at boot by `db.ts`, each migration in its own `BEGIN IMMEDIATE` transaction. SQLite has transactional DDL, so a failed migration leaves nothing half-applied and its version unrecorded for the next boot to retry. Versions must ascend and each may appear once; the API refuses to start rather than serve a half-migrated schema. `schema.ts` describes the database as it is now and is where a column says what it is for.
 
@@ -76,7 +76,10 @@ One SQLite file is the system of record. There is no second store, no cache to i
 | `integrations`       | One row per connection: kind, JSON config, encrypted secrets, optional inbound token hash       |
 | `config`             | Single row of agent and sandbox settings                                                        |
 | `provider_config`    | One row per LLM provider: model, base URL, encrypted key, reasoning level                       |
-| `user`               | The owner account                                                                               |
+| `user`               | One row per person: name, email, and the admin plugin's role and ban columns                    |
+| `auth_session`       | One row per signed-in browser, with its token, expiry, IP and user agent                        |
+| `account`            | One row per sign-in method on a user; email and password is one holding the argon2id hash       |
+| `verification`       | Short-lived tokens: password resets today, an invite link when one is built                     |
 | `schema_migrations`  | Which migrations this database has seen                                                         |
 
 ---
@@ -429,7 +432,7 @@ Connecting a GitHub repository lets investigations read the code, build and test
 
 **HTTPS.** Put a reverse proxy in front, point a domain at the host, set `NIGHTWARDEN_PUBLIC_URL=https://your-domain`, and drop the `ports` mapping so only the proxy is exposed. Without a domain, run plain HTTP behind a firewall.
 
-**Backup.** Everything durable is in the state directory. Stop the stack, archive it, start again. The key files are in there: restoring the database without them leaves stored credentials unreadable and signs everyone out.
+**Backup.** Everything durable is in the state directory. Stop the stack, archive it, start again. Both key files are in there, and they fail apart: restoring without `secret.key` leaves stored credentials unreadable, and without `auth.key` everyone is signed out.
 
 **Upgrade.** `docker compose pull && docker compose up -d`. Migrations apply on boot, each in a transaction, and the API refuses to start rather than serve a half-migrated schema.
 
@@ -449,7 +452,8 @@ Connecting a GitHub repository lets investigations read the code, build and test
 | --------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NIGHTWARDEN_PUBLIC_URL`                      | no       | The address other machines use to reach this install. Runners dial back here and Alertmanager posts here, so it must be routable from them. Unset means the request's own origin, which is fine locally and wrong behind a proxy |
 | `NIGHTWARDEN_DIR`                             | no       | Absolute path to all durable state: `nightwarden.db`, the key files, sandbox `workspaces/`, generated `proxy/` config. Defaults to `~/.nightwarden`. Must be absolute                                                            |
-| `NIGHTWARDEN_SECRET_KEY`                      | no       | AES-256-GCM key encrypting every credential stored at rest. Generated on first boot into a `0600` file in `NIGHTWARDEN_DIR` if unset. Deleting it makes those credentials unrecoverable                                          |
+| `NIGHTWARDEN_SECRET_KEY`                      | no       | AES-256-GCM key encrypting every credential stored at rest. Generated on first boot into a `0600` `secret.key` in `NIGHTWARDEN_DIR` if unset. Deleting it makes those credentials unrecoverable                                  |
+| `NIGHTWARDEN_AUTH_SECRET`                     | no       | Signs session tokens. Generated on first boot into a `0600` `auth.key` in `NIGHTWARDEN_DIR` if unset. Deleting it signs everyone out and nothing else                                                                            |
 | `PORT`                                        | no       | HTTP port (default `3000`)                                                                                                                                                                                                       |
 | `HOST`                                        | no       | Bind address (default `127.0.0.1`)                                                                                                                                                                                               |
 | `NIGHTWARDEN_LOG_LEVEL`                       | no       | Pino level (default `info`)                                                                                                                                                                                                      |

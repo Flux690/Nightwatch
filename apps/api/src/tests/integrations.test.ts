@@ -120,7 +120,7 @@ describe("GitHub integration routes", () => {
       method: opts.method,
       url: opts.url,
       ...(opts.payload !== undefined && { payload: opts.payload }),
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
   }
 
@@ -439,7 +439,7 @@ describe("metrics source routes", () => {
       method: opts.method,
       url: opts.url,
       ...(opts.payload !== undefined && { payload: opts.payload }),
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
   }
 
@@ -692,7 +692,7 @@ describe("Alertmanager integration routes", () => {
     return server.inject({
       method: opts.method,
       url: opts.url,
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
   }
 
@@ -846,7 +846,7 @@ describe("Loki integration routes", () => {
       method: opts.method,
       url: opts.url,
       ...(opts.payload !== undefined && { payload: opts.payload }),
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
   }
 
@@ -1002,7 +1002,7 @@ describe("Sentry integration routes", () => {
       method,
       url: URL_,
       ...(payload !== undefined && { payload }),
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
   }
 

@@ -8,29 +8,34 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
-import { secretKeyPath } from "./paths.js";
+import { authSecretPath, secretKeyPath } from "./paths.js";
 import { logger } from "./logger.js";
 
-// Every credential stored at rest passes through here: provider keys,
-// integration tokens, the fleet ingest token, and the owner session signature.
-let secret: string | null = null;
+/* Two keys with two lifetimes: the encryption key protects credentials at rest,
+   and the auth secret signs sessions. One value doing both welded them together. */
+let encryption: string | null = null;
+let auth: string | null = null;
 
 // Publishing the key through process.env made the ordering an undeclared
 // contract: import before boot and the failure named the env var, not why.
 export function initSecrets(): void {
-  secret = resolveSecretKey();
+  encryption = resolveSecretKey();
+  auth = resolveAuthSecret();
 }
 
 function activeSecret(): string {
-  if (secret === null) {
+  if (encryption === null) {
     throw new Error("secrets are not initialised; initSecrets() runs at boot");
   }
-  return secret;
+  return encryption;
 }
 
-// jose signs with the raw value; AES needs exactly 32 bytes, which the hash gives.
-export function signingSecret(): string {
-  return activeSecret();
+// Handed to Better Auth, which signs session tokens with it.
+export function authSecret(): string {
+  if (auth === null) {
+    throw new Error("secrets are not initialised; initSecrets() runs at boot");
+  }
+  return auth;
 }
 
 function deriveKey(): Buffer {
@@ -71,25 +76,21 @@ export function maskKey(plaintext: string): string {
   return `sk-...${suffix}`;
 }
 
-// Resolves NIGHTWARDEN_SECRET_KEY: env var wins, else a 0600 key file in the state dir is
-// reused or generated on first boot. Losing it equals rotating NIGHTWARDEN_SECRET_KEY.
-export function resolveSecretKey(): string {
-  const envKey = process.env["NIGHTWARDEN_SECRET_KEY"];
-  if (envKey) return envKey;
+// Env wins, else a 0600 file is reused or generated. Losing the file is the
+// same as rotating the variable.
+function resolveKey(envVar: string, path: string): string {
+  const fromEnv = process.env[envVar];
+  if (fromEnv) return fromEnv;
 
-  const path = secretKeyPath();
   if (existsSync(path)) {
     const persisted = readFileSync(path, "utf8").trim();
     if (persisted) {
-      logger.info({ path }, "loaded persisted NIGHTWARDEN_SECRET_KEY file");
+      logger.info({ path }, `loaded persisted ${envVar} file`);
       return persisted;
     }
-    // An empty file (crash mid-write, full disk, tampering) has no recoverable key,
-    // so treat it as absent rather than returning "" and failing later as a confusing signing error.
-    logger.warn(
-      { path },
-      "NIGHTWARDEN_SECRET_KEY file is empty, generating a new one",
-    );
+    /* An empty file (crash mid-write, full disk, tampering) holds no recoverable
+       key, so it is treated as absent rather than returned as "". */
+    logger.warn({ path }, `${envVar} file is empty, generating a new one`);
   }
 
   const generated = randomBytes(32).toString("hex");
@@ -102,6 +103,14 @@ export function resolveSecretKey(): string {
       stdio: "ignore",
     });
   }
-  logger.info({ path }, "generated new NIGHTWARDEN_SECRET_KEY file");
+  logger.info({ path }, `generated new ${envVar} file`);
   return generated;
+}
+
+export function resolveSecretKey(): string {
+  return resolveKey("NIGHTWARDEN_SECRET_KEY", secretKeyPath());
+}
+
+export function resolveAuthSecret(): string {
+  return resolveKey("NIGHTWARDEN_AUTH_SECRET", authSecretPath());
 }

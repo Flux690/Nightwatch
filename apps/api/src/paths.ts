@@ -25,6 +25,12 @@ export function secretKeyPath(): string {
   return join(nightwardenDir(), "secret.key");
 }
 
+// Its own file, so deleting one does not do the other's damage: losing this
+// signs everyone out, losing secret.key makes stored credentials unreadable.
+export function authSecretPath(): string {
+  return join(nightwardenDir(), "auth.key");
+}
+
 // Absolute so the Docker bind mount accepts it (a relative source reads as a
 // named volume).
 export function workspacesDir(): string {

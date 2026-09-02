@@ -77,7 +77,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Anything running?" }),
     });
@@ -87,7 +87,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     // Deliberately no waitFor: needing one is the defect.
     const detail = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(detail.status).toBe(200);
   });
@@ -102,7 +102,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -114,7 +114,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const listRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions?kind=chat`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(listRes.status).toBe(200);
     const { rows } = (await listRes.json()) as SessionListPage;
@@ -122,7 +122,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const txRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(txRes.status).toBe(200);
     const session = (await txRes.json()) as SessionDetail;
@@ -138,7 +138,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("answers 404 for a session that does not exist", async () => {
     const res = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${randomUUID()}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(res.status).toBe(404);
   });
@@ -152,7 +152,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
@@ -166,7 +166,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const txRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     const session = (await txRes.json()) as SessionDetail;
     // The session reports the same absence the row holds, so nothing downstream
@@ -210,7 +210,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const detailRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     const session = (await detailRes.json()) as SessionDetail;
     expect(session.investigation).toBe(true);
@@ -218,7 +218,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const listRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions?kind=investigation`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     const { rows } = (await listRes.json()) as SessionListPage;
     expect(rows.find((r) => r.sessionId === sessionId)?.investigation).toBe(
@@ -229,7 +229,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   describe("the session list pages rather than stopping", () => {
     async function listPage(query: string): Promise<Response> {
       return fetch(`http://127.0.0.1:${port}/api/sessions?kind=chat&${query}`, {
-        headers: { Cookie: `nw_auth=${SESSION}` },
+        headers: { Cookie: `${SESSION}` },
       });
     }
 

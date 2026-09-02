@@ -24,7 +24,7 @@ function AuthField({
 }: {
   id: string;
   label: string;
-  type: "email" | "password";
+  type: "email" | "password" | "text";
   value: string;
   error?: string;
   onChange: (value: string) => void;
@@ -74,6 +74,7 @@ function ServerError({ message }: { message: string }): React.JSX.Element {
 
 function SetupForm(): React.JSX.Element {
   const { signup } = useAuth();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -114,7 +115,7 @@ function SetupForm(): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const result = await signup(email, password);
+      const result = await signup(name, email, password);
       if (!result.ok) setServerError(result.error);
     } finally {
       setSubmitting(false);
@@ -127,6 +128,14 @@ function SetupForm(): React.JSX.Element {
       onSubmit={(e) => void handleSubmit(e)}
     >
       <FormHeading>Create your account</FormHeading>
+      {/* Shown on an approval record, so it is a person's name and not a login. */}
+      <AuthField
+        id="setup-name"
+        label="Your name"
+        type="text"
+        value={name}
+        onChange={setName}
+      />
       <AuthField
         id="setup-email"
         label="Email"

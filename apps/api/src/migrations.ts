@@ -142,7 +142,73 @@ const HARNESS_KIND = `
 UPDATE session_transcript SET kind = 'harness' WHERE kind = 'nightwarden';
 `;
 
+/* Transcribed from what Better Auth's own getMigrations emits for this config,
+   so the columns are the library's answer rather than a reading of its docs. */
+const BETTER_AUTH = `
+
+DROP TABLE IF EXISTS user;
+
+CREATE TABLE user (
+  id             TEXT     NOT NULL PRIMARY KEY,
+  name           TEXT     NOT NULL,
+  email          TEXT     NOT NULL UNIQUE,
+  email_verified INTEGER  NOT NULL,
+  image          TEXT,
+  created_at     DATE     NOT NULL,
+  updated_at     DATE     NOT NULL,
+  role           TEXT,
+  banned         INTEGER,
+  ban_reason     TEXT,
+  ban_expires    DATE
+);
+
+CREATE TABLE auth_session (
+  id              TEXT     NOT NULL PRIMARY KEY,
+  expires_at      DATE     NOT NULL,
+  token           TEXT     NOT NULL UNIQUE,
+  created_at      DATE     NOT NULL,
+  updated_at      DATE     NOT NULL,
+  ip_address      TEXT,
+  user_agent      TEXT,
+  user_id         TEXT     NOT NULL REFERENCES user (id) ON DELETE CASCADE,
+  impersonated_by TEXT
+);
+
+CREATE TABLE account (
+  id                          TEXT     NOT NULL PRIMARY KEY,
+  issuer                      TEXT     NOT NULL,
+  account_id                  TEXT     NOT NULL,
+  provider_id                 TEXT     NOT NULL,
+  user_id                     TEXT     NOT NULL REFERENCES user (id) ON DELETE CASCADE,
+  access_token                TEXT,
+  refresh_token               TEXT,
+  id_token                    TEXT,
+  access_token_expires_at     DATE,
+  refresh_token_expires_at    DATE,
+  scope                       TEXT,
+  password                    TEXT,
+  created_at                  DATE     NOT NULL,
+  updated_at                  DATE     NOT NULL
+);
+
+CREATE TABLE verification (
+  id         TEXT     NOT NULL PRIMARY KEY,
+  identifier TEXT     NOT NULL,
+  value      TEXT     NOT NULL,
+  expires_at DATE     NOT NULL,
+  created_at DATE     NOT NULL,
+  updated_at DATE     NOT NULL
+);
+
+CREATE INDEX auth_session_user_id_idx ON auth_session (user_id);
+CREATE INDEX account_user_id_idx ON account (user_id);
+CREATE INDEX verification_identifier_idx ON verification (identifier);
+CREATE UNIQUE INDEX account_issuer_account_id_uidx ON account (issuer, account_id);
+
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", sql: BASELINE },
   { version: 2, name: "transcript kind harness", sql: HARNESS_KIND },
+  { version: 3, name: "better auth tables", sql: BETTER_AUTH },
 ];

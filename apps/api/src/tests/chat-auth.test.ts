@@ -42,7 +42,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({}),
     });
@@ -54,7 +54,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -72,7 +72,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "hello" }),
     });
@@ -85,7 +85,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "How are things?" }),
     });
@@ -102,7 +102,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "Any alerts?" }),
       },
@@ -121,7 +121,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "why is checkout slow" }),
       });
@@ -141,7 +141,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "hello" }),
       },

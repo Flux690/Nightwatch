@@ -52,7 +52,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Do something dangerous." }),
     });
@@ -93,7 +93,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Wrap up." }),
     });
@@ -178,7 +178,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({
           decision: "reject",

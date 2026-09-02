@@ -45,7 +45,7 @@ function setup(statusResponse: object) {
   vi.stubGlobal("EventSource", MockEventSource);
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (url.includes("/auth/status")) {
+    if (url.includes("/auth-status")) {
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -150,7 +150,7 @@ describe("AuthGate", () => {
     vi.stubGlobal("EventSource", MockEventSource);
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/auth/status")) {
+      if (url.includes("/auth-status")) {
         return Promise.resolve({
           ok: true,
           status: 200,

@@ -401,7 +401,7 @@ describe("toolset assembly by fleet capabilities", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "Restart the K8s workload." }),
       });
@@ -428,7 +428,7 @@ describe("toolset assembly by fleet capabilities", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Cookie: `nw_auth=${SESSION}`,
+            Cookie: `${SESSION}`,
           },
           body: JSON.stringify({ decision: "reject" }),
         },
@@ -456,7 +456,7 @@ describe("toolset assembly by fleet capabilities", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ message: "Why does redis keep restarting?" }),
       });
@@ -495,7 +495,7 @@ describe("toolset assembly by fleet capabilities", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Cookie: `nw_auth=${SESSION}`,
+            Cookie: `${SESSION}`,
           },
           body: JSON.stringify({ message: "Anything else?" }),
         },

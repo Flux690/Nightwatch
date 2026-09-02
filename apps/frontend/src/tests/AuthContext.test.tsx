@@ -25,7 +25,7 @@ function Probe(): React.JSX.Element {
       </button>
       <button
         onClick={() =>
-          void signup("admin@example.com", "correcthorsebattery").then(
+          void signup("Admin", "admin@example.com", "correcthorsebattery").then(
             setResult,
           )
         }
@@ -47,7 +47,7 @@ function jsonResponse(status: number, body: object) {
 }
 
 // Routes by exact path suffix; falls back to the status response for the
-// initial GET /api/auth/status bootstrap call every test triggers on mount.
+// initial GET /api/auth-status bootstrap call every test triggers on mount.
 function stubFetch(
   statusResponse: object,
   handlers: Record<string, ReturnType<typeof jsonResponse>>,
@@ -104,11 +104,11 @@ describe("AuthProvider", () => {
 });
 
 describe("AuthProvider actions", () => {
-  it("login POSTs /api/login with the credentials and moves phase to authenticated", async () => {
+  it("login POSTs the sign-in endpoint with the credentials and moves phase to authenticated", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch(
       { ownerExists: true, authenticated: false },
-      { "/login": jsonResponse(200, { ok: true }) },
+      { "/sign-in/email": jsonResponse(200, { ok: true }) },
     );
 
     render(
@@ -126,7 +126,7 @@ describe("AuthProvider actions", () => {
       expect(screen.getByTestId("phase")).toHaveTextContent("authenticated");
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/login",
+      "/api/auth/sign-in/email",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -141,7 +141,7 @@ describe("AuthProvider actions", () => {
     const user = userEvent.setup();
     stubFetch(
       { ownerExists: true, authenticated: false },
-      { "/login": jsonResponse(401, { error: "invalid credentials" }) },
+      { "/sign-in/email": jsonResponse(401, { error: "invalid credentials" }) },
     );
 
     render(
@@ -163,11 +163,11 @@ describe("AuthProvider actions", () => {
     expect(screen.getByTestId("phase")).toHaveTextContent("needs-login");
   });
 
-  it("signup POSTs /api/setup and moves phase to authenticated", async () => {
+  it("signup POSTs the sign-up endpoint and moves phase to authenticated", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch(
       { ownerExists: false },
-      { "/setup": jsonResponse(200, { ok: true }) },
+      { "/sign-up/email": jsonResponse(200, { ok: true }) },
     );
 
     render(
@@ -185,10 +185,11 @@ describe("AuthProvider actions", () => {
       expect(screen.getByTestId("phase")).toHaveTextContent("authenticated");
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/setup",
+      "/api/auth/sign-up/email",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
+          name: "Admin",
           email: "admin@example.com",
           password: "correcthorsebattery",
         }),
@@ -196,11 +197,16 @@ describe("AuthProvider actions", () => {
     );
   });
 
-  it("logout POSTs /api/logout and moves phase back to needs-login", async () => {
+  it("logout POSTs the sign-out endpoint and moves phase back to needs-login", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch(
-      { ownerExists: true, authenticated: true, email: "admin@example.com" },
-      { "/logout": jsonResponse(200, { ok: true }) },
+      {
+        ownerExists: true,
+        authenticated: true,
+        email: "admin@example.com",
+        name: "Admin",
+      },
+      { "/sign-out": jsonResponse(200, { ok: true }) },
     );
 
     render(
@@ -218,16 +224,21 @@ describe("AuthProvider actions", () => {
       expect(screen.getByTestId("phase")).toHaveTextContent("needs-login");
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/logout",
+      "/api/auth/sign-out",
       expect.objectContaining({ method: "POST" }),
     );
   });
 
-  it("logoutAll POSTs /api/logout-all and moves phase back to needs-login", async () => {
+  it("logoutAll POSTs the revoke-sessions endpoint and moves phase back to needs-login", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch(
-      { ownerExists: true, authenticated: true, email: "admin@example.com" },
-      { "/logout-all": jsonResponse(200, { ok: true }) },
+      {
+        ownerExists: true,
+        authenticated: true,
+        email: "admin@example.com",
+        name: "Admin",
+      },
+      { "/revoke-sessions": jsonResponse(200, { ok: true }) },
     );
 
     render(
@@ -245,7 +256,7 @@ describe("AuthProvider actions", () => {
       expect(screen.getByTestId("phase")).toHaveTextContent("needs-login");
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/logout-all",
+      "/api/auth/revoke-sessions",
       expect.objectContaining({ method: "POST" }),
     );
   });

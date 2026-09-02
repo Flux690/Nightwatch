@@ -42,7 +42,7 @@ describe("DELETE /sessions/:id", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Quick question." }),
     });
@@ -53,7 +53,7 @@ describe("DELETE /sessions/:id", () => {
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       {
         method: "DELETE",
-        headers: { Cookie: `nw_auth=${SESSION}` },
+        headers: { Cookie: `${SESSION}` },
       },
     );
     expect(delRes.status).toBe(204);
@@ -65,7 +65,7 @@ describe("DELETE /sessions/:id", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "What happened here?" }),
     });
@@ -75,18 +75,18 @@ describe("DELETE /sessions/:id", () => {
 
     const before = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(before.status).toBe(200);
 
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}`, {
       method: "DELETE",
-      headers: { Cookie: `nw_auth=${SESSION}` },
+      headers: { Cookie: `${SESSION}` },
     });
 
     const after = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
-      { headers: { Cookie: `nw_auth=${SESSION}` } },
+      { headers: { Cookie: `${SESSION}` } },
     );
     expect(after.status).toBe(404);
   });
@@ -103,7 +103,7 @@ describe("DELETE /sessions/:id", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Long running." }),
     });
@@ -114,7 +114,7 @@ describe("DELETE /sessions/:id", () => {
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       {
         method: "DELETE",
-        headers: { Cookie: `nw_auth=${SESSION}` },
+        headers: { Cookie: `${SESSION}` },
       },
     );
     expect(delRes.status).toBe(409);

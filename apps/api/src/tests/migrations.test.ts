@@ -33,7 +33,9 @@ describe("the migration runner", () => {
   it("creates every table on a database that has none", async () => {
     const tables = (await getDb().introspection.getTables()).map((t) => t.name);
     expect(tables.sort()).toEqual([
+      "account",
       "alerts",
+      "auth_session",
       "config",
       "integrations",
       "provider_config",
@@ -42,6 +44,7 @@ describe("the migration runner", () => {
       "session_transcript",
       "sessions",
       "user",
+      "verification",
     ]);
   });
 

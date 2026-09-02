@@ -83,7 +83,7 @@ describe("flat runner registry", () => {
     const res = await server.inject({
       method: "GET",
       url: "/api/runners",
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as RunnerRecord[];
@@ -93,7 +93,7 @@ describe("flat runner registry", () => {
     const res = await server.inject({
       method: "GET",
       url: "/api/fleet",
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as FleetRunner[];
@@ -469,7 +469,7 @@ describe("protocol ping/pong liveness", () => {
     const res = await server.inject({
       method: "GET",
       url: "/api/runners",
-      headers: { cookie: `nw_auth=${SESSION}` },
+      headers: { cookie: `${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as RunnerRecord[];

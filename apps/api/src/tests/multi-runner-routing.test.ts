@@ -419,7 +419,7 @@ describe("multi-runner routing", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "postgres is crashing" }),
     });
@@ -446,7 +446,7 @@ describe("multi-runner routing", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+          Cookie: `${SESSION}`,
         },
         body: JSON.stringify({ decision: "approve" }),
       },

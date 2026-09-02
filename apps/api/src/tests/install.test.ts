@@ -30,7 +30,7 @@ describe("GET /runners/install", () => {
       method: "GET",
       url: URL,
       headers: {
-        cookie: `nw_auth=${SESSION}`,
+        cookie: `${SESSION}`,
         ...(token !== null && { authorization: `Bearer ${token}` }),
         ...headers,
       },
@@ -47,7 +47,7 @@ describe("GET /runners/install", () => {
       const res = await nw.server.inject({
         method: "GET",
         url: `${URL}?token=${DOCKER_TOKEN}`,
-        headers: { cookie: `nw_auth=${SESSION}` },
+        headers: { cookie: `${SESSION}` },
       });
       expect(res.statusCode).toBe(400);
     });

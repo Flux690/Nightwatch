@@ -51,7 +51,7 @@ describe("POST /sessions/:id/stop", () => {
       `http://127.0.0.1:${port}/api/sessions/unknown/stop`,
       {
         method: "POST",
-        headers: { Cookie: `nw_auth=${SESSION}` },
+        headers: { Cookie: `${SESSION}` },
       },
     );
     expect(res.status).toBe(409);
@@ -69,7 +69,7 @@ describe("POST /sessions/:id/stop", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+        Cookie: `${SESSION}`,
       },
       body: JSON.stringify({ message: "Long running." }),
     });
@@ -80,7 +80,7 @@ describe("POST /sessions/:id/stop", () => {
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/stop`,
       {
         method: "POST",
-        headers: { Cookie: `nw_auth=${SESSION}` },
+        headers: { Cookie: `${SESSION}` },
       },
     );
     expect(stopRes.status).toBe(200);
@@ -157,7 +157,7 @@ describe("POST /sessions/:id/stop", () => {
 
     const stopRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/stop`,
-      { method: "POST", headers: { Cookie: `nw_auth=${SESSION}` } },
+      { method: "POST", headers: { Cookie: `${SESSION}` } },
     );
     expect(stopRes.status).toBe(200);
 
