@@ -1,6 +1,6 @@
 # NightWarden
 
-[![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml) ![License: FCL-1.0-ALv2](https://img.shields.io/badge/license-FCL--1.0--ALv2-blue.svg) ![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg) ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
+[![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml) ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg) ![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg) ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
 
 NightWarden is a self-hosted, source-available AI SRE agent for Docker and Kubernetes workloads. It watches your servers and clusters, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
 
@@ -414,12 +414,8 @@ pnpm build
 
 ## License
 
-**Run NightWarden on your own infrastructure, for your own organisation, free and without limits.** What the licence does not allow is making NightWarden available to other people as part of a commercial product or service, whether that is NightWarden itself or something built on it offering the same or substantially similar functionality. A licence covering that use is available on request.
-
-NightWarden is licensed under the [Fair Core License, Version 1.0, ALv2 Future License](LICENSE) (FCL-1.0-ALv2), which calls the first a Permitted Purpose and the second a Competing Use. Reading, modifying and redistributing the source are Permitted Purposes too, as are non-commercial education and research.
-
-Each version becomes Apache-2.0 on the second anniversary of its release, and that grant is irrevocable.
+NightWarden is open source under the [GNU Affero General Public License v3.0](LICENSE). Run it on your own infrastructure, for any purpose, free and without limits. If you run a modified version as a network service, the AGPL requires you to offer its source to that service's users.
 
 NightWarden's terms cover NightWarden. Its dependencies stay under the licences their own authors granted: every image carries `LICENSE` and `NOTICE` at its root, and the licence text of everything bundled into the frontend is served at `/THIRD-PARTY-LICENSES.txt`.
 
-This is **source available**, not open source: the Open Source Definition does not allow a licence to restrict what software may be used for, so calling it open source would be wrong.
+For commercial or proprietary use outside the terms of the AGPL, contact the maintainers about a separate licence.

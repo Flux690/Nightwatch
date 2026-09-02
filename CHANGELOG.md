@@ -20,6 +20,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **The licence is the GNU Affero General Public License v3.0 again**, replacing FCL-1.0-ALv2. NightWarden is open source: you may run it for any purpose, including commercially, and the only obligation is the AGPL's own - if you run a modified version as a network service, its users may ask you for the source. The Fair Core License was adopted to prevent a competitor hosting NightWarden, which the AGPL does not prevent; it also excluded the project from the CNCF landscape and from every distribution that requires an OSI-approved licence, which is a real cost against a theoretical risk. — `0.4.1`
+
 - **The session list requires a `kind`.** `GET /api/sessions` now answers 400 without `?kind=investigation` or `?kind=chat`. The unfiltered shape no index could serve, and nothing asked for it; every page in the frontend already sent one. — `0.3.174` (`c306689`)
 
 - **One metrics source, not one per product.** Connecting Prometheus now closes the VictoriaMetrics, Mimir, Thanos and AMP cards until you disconnect it, and the agent no longer names a source on any metrics call. What you point at is already an aggregate, so the second connection was a setting that could only ever disagree with itself. — `0.3.172` (`9cc8481`)
