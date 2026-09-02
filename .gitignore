@@ -23,7 +23,6 @@ Desktop.ini
 
 # Per-feature PRDs, docs and issue for tracking — local working docs, not published
 docs
-CONTEXT.md
 issues
 
 # Demo droplet deployment sequence
