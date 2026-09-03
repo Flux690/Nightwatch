@@ -34,7 +34,7 @@ const PUBLIC: ReadonlyArray<{ route: string; why: string }> = [
     route: "GET /api/auth-status",
     why: "answers whether an owner exists at all",
   },
-  { route: "POST /api/alerts/ingest", why: "verifies its own minted token" },
+  { route: "POST /api/alerts/ingest", why: "verifies its own issued token" },
   { route: "GET /api/clients/connect", why: "a runner presents its own token" },
 ];
 

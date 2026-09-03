@@ -380,7 +380,7 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  // Credential minted here (the config plane); deliveries hit /alerts/ingest
+  // Credential issued here (the config plane); deliveries hit /alerts/ingest
   // (the data plane) with it. One family, so a new sender is a kind.
   const knownSender = [requireSession, requireKnownAlertSource];
 

@@ -120,7 +120,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
   let tool: Tool;
   let sessionSeq = 0;
 
-  async function mintSession(
+  async function toolContext(
     alert: NormalizedAlert | null,
   ): Promise<ToolDispatchContext> {
     sessionSeq++;
@@ -171,7 +171,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.filesByPr = { 42: ["src/redis.ts", "src/config.ts"] };
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -207,7 +207,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     );
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.commits.length).toBeLessThan(400);
@@ -223,7 +223,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     installFetchMock(mock);
 
     const before = Date.now();
-    const toolOutcome = await executeTool(tool, {}, await mintSession(null));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(null));
     const after = Date.now();
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -237,7 +237,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const mock = makeMock();
     installFetchMock(mock);
 
-    await executeTool(tool, { windowHours: 10_000 }, await mintSession(ALERT));
+    await executeTool(tool, { windowHours: 10_000 }, await toolContext(ALERT));
 
     const commitsUrl = mock.requests.find((u) => u.includes("/commits?"));
     const since = new URL(commitsUrl!).searchParams.get("since");
@@ -258,7 +258,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     ];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.commits.map((c) => c.sha)).toEqual(["plain-1"]);
@@ -273,7 +273,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     for (let n = 1; n <= 16; n++) mock.filesByPr[n] = [`file-${n}.ts`];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
     expect(result.pullRequests).toHaveLength(16);
@@ -291,7 +291,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.commits = [commit("c1", "fix: something", "2026-07-16T11:31:00Z")];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -306,7 +306,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.commitsStatus = 409;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(toolOutcome.toolOutcome).toBeUndefined();
     const result = parsedContent<GetRecentChangesResult>(toolOutcome);
@@ -319,7 +319,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.repoStatus = 500;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(toolOutcome.toolOutcome).toBe("retryable");
     expect(toolOutcome.content).toContain(
@@ -331,7 +331,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const mock = makeMock();
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await mintSession(ALERT));
+    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(toolOutcome.toolOutcome).toBe("permission");
     expect(toolOutcome.content).toContain("not configured");

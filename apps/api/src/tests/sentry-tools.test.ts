@@ -98,7 +98,7 @@ describe("Sentry tools through the tool dispatch", () => {
   let mock: SentryMock;
   let sessionSeq = 0;
 
-  async function mintSession(
+  async function toolContext(
     alert: NormalizedAlert | null,
   ): Promise<ToolDispatchContext> {
     sessionSeq++;
@@ -139,7 +139,7 @@ describe("Sentry tools through the tool dispatch", () => {
   });
 
   it("returns a corrective error without any request when not configured", async () => {
-    const result = await executeTool(search, {}, await mintSession(ALERT));
+    const result = await executeTool(search, {}, await toolContext(ALERT));
     expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
@@ -170,7 +170,7 @@ describe("Sentry tools through the tool dispatch", () => {
         await executeTool(
           search,
           { projects: ["api", "web"], environments: ["production"] },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
 
         const req = mock.requests[0]!;
@@ -190,13 +190,13 @@ describe("Sentry tools through the tool dispatch", () => {
       });
 
       it("always sends query, so Sentry's is:unresolved default never hides a resolved issue", async () => {
-        await executeTool(search, {}, await mintSession(ALERT));
+        await executeTool(search, {}, await toolContext(ALERT));
         expect(mock.requests[0]!.params.get("query")).toBe("");
 
         await executeTool(
           search,
           { query: "level:error" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         expect(mock.requests[1]!.params.get("query")).toBe("level:error");
       });
@@ -220,7 +220,7 @@ describe("Sentry tools through the tool dispatch", () => {
             project: { slug: "api", name: "API" },
           },
         ];
-        const result = await executeTool(search, {}, await mintSession(ALERT));
+        const result = await executeTool(search, {}, await toolContext(ALERT));
         const body = parsedContent<SentryIssuesResult>(result);
 
         const issue = body.issues[0]!;
@@ -231,7 +231,7 @@ describe("Sentry tools through the tool dispatch", () => {
       });
 
       it("names what it searched, and reads an empty page as an expected miss", async () => {
-        const result = await executeTool(search, {}, await mintSession(ALERT));
+        const result = await executeTool(search, {}, await toolContext(ALERT));
         const body = parsedContent<SentryIssuesResult>(result);
 
         expect(result.toolOutcome).toBe("expected_miss");
@@ -247,7 +247,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const withMore = await executeTool(
           search,
           {},
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         expect(parsedContent<SentryIssuesResult>(withMore).nextCursor).toBe(
           "0:100:0",
@@ -258,7 +258,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const lastPage = await executeTool(
           search,
           {},
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         expect(
           parsedContent<SentryIssuesResult>(lastPage).nextCursor,
@@ -282,7 +282,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           event,
           { issueId: "77" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<SentryEventResult>(result);
 
@@ -324,7 +324,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           event,
           { issueId: "77" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<SentryEventResult>(result);
 
@@ -351,7 +351,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           event,
           { issueId: "77" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<SentryEventResult>(result);
 
@@ -373,7 +373,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           tagValues,
           { issueId: "77", key: "server_name" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<{ note: string; values: unknown[] }>(result);
 
@@ -413,7 +413,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           releases,
           {},
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<SentryReleasesResult>(result);
 
@@ -450,7 +450,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           commits,
           { version: "api@1.4.2" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<{
           commits: Array<{ suspectCommitType: string; repository: string }>;
@@ -467,7 +467,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(
           commits,
           { version: "api@1.4.2" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         const body = parsedContent<{ note: string }>(result);
 
@@ -478,7 +478,7 @@ describe("Sentry tools through the tool dispatch", () => {
 
     it("reports a missing scope as a permission failure the user fixes on the token", async () => {
       mock.status = 403;
-      const result = await executeTool(releases, {}, await mintSession(ALERT));
+      const result = await executeTool(releases, {}, await toolContext(ALERT));
 
       expect(result.toolOutcome).toBe("permission");
       expect(result.content).toContain("project:read");

@@ -134,7 +134,7 @@ describe("frontend SSE pipeline", () => {
     await waitFor(() => assistantFinishes(sessionId) >= 1);
 
     // Resume the ended session with a follow-up message. The same sessionId
-    // must come back - no new session is minted.
+    // must come back - no new session is issued.
     const resumeRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {

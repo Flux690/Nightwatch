@@ -32,7 +32,7 @@ The frontend (`@nightwarden/frontend`) is not a deployable. Vite bundles it and 
 
 **The two runners are two programs, not one program with a switch.** `@kubernetes/client-node` installs 53MB against dockerode's 224KB, so a single image would ship a Kubernetes client to every Docker host. Nothing is shared between them by reaching across a directory: common code goes through `@nightwarden/runner-core` (the WS client, wire decoders, redaction, logger, runner identity) or is duplicated deliberately. `apps/api/src/tests/architecture.test.ts` fails the build if a runner imports from its sibling.
 
-**A runner never probes for its platform.** Which platform it serves is fixed when its token is minted, stored on the `runner` row, and carried by which binary was installed. The row is authoritative before the runner has ever connected, so routing, the alert matcher and the offered toolset all read it. A runner reports its platform on connect only so a mismatch can be refused loudly.
+**A runner never probes for its platform.** Which platform it serves is fixed when its token is issued, stored on the `runner` row, and carried by which binary was installed. The row is authoritative before the runner has ever connected, so routing, the alert matcher and the offered toolset all read it. A runner reports its platform on connect only so a mismatch can be refused loudly.
 
 **Connections are outbound-initiated.** A runner dials the API over WSS, so no inbound port opens on a monitored host and NAT is not an obstacle. The API never dials a runner.
 
@@ -44,7 +44,7 @@ The frontend (`@nightwarden/frontend`) is not a deployable. Vite bundles it and 
 | --------------- | --------------------------------------------------- |
 | `agent/`        | The loop, prompts, tools, evidence ids, the record  |
 | `alerts/`       | Ingest, parsing, grouping, target resolution        |
-| `auth/`         | Owner sessions, runner token minting                |
+| `auth/`         | Owner sessions, runner token issuing                |
 | `config/`       | Settings and LLM readiness                          |
 | `fleet/`        | Runner connections, manifests, command transport    |
 | `integrations/` | Metrics, Loki, Sentry, GitHub connections           |
@@ -110,9 +110,9 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Runner.** An executor installed on one Docker host or one Kubernetes cluster. Its identity is its permanent row id; its token is a rotatable credential. It keeps no durable state but does know what it is.
 
-**Platform.** Docker or Kubernetes. Fixed when the token is minted, stored on the row, and declared by which binary was installed.
+**Platform.** Docker or Kubernetes. Fixed when the token is issued, stored on the row, and declared by which binary was installed.
 
-**Server.** What the model addresses: one Docker host or one cluster, named at mint. Supplied as the `server` parameter by tools acting on a whole machine, and the first segment of every target key. "Runner" is the operator's word for the program; the model only ever says server.
+**Server.** What the model addresses: one Docker host or one cluster, named when the token is issued. Supplied as the `server` parameter by tools acting on a whole machine, and the first segment of every target key. "Runner" is the operator's word for the program; the model only ever says server.
 
 **Target key.** The canonical address of one service, three segments, `server/scope/name` - for example `web-01/shop/api`. Built only from what the infrastructure publishes, copied verbatim, never assembled by hand.
 
@@ -363,11 +363,11 @@ Integrations are grouped by capability, not by vendor: **Alerting**, **Metrics**
 
 **Every connection is probed with the exact calls an investigation makes before anything is saved**, so a successful connect is itself proof the address is reachable. A failed probe reports what went wrong - a name that would not resolve, a port with nothing listening, a timeout, an expired certificate - rather than a generic failure.
 
-**A credential is minted by whoever verifies it.** NightWarden mints for anything that pushes to it, because it hashes and matches the token on an unauthenticated request. The sender mints for anything NightWarden pulls from, because NightWarden presents it. One `integrations` table holds both, and only an inbound row fills `token_hash`.
+**A credential is issued by whoever verifies it.** NightWarden issues one for anything that pushes to it, because it hashes and matches the token on an unauthenticated request. The sender issues one for anything NightWarden pulls from, because NightWarden presents it. One `integrations` table holds both, and only an inbound row fills `token_hash`.
 
 ### Alerting
 
-Two senders, either or both: **Prometheus Alertmanager** and **Grafana Alerting** (offered only because its notification engine is a fork of Alertmanager's). Each mints its own credential and reports its own deliveries, so rotating one leaves the other alone.
+Two senders, either or both: **Prometheus Alertmanager** and **Grafana Alerting** (offered only because its notification engine is a fork of Alertmanager's). Each has its own credential and reports its own deliveries, so rotating one leaves the other alone.
 
 The kind decides which card, which credential and which status line - **never how a body is parsed**, which is decided by the body's own shape (`{ alerts: [...] }`). A sender nobody has heard of therefore works with no code, which is why Mimir, Thanos and VictoriaMetrics need nothing of their own. The ingest endpoint accepts the token as `Authorization: Bearer` or `X-NightWarden-Token`, and never trusts a client-controlled header to identify the sender.
 
@@ -404,7 +404,7 @@ Issue search windows on the alert. **The release list deliberately does not**, b
 Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Three steps either way:
 
 1. **Name it** - the server name, unique, and the first segment of every target key this runner advertises.
-2. **Install it** - NightWarden mints the token and shows the install command with it baked in. The runner dials back over WSS and appears within seconds.
+2. **Install it** - NightWarden issues the token and shows the install command with it baked in. The runner dials back over WSS and appears within seconds.
 3. **Confirm what it sees** - the advertised services with their full target keys, read from the manifest it already sent, so checking the wiring costs nothing and starts nothing.
 
 An alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync.
@@ -440,7 +440,9 @@ Connecting a GitHub repository lets investigations read the code, build and test
 
 **Architecture.** Published images are `linux/amd64`. `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures, so on arm64 hosts build locally rather than pulling.
 
-**Credential handling.** Tokens are validated against a stored SHA-256 hash and never appear in logs, identifiers or URLs. Runner tokens are hash-only: the plaintext is shown once at mint and cannot be recovered. Anything that must be replayed to a third party - provider API keys, Prometheus and Loki `Authorization` headers, Loki's org id, the GitHub token, AMP keys - is encrypted at rest rather than hashed, because it has to be presented again.
+**Credential handling.** `secrets.ts` holds the whole rule. `issueToken` mints the two credentials NightWarden hands out, the runner token as `nwr_` and the alert ingest token as `nwi_`, each 32 random bytes; the prefix is the only self-description a loose token carries, which is what tells you which one to rotate. `hashToken` stores a SHA-256 of it and nothing else, so the plaintext is shown once and cannot be recovered. `tokenMatches` checks a presented token by scanning and comparing in constant time, never by looking the hash up on an index, because how long an index takes to answer is itself an answer. Tokens never appear in logs, identifiers or URLs.
+
+Anything that must be replayed to a third party is encrypted rather than hashed, because it has to be presented again: provider API keys, the Prometheus and Loki `Authorization` headers, Loki's org id, the GitHub token, AMP keys. The owner password is neither - Better Auth stores it as an argon2id hash in the `account` row.
 
 ---
 
@@ -473,7 +475,7 @@ Connecting a GitHub repository lets investigations read the code, build and test
 
 | Variable                     | Required | Description                                                                                 |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `NIGHTWARDEN_TOKEN`          | yes      | Runner credential minted from the frontend                                                  |
+| `NIGHTWARDEN_TOKEN`          | yes      | Runner credential issued from the frontend                                                  |
 | `NIGHTWARDEN_WS_URL`         | yes      | API WebSocket endpoint, e.g. `wss://your-api/clients/connect`                               |
 | `NIGHTWARDEN_HOST_PROC`      | no       | Docker runner only. `/proc` mount path inside a container (default `/proc`)                 |
 | `NIGHTWARDEN_FILE_ALLOWLIST` | no       | Docker runner only. Colon-separated paths appended to the built-in `ReadHostFile` allowlist |

@@ -115,7 +115,7 @@ describe("Loki tools through the tool dispatch", () => {
   let mock: LokiMock;
   let sessionSeq = 0;
 
-  async function mintSession(
+  async function toolContext(
     alert: NormalizedAlert | null,
   ): Promise<ToolDispatchContext> {
     sessionSeq++;
@@ -157,7 +157,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: '{app="api"}' },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("not configured");
@@ -182,7 +182,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: '{app="api"} |= "error"' },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(result.toolOutcome).toBeUndefined();
 
@@ -218,7 +218,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: '{app="api"}', limit: 1 },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(mock.requests[0]!.params.get("limit")).toBe("1");
     const content = parsedContent<LokiLogsResult>(result);
@@ -248,7 +248,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: '{app="api"}' },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     const content = parsedContent<LokiLogsResult>(result);
@@ -278,7 +278,7 @@ describe("Loki tools through the tool dispatch", () => {
         until: "2026-07-16T11:23:00.000Z",
         lookbackMinutes: 30,
       },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     const params = mock.requests[0]!.params;
@@ -297,7 +297,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: '{app="api"}', until: "last tuesday" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     expect(result.toolOutcome).toBe("system");
@@ -315,7 +315,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       metrics,
       { query: 'sum(rate({app="api"}[5m]))' },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     const req = mock.requests[0]!;
     expect(req.params.get("step")).not.toBeNull();
@@ -329,7 +329,7 @@ describe("Loki tools through the tool dispatch", () => {
   it("DiscoverLogLabels lists label names, values, and series, time-bounded to the alert", async () => {
     await connect();
     mock.labels = ["app", "namespace"];
-    const names = await executeTool(discover, {}, await mintSession(ALERT));
+    const names = await executeTool(discover, {}, await toolContext(ALERT));
     const namesContent = parsedContent<LogLabelsResult>(names);
     expect(namesContent.mode).toBe("labels");
     expect(namesContent.labels).toEqual(["app", "namespace"]);
@@ -343,7 +343,7 @@ describe("Loki tools through the tool dispatch", () => {
     const values = await executeTool(
       discover,
       { label: "app" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     const valuesContent = parsedContent<LogLabelsResult>(values);
     expect(valuesContent.mode).toBe("values");
@@ -354,7 +354,7 @@ describe("Loki tools through the tool dispatch", () => {
     const series = await executeTool(
       discover,
       { selector: '{namespace="shop"}' },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     const seriesContent = parsedContent<LogLabelsResult>(series);
     expect(seriesContent.mode).toBe("series");
@@ -368,7 +368,7 @@ describe("Loki tools through the tool dispatch", () => {
     const result = await executeTool(
       logs,
       { query: "{" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("parse error");
@@ -376,7 +376,7 @@ describe("Loki tools through the tool dispatch", () => {
 
   it("chat sessions anchor on now, and the window never extends into the future", async () => {
     await connect();
-    await executeTool(logs, { query: '{app="api"}' }, await mintSession(null));
+    await executeTool(logs, { query: '{app="api"}' }, await toolContext(null));
     const params = mock.requests[0]!.params;
     const end = nsToMs(params.get("end")!);
     expect(Math.abs(end - Date.now())).toBeLessThan(5_000);

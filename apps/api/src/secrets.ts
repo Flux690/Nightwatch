@@ -7,6 +7,7 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  timingSafeEqual,
 } from "node:crypto";
 import { authSecretPath, secretKeyPath } from "./paths.js";
 import { logger } from "./logger.js";
@@ -67,6 +68,26 @@ export function decrypt(stored: string): string {
   return (
     decipher.update(Buffer.from(ctHex, "hex")).toString("utf8") +
     decipher.final("utf8")
+  );
+}
+
+/* A credential this API issues and afterwards only ever compares: the plaintext
+   is shown once and only its hash is stored. The prefix says which kind it is. */
+export function issueToken(prefix: string): string {
+  return `${prefix}_${randomBytes(32).toString("base64url")}`;
+}
+
+export function hashToken(plaintext: string): string {
+  return createHash("sha256").update(plaintext).digest("hex");
+}
+
+// Compared in constant time, and never by looking the hash up on an index,
+// because the time an index takes to answer is itself an answer.
+export function tokenMatches(plaintext: string, storedHash: string): boolean {
+  const presented = Buffer.from(hashToken(plaintext), "hex");
+  const stored = Buffer.from(storedHash, "hex");
+  return (
+    stored.length === presented.length && timingSafeEqual(stored, presented)
   );
 }
 

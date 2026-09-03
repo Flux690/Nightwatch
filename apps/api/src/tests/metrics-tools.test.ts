@@ -88,7 +88,7 @@ describe("metrics tools through the tool dispatch", () => {
   let mock: PromMock;
   let sessionSeq = 0;
 
-  async function mintSession(
+  async function toolContext(
     ...alerts: NormalizedAlert[]
   ): Promise<ToolDispatchContext> {
     sessionSeq++;
@@ -137,7 +137,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("No metrics source is connected");
@@ -149,7 +149,7 @@ describe("metrics tools through the tool dispatch", () => {
     mock.result = [
       { metric: { name: "api" }, value: [1752667200, "412000000"] },
     ];
-    const ctx = await mintSession(ALERT);
+    const ctx = await toolContext(ALERT);
 
     const atAlert = await executeTool(
       instant,
@@ -185,7 +185,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       instant,
       { query: "up" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     expect(result.toolOutcome).toBeUndefined();
@@ -199,7 +199,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     // No series is a miss rather than a reading of zero: a metric that does not
     // exist answers identically, so the window is still echoed.
@@ -228,7 +228,7 @@ describe("metrics tools through the tool dispatch", () => {
     await executeTool(
       range,
       { query: "up" },
-      await mintSession(ALERT, earlier),
+      await toolContext(ALERT, earlier),
     );
 
     const params = mock.requests[0]!.params;
@@ -238,7 +238,7 @@ describe("metrics tools through the tool dispatch", () => {
 
   it("chat sessions anchor on now, and the window never extends into the future", async () => {
     await connect();
-    await executeTool(range, { query: "up" }, await mintSession());
+    await executeTool(range, { query: "up" }, await toolContext());
 
     const params = mock.requests[0]!.params;
     const end = Date.parse(params.get("end")!);
@@ -259,7 +259,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up", lookbackMinutes: 999_999 },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     const params = mock.requests[0]!.params;
@@ -285,7 +285,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       range,
       { query: "up" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
 
     const content = parsedContent<MetricsRangeResult>(result);
@@ -303,7 +303,7 @@ describe("metrics tools through the tool dispatch", () => {
     const result = await executeTool(
       instant,
       { query: "up{" },
-      await mintSession(ALERT),
+      await toolContext(ALERT),
     );
     expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("parse error");
@@ -343,7 +343,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("ListMetricNames")!,
         { contains: "MeMoRy" },
-        await mintSession(ALERT),
+        await toolContext(ALERT),
       );
       const content = parsedContent<{ names: string[] }>(result);
       expect(content.names).toEqual([
@@ -361,7 +361,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("ListMetricNames")!,
         { contains: "nonesuch" },
-        await mintSession(ALERT),
+        await toolContext(ALERT),
       );
       expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("No metric names matched");
@@ -380,7 +380,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("GetMetricMetadata")!,
         { metric: "container_memory_working_set_bytes" },
-        await mintSession(ALERT),
+        await toolContext(ALERT),
       );
       expect(parsedContent(result)).toMatchObject({
         type: "gauge",
@@ -397,7 +397,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("GetMetricMetadata")!,
         { metric: "custom_thing" },
-        await mintSession(ALERT),
+        await toolContext(ALERT),
       );
       expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("may still exist");
@@ -431,7 +431,7 @@ describe("metrics tools through the tool dispatch", () => {
       const result = await executeTool(
         findTool("ListAlertRules")!,
         {},
-        await mintSession(ALERT),
+        await toolContext(ALERT),
       );
       const content = parsedContent<{
         rules: Array<{ name: string; query: string; firingCount: number }>;
@@ -456,7 +456,7 @@ describe("metrics tools through the tool dispatch", () => {
         const result = await executeTool(
           findTool("GetMetricMetadata")!,
           { metric: "container_memory_working_set_bytes" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
 
         expect(result.content).toContain("does not implement");
@@ -472,7 +472,7 @@ describe("metrics tools through the tool dispatch", () => {
         const result = await executeTool(
           findTool("ListAlertRules")!,
           {},
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
 
         expect(result.toolOutcome).toBe("permission");
@@ -493,7 +493,7 @@ describe("metrics tools through the tool dispatch", () => {
         const result = await executeTool(
           findTool(name)!,
           { metric: "x" },
-          await mintSession(ALERT),
+          await toolContext(ALERT),
         );
         expect(result.toolOutcome).toBe("permission");
         expect(result.content).toContain("No metrics source is connected");

@@ -15,7 +15,7 @@ type AlertResolution =
   { kind: "resolved"; keys: string[] } | { kind: "unresolved" };
 
 // Walks what the fleet advertises and asks whether these labels describe it.
-// The other direction mints keys nothing advertises, each needing an answer.
+// The other direction invents keys nothing advertises, each needing an answer.
 export function resolveAlertTarget(
   labels: Record<string, string>,
   fleet: FleetRunner[],

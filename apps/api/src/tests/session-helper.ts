@@ -56,9 +56,9 @@ export async function seedChatSession(
   await createSession(buildSessionMeta(sessionId, null, message));
 }
 
-/* A real signed-in session, minted the way production does: the owner is created
+/* A real signed-in session, issued the way production does: the owner is created
    through the signup door, so the cookie is one Better Auth actually issued. */
-export async function mintTestSession(): Promise<string> {
+export async function issueTestSession(): Promise<string> {
   const auth = getAuth();
   const body = {
     email: "owner@example.test",

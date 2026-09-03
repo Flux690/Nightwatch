@@ -26,7 +26,7 @@ const setScript = (turns: ScriptedTurn[]): void =>
 
 import { generateRunnerToken } from "../fleet/runners-store.js";
 import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { issueTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerFrontendEventRoutes } from "../session/events.js";
 import { connectFrontendEvents } from "./frontend-events-helper.js";
@@ -327,7 +327,7 @@ describe("toolset assembly by fleet capabilities", () => {
 
     beforeAll(async () => {
       cleanupDb = await useTempDb();
-      SESSION = await mintTestSession();
+      SESSION = await issueTestSession();
       K8S_TOKEN = (await generateRunnerToken("kubernetes", "toolset-k8s-001"))
         .id;
 

@@ -66,9 +66,9 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(row!.token).not.toContain("nwr_");
     });
 
-    // A runner that does not know what it is at mint time is the defect this
+    // A runner that does not know what it is when its token is issued is the defect this
     // column exists to prevent, so there is no default to fall back on.
-    it("refuses to mint without a platform", async () => {
+    it("refuses to issue one without a platform", async () => {
       const res = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
@@ -209,7 +209,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("GET /tokens", () => {
     it("never returns plaintext in the list", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `${SESSION}` },
@@ -219,7 +219,7 @@ describe("Runner token lifecycle (issue 038)", () => {
           serverName: "srv-03",
         },
       });
-      const { token } = JSON.parse(mint.body) as { token: string };
+      const { token } = JSON.parse(issued.body) as { token: string };
 
       const res = await nw.server.inject({
         method: "GET",
@@ -234,7 +234,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("DELETE /tokens/:id", () => {
     it("returns 204 and removes the token row entirely", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `${SESSION}` },
@@ -244,7 +244,7 @@ describe("Runner token lifecycle (issue 038)", () => {
           serverName: "srv-05",
         },
       });
-      const { id } = JSON.parse(mint.body) as { id: string };
+      const { id } = JSON.parse(issued.body) as { id: string };
 
       const del = await nw.server.inject({
         method: "DELETE",
@@ -275,13 +275,13 @@ describe("Runner token lifecycle (issue 038)", () => {
     });
 
     it("denies reconnect with the deleted token", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "srv-07" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token, id } = JSON.parse(mint.body) as {
+      const { token, id } = JSON.parse(issued.body) as {
         token: string;
         id: string;
       };
@@ -307,13 +307,13 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("runner WS connect", () => {
     it("accepts a valid token and sends connected", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "srv-08" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token } = JSON.parse(mint.body) as { token: string };
+      const { token } = JSON.parse(issued.body) as { token: string };
 
       await new Promise<void>((resolve, reject) => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
@@ -335,13 +335,13 @@ describe("Runner token lifecycle (issue 038)", () => {
     // A disagreement is a real user error, the Docker install line pasted into
     // a cluster, so it is refused rather than half-served.
     it("refuses a runner whose manifest contradicts its row", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "mismatch-host" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token } = JSON.parse(mint.body) as { token: string };
+      const { token } = JSON.parse(issued.body) as { token: string };
 
       const { code, reason } = await new Promise<{
         code: number;
@@ -397,13 +397,13 @@ describe("Runner token lifecycle (issue 038)", () => {
     });
 
     it("disconnects live runner sockets immediately on token delete", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "srv-09" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token, id } = JSON.parse(mint.body) as {
+      const { token, id } = JSON.parse(issued.body) as {
         token: string;
         id: string;
       };
@@ -432,13 +432,13 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("lastUsedAt", () => {
     it("is set after the runner sends its manifest", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "srv-10" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token, id } = JSON.parse(mint.body) as {
+      const { token, id } = JSON.parse(issued.body) as {
         token: string;
         id: string;
       };
@@ -488,13 +488,13 @@ describe("Runner token lifecycle (issue 038)", () => {
 
     // A runner whose platform API is down authenticates but never manifests.
     it("is set when the runner authenticates, before any manifest arrives", async () => {
-      const mint = await nw.server.inject({
+      const issued = await nw.server.inject({
         method: "POST",
         url: "/api/tokens",
         payload: { platform: "docker", serverName: "srv-12" },
         headers: { cookie: `${SESSION}` },
       });
-      const { token, id } = JSON.parse(mint.body) as {
+      const { token, id } = JSON.parse(issued.body) as {
         token: string;
         id: string;
       };

@@ -19,7 +19,7 @@ import {
 } from "../integrations/store.js";
 import { setAlertSourceReceived } from "../integrations/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { issueTestSession } from "./session-helper.js";
 import { getDb } from "../db.js";
 import { decrypt } from "../secrets.js";
 import { mountApi } from "./api-server.js";
@@ -93,7 +93,7 @@ describe("GitHub integration routes", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
     await server.ready();
@@ -414,7 +414,7 @@ describe("metrics source routes", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerMetricsRoutes);
     await server.ready();
@@ -676,7 +676,7 @@ describe("Alertmanager integration routes", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
     await server.ready();
@@ -724,7 +724,7 @@ describe("Alertmanager integration routes", () => {
     expect(reveal.statusCode).toBe(404);
   });
 
-  // A typo would otherwise mint a credential nothing can present, leaving a
+  // A typo would otherwise issue a credential nothing can present, leaving a
   // card that never turns green.
   it("refuses a sender it does not know, on every route in the family", async () => {
     const routes = [
@@ -744,7 +744,7 @@ describe("Alertmanager integration routes", () => {
     }
   });
 
-  it("mints an nwi_ credential, stores only its hash, and never hands it back", async () => {
+  it("issues an nwi_ credential, stores only its hash, and never hands it back", async () => {
     const res = await authed({
       method: "POST",
       url: "/api/integrations/alerting/alertmanager/credential",
@@ -761,7 +761,7 @@ describe("Alertmanager integration routes", () => {
     expect(row.token_hash).toBe(sha256hex(token));
     expect(row.token_hash).not.toContain("nwi_");
 
-    // Shown once at mint and never again: nothing stores a readable copy, so
+    // Shown once and never again: nothing stores a readable copy, so
     // no route can answer with one.
     const reveal = await authed({
       method: "POST",
@@ -820,7 +820,7 @@ describe("Loki integration routes", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
     await server.ready();
@@ -969,7 +969,7 @@ describe("Sentry integration routes", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await mountApi(server, registerIntegrationRoutes);
     await server.ready();

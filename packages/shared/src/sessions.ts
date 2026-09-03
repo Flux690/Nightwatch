@@ -1,5 +1,5 @@
 // A session is the agent's conversation thread (the durable parent); an incident is an optional
-// artifact referencing it. Sessions live in the API's SQLite, id minted at trigger time, appended per turn.
+// artifact referencing it. Sessions live in the API's SQLite, id generated at trigger time, appended per turn.
 
 import type { AlertGroupContext, NormalizedAlert } from "./alerts.js";
 import type { MessagePart, NativeEnvelope } from "./messages.js";

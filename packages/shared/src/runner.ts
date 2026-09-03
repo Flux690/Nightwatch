@@ -66,7 +66,7 @@ export interface RunnerRecord {
 // lets a caller partition the fleet before matching.
 interface FleetRunnerBase {
   runnerId: string;
-  // The model-visible address, assigned at mint and the first segment of every
+  // The model-visible address, assigned when the token is issued and the first segment of every
   // target key this runner advertises.
   serverName: string;
   hostname: string;

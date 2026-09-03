@@ -1,6 +1,7 @@
-import { randomBytes, createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { isPlatform, type Platform } from "@nightwarden/shared";
 import { getDb } from "../db.js";
+import { hashToken, issueToken, tokenMatches } from "../secrets.js";
 
 // Runner record stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
 // Plaintext is returned once at generation and never stored or logged.
@@ -22,17 +23,13 @@ type RunnerMeta = {
   lastUsedAt: string | null;
 };
 
-export function hashToken(plaintext: string): string {
-  return createHash("sha256").update(plaintext).digest("hex");
-}
-
 // The plaintext is returned once and only its hash stored. Neither platform nor
-// serverName defaults: a runner not knowing what or where it is at mint is the bug.
+// serverName defaults: a runner not knowing what or where it is is the bug.
 export async function generateRunnerToken(
   platform: Platform,
   serverName: string,
 ): Promise<{ plaintext: string } & RunnerMeta> {
-  const plaintext = "nwr_" + randomBytes(32).toString("base64url");
+  const plaintext = issueToken("nwr");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
@@ -113,12 +110,15 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
 export async function findRunnerByToken(
   plaintext: string,
 ): Promise<RunnerRow | undefined> {
-  const raw = await getDb()
+  /* Scanned and compared in constant time rather than looked up on the token
+     index, which is the same rule the ingest credential follows. */
+  for (const raw of await getDb()
     .selectFrom("runner")
     .select(SELECT_ROW)
-    .where("token", "=", hashToken(plaintext))
-    .executeTakeFirst();
-  return raw ? mapRow(raw) : undefined;
+    .execute()) {
+    if (tokenMatches(plaintext, raw.tokenHash)) return mapRow(raw);
+  }
+  return undefined;
 }
 
 // Touch last_used_at on every authenticated use (WS connect, ingest, chat).

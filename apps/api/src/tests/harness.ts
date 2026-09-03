@@ -22,7 +22,7 @@ import {
   kubernetesWorkload,
   manifest,
 } from "./manifest-helper.js";
-import { mintTestSession } from "./session-helper.js";
+import { issueTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 
 // It decides nothing: what a runner replies is the test's own, passed in as
@@ -110,7 +110,7 @@ function manifestFor(
 
 export async function harness(options: HarnessOptions = {}): Promise<Harness> {
   const cleanupDb = await useTempDb();
-  const session = await mintTestSession();
+  const session = await issueTestSession();
 
   const runners: HarnessRunner[] = await Promise.all(
     (options.runners ?? []).map(async (spec, index) => {

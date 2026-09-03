@@ -10,7 +10,7 @@ import type {
   RunnerRecord,
 } from "@nightwarden/shared";
 import { generateRunnerToken } from "../fleet/runners-store.js";
-import { mintTestSession } from "./session-helper.js";
+import { issueTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../fleet/server.js";
@@ -20,7 +20,7 @@ import { logger } from "../logger.js";
 import { mountApi } from "./api-server.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
-// The server name is the row's, assigned at mint; the hostname is what the box
+// The server name is the row's, assigned when the token is issued; the hostname is what the box
 // calls itself. Keys are prefixed with the first, never the second.
 function runnerManifest(
   server: string,
@@ -64,7 +64,7 @@ describe("flat runner registry", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await mountApi(server, registerWsRoutes);
@@ -450,7 +450,7 @@ describe("protocol ping/pong liveness", () => {
 
   beforeAll(async () => {
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await mountApi(server, registerWsRoutes);

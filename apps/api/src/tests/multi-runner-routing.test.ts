@@ -32,7 +32,7 @@ const setScript = (turns: ScriptedTurn[]): void =>
 
 import { generateRunnerToken } from "../fleet/runners-store.js";
 import { useTempDb } from "./temp-db.js";
-import { mintTestSession } from "./session-helper.js";
+import { issueTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import {
   registerRunner,
@@ -147,7 +147,7 @@ describe("multi-runner routing", () => {
     );
     initSecrets();
     cleanupDb = await useTempDb();
-    SESSION = await mintTestSession();
+    SESSION = await issueTestSession();
     runnerIdA = (await generateRunnerToken("docker", "web-01")).id;
     runnerIdB = (await generateRunnerToken("docker", "db-02")).id;
 

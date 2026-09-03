@@ -10,7 +10,7 @@ export interface RunnerCommandMessage extends WsEnvelope {
   payload: {
     commandName: string;
     commandInput: Record<string, unknown>;
-    correlationId: string; // random UUID minted per command by the API transport
+    correlationId: string; // random UUID generated per command by the API transport
   };
 }
 

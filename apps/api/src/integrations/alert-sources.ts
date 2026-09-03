@@ -1,5 +1,4 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { hashToken } from "../fleet/runners-store.js";
+import { hashToken, issueToken, tokenMatches } from "../secrets.js";
 import {
   allIntegrations,
   deleteIntegrationsOfKind,
@@ -12,7 +11,7 @@ import { ALERT_SOURCE_KINDS } from "@nightwarden/shared";
 import type { AlertSourceKind } from "@nightwarden/shared";
 
 // The one connection whose credential we verify rather than present, so the
-// only kind filling `token_hash`. The plaintext is shown once at mint.
+// only kind filling `token_hash`. The plaintext is shown once when it is issued.
 
 interface AlertSourceRow {
   kind: string;
@@ -41,7 +40,7 @@ export async function getAlertSource(
 export async function generateAlertSourceToken(
   kind: AlertSourceKind,
 ): Promise<string> {
-  const plaintext = `nwi_${randomBytes(32).toString("base64url")}`;
+  const plaintext = issueToken("nwi");
   const existing = await integrationOfKind(kind);
   await putIntegration(
     {
@@ -76,16 +75,9 @@ export async function deleteAlertSource(kind: AlertSourceKind): Promise<void> {
 export async function findAlertSourceKindByToken(
   plaintext: string,
 ): Promise<string | null> {
-  const presented = Buffer.from(hashToken(plaintext), "hex");
   for (const row of await allIntegrations()) {
     if (!isAlertSourceRow(row) || row.tokenHash === null) continue;
-    const stored = Buffer.from(row.tokenHash, "hex");
-    if (
-      stored.length === presented.length &&
-      timingSafeEqual(stored, presented)
-    ) {
-      return row.kind;
-    }
+    if (tokenMatches(plaintext, row.tokenHash)) return row.kind;
   }
   return null;
 }
