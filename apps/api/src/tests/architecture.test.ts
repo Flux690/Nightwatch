@@ -49,6 +49,7 @@ const INFRASTRUCTURE = [
   "public-url.ts",
   "schema.ts",
   "frontend.ts",
+  "request-body.ts",
 ];
 
 describe("layering", () => {

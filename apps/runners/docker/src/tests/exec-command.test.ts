@@ -84,6 +84,7 @@ describe("execCommand handler", () => {
     const result = await execCommand({
       service: SERVICE,
       executable: "bad-cmd",
+      args: [],
       reason: "test",
     });
 
@@ -126,6 +127,7 @@ describe("execCommand handler", () => {
     const result = await execCommand({
       service: SERVICE,
       executable: "env",
+      args: [],
       reason: "test",
     });
 
@@ -155,6 +157,7 @@ describe("execCommand handler", () => {
       execCommand({
         service: SERVICE,
         executable: "ls",
+        args: [],
         reason: "test",
       }),
     ).rejects.toThrow(

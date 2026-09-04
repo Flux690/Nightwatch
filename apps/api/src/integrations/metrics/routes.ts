@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readable } from "../../request-body.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { isMetricsSourceKind } from "@nightwarden/shared";
 import type { MetricsSourceStatus } from "@nightwarden/shared";
@@ -82,7 +83,7 @@ export async function registerMetricsRoutes(
     async (request, reply) => {
       const parsed = ConnectSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { kind, query, rules } = parsed.data;
       const name = METRICS_PRESETS[kind].label;

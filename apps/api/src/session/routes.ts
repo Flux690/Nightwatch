@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type {
-  RespondRequest,
-  SessionDetail,
-  SessionReportResponse,
-} from "@nightwarden/shared";
+import type { SessionDetail, SessionReportResponse } from "@nightwarden/shared";
+import {
+  chatRequestSchema,
+  sessionMessageRequestSchema,
+  sessionPageQuerySchema,
+  respondRequestSchema,
+} from "@nightwarden/shared/schemas";
+import { parseRequest } from "../request-body.js";
 import {
   computeConviction,
   gatedCalls,
@@ -35,23 +38,6 @@ import {
   notConfiguredMessage,
 } from "../config/readiness.js";
 
-const DEFAULT_PAGE_LIMIT = 50;
-const MAX_PAGE_LIMIT = 200;
-
-// A missing parameter takes the default; a nonsensical one is a client bug and
-// answers 400 rather than being clamped into a window nobody asked for.
-function parseBoundedInt(
-  raw: string | undefined,
-  fallback: number,
-  min: number,
-  max: number,
-): number | null {
-  if (raw === undefined) return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < min || value > max) return null;
-  return value;
-}
-
 function sendHumanInputError(
   reply: {
     code: (statusCode: number) => {
@@ -71,32 +57,18 @@ export async function registerSessionRoutes(
 ): Promise<void> {
   // Paginated rather than capped: a cap makes the hundredth session the last
   // one reachable, with nothing on screen saying so.
-  fastify.get<{
-    Querystring: { limit?: string; offset?: string; kind?: string };
-  }>("/sessions", { preHandler: requireSession }, async (request, reply) => {
-    const limit = parseBoundedInt(
-      request.query.limit,
-      DEFAULT_PAGE_LIMIT,
-      1,
-      MAX_PAGE_LIMIT,
-    );
-    const offset = parseBoundedInt(
-      request.query.offset,
-      0,
-      0,
-      Number.MAX_SAFE_INTEGER,
-    );
-    if (limit === null || offset === null) {
-      return reply.code(400).send({ error: "invalid limit or offset" });
-    }
-    // Required: the list is served by one index, and the unfiltered shape it
-    // cannot serve was reachable only by omitting this.
-    const { kind } = request.query;
-    if (kind !== "investigation" && kind !== "chat") {
-      return reply.code(400).send({ error: "invalid kind" });
-    }
-    return await listSessionPage(limit, offset, kind);
-  });
+  fastify.get(
+    "/sessions",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      // kind is required: the list is served by one index, and the unfiltered
+      // shape it cannot serve was reachable only by omitting this.
+      const query = parseRequest(sessionPageQuerySchema, request.query);
+      if (!query.ok) return reply.code(400).send({ error: query.error });
+      const { limit, offset, kind } = query.data;
+      return await listSessionPage(limit, offset, kind);
+    },
+  );
 
   // The session answers what it is. A bare transcript returned `200 []` for an
   // unknown id, which the frontend drew as a real but empty session.
@@ -212,16 +184,17 @@ export async function registerSessionRoutes(
     },
   );
 
-  fastify.post<{ Params: { id: string }; Body: RespondRequest }>(
+  fastify.post<{ Params: { id: string } }>(
     "/sessions/:id/respond",
     { preHandler: requireSession },
     async (request, reply) => {
+      const body = parseRequest(respondRequestSchema, request.body ?? {});
+      if (!body.ok) return reply.code(400).send({ error: body.error });
       try {
-        const { decision, text } = request.body ?? {};
-        const response = await respondToPendingHumanInput(request.params.id, {
-          decision,
-          text,
-        });
+        const response = await respondToPendingHumanInput(
+          request.params.id,
+          body.data,
+        );
         return reply.code(200).send(response);
       } catch (error) {
         return sendHumanInputError(reply, error);
@@ -229,23 +202,15 @@ export async function registerSessionRoutes(
     },
   );
 
-  fastify.post<{ Body: { message?: string; kind?: string } }>(
+  fastify.post(
     "/chat",
     { preHandler: requireSession },
     async (request, reply) => {
-      const message = request.body?.message?.trim();
-      if (!message) {
-        return reply.code(400).send({ error: "message is required" });
-      }
-      // An investigation is a session with a falsifiable condition attached, and
-      // only an alert carries one, so this path creates chats alone.
-      const kind = request.body?.kind ?? "chat";
-      if (kind !== "chat") {
-        return reply.code(400).send({
-          error:
-            "invalid kind: an investigation is opened by an alert, not by hand",
-        });
-      }
+      // The schema admits only kind "chat": an investigation is a session with a
+      // falsifiable condition attached, and only an alert carries one.
+      const body = parseRequest(chatRequestSchema, request.body ?? {});
+      if (!body.ok) return reply.code(400).send({ error: body.error });
+      const { message } = body.data;
       const readiness = await checkLLMReadiness();
       if (!readiness.ready) {
         return reply
@@ -273,18 +238,17 @@ export async function registerSessionRoutes(
     },
   );
 
-  fastify.post<{
-    Params: { id: string };
-    Body: { message?: string };
-  }>(
+  fastify.post<{ Params: { id: string } }>(
     "/sessions/:id/messages",
     { preHandler: requireSession },
     async (request, reply) => {
       const sessionId = request.params.id;
-      const message = request.body?.message?.trim();
-      if (!message) {
-        return reply.code(400).send({ error: "message is required" });
-      }
+      const body = parseRequest(
+        sessionMessageRequestSchema,
+        request.body ?? {},
+      );
+      if (!body.ok) return reply.code(400).send({ error: body.error });
+      const { message } = body.data;
       if (!(await sessionExists(sessionId))) {
         return reply.code(404).send({ error: "unknown session" });
       }

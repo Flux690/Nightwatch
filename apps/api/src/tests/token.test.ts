@@ -147,6 +147,11 @@ describe("Runner token lifecycle (issue 038)", () => {
         payload: { platform: "docker", serverName: "" },
       });
       expect(res.statusCode).toBe(400);
+      // serverNameError owns every rule about the name, so an empty one reads
+      // the same here as it does in the wizard.
+      expect(JSON.parse(res.body)).toMatchObject({
+        error: "Server name is required",
+      });
     });
 
     it("returns 400 when serverName contains a forward slash", async () => {

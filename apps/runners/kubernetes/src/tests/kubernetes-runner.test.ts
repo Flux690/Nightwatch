@@ -1220,6 +1220,7 @@ describe("Kubernetes runner command handlers", () => {
       const result = await execInWorkload({
         service: K8S_SERVICE,
         executable: "ls",
+        args: [],
         reason: "test",
       });
 
@@ -1236,6 +1237,7 @@ describe("Kubernetes runner command handlers", () => {
       const result = await execInWorkload({
         service: K8S_SERVICE,
         executable: "env",
+        args: [],
         reason: "test",
       });
 

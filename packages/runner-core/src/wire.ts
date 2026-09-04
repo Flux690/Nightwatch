@@ -1,86 +1,22 @@
 // Decoding the untrusted side of the socket. A command's input arrives as JSON, so a
-// registry that asserted its shape would be trusting the sender; these read and check.
+// registry that asserted its shape would be trusting the sender; this checks it.
 
-function record(input: unknown): Record<string, unknown> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new Error("command input must be an object");
-  }
-  // The one narrowing in the decoder, justified by the three checks above.
-  return input as Record<string, unknown>;
+import type { ZodType } from "zod";
+
+/* Zod's own message is the issues array as JSON, and this one crosses back to the
+   API as a command error the agent reads. Name the field and what is wrong. */
+function readable(issues: readonly { path: PropertyKey[]; message: string }[]) {
+  return issues
+    .map((issue) =>
+      issue.path.length > 0
+        ? `"${issue.path.join(".")}" ${issue.message}`
+        : issue.message,
+    )
+    .join("; ");
 }
 
-export function requiredString(input: unknown, key: string): string {
-  const value = record(input)[key];
-  if (typeof value !== "string" || value === "") {
-    throw new Error(`command input needs a non-empty "${key}"`);
-  }
-  return value;
-}
-
-export function optionalString(
-  input: unknown,
-  key: string,
-): string | undefined {
-  const value = record(input)[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") {
-    throw new Error(`"${key}" must be a string`);
-  }
-  return value;
-}
-
-export function optionalNumber(
-  input: unknown,
-  key: string,
-): number | undefined {
-  const value = record(input)[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`"${key}" must be a number`);
-  }
-  return value;
-}
-
-export function optionalBoolean(
-  input: unknown,
-  key: string,
-): boolean | undefined {
-  const value = record(input)[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "boolean") {
-    throw new Error(`"${key}" must be a boolean`);
-  }
-  return value;
-}
-
-export function optionalStringArray(
-  input: unknown,
-  key: string,
-): string[] | undefined {
-  const value = record(input)[key];
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
-    throw new Error(`"${key}" must be an array of strings`);
-  }
-  return value;
-}
-
-// The nested object every service-routed command carries, read through the same
-// checks so a malformed identity fails here rather than deep in a platform client.
-export function nested(input: unknown, key: string): unknown {
-  const value = record(input)[key];
-  if (typeof value !== "object" || value === null) {
-    throw new Error(`command input needs a "${key}" object`);
-  }
-  return value;
-}
-
-// A program name, never a command line: the runner execs it directly, so a
-// space here would name a binary that does not exist.
-export function executableName(input: unknown, key = "executable"): string {
-  const value = requiredString(input, key);
-  if (/\s/.test(value)) {
-    throw new Error(`"${key}" must name one program: put arguments in "args"`);
-  }
-  return value;
+export function decode<T>(schema: ZodType<T>, input: unknown): T {
+  const parsed = schema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  throw new Error(`invalid command input: ${readable(parsed.error.issues)}`);
 }

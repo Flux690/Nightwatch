@@ -12,17 +12,7 @@ import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 
-/* Zod's own message is the issues array as JSON, which the frontend would show
-   a user verbatim. This names the field and says what is wrong with it. */
-function readable(error: z.ZodError): string {
-  return error.issues
-    .map((issue) =>
-      issue.path.length > 0
-        ? `${issue.path.join(".")}: ${issue.message}`
-        : issue.message,
-    )
-    .join("; ");
-}
+import { readable } from "../request-body.js";
 import type {
   LLMProviderName,
   ModelCatalog,

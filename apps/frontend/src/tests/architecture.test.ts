@@ -80,4 +80,15 @@ describe("layering", () => {
       }
     }
   });
+
+  /* Shared's types erase, its schemas do not: one import of the runtime entry
+     ships zod to every browser, which no page here has a use for. */
+  it("reaches shared for types alone, never for its schemas", () => {
+    for (const [path, text] of MODULES) {
+      expect(
+        text.includes("@nightwarden/shared/schemas"),
+        `${path} imports @nightwarden/shared/schemas, which would bundle zod`,
+      ).toBe(false);
+    }
+  });
 });

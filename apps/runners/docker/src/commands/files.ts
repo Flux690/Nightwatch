@@ -1,6 +1,7 @@
 import { redactSecrets } from "@nightwarden/runner-core";
 import { openAllowedFile } from "../safety/paths.js";
-import type { HostFileInput, HostFileResult } from "@nightwarden/shared";
+import type { HostFileResult } from "@nightwarden/shared";
+import type { HostFileInput } from "@nightwarden/shared/schemas";
 
 export async function readFileCommand(
   input: HostFileInput,

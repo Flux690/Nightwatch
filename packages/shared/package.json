@@ -7,7 +7,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./schemas": {
+      "types": "./src/schemas/index.ts",
+      "default": "./src/schemas/index.ts"
     }
+  },
+  "dependencies": {
+    "zod": "4.4.3"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

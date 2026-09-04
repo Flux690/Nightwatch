@@ -42,20 +42,12 @@ export interface HostNetworkResult {
   totalConnections: number;
 }
 
-export interface HostDmesgInput {
-  tailLines?: number;
-  filterLevel?: "err" | "warn" | "all";
-}
 export interface HostDmesgResult {
   lines: Array<{ timestamp: string; message: string }>;
   oomEventsFound: boolean;
   fsErrorsFound: boolean;
 }
 
-export interface HostFileInput {
-  path: string;
-  maxLines?: number;
-}
 export interface HostFileResult {
   content: string;
   lineCount: number;

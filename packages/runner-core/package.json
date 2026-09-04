@@ -19,9 +19,10 @@
   },
   "devDependencies": {
     "@nightwarden/shared": "workspace:*",
+    "@types/node": "26.1.1",
     "@types/ws": "8.18.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10",
-    "@types/node": "26.1.1"
+    "zod": "4.4.3"
   }
 }

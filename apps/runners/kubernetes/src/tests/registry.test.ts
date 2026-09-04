@@ -26,8 +26,9 @@ describe("createDispatchRegistry", () => {
 
   it("refuses a command input that is not shaped like its schema", async () => {
     const logs = registry.get("GetK8sLogs")!;
+    // Path-qualified, so a nested miss says which field of which object.
     await expect(logs({ service: { namespace: "shop" } })).rejects.toThrow(
-      /"workload"/,
+      /"service\.workload"/,
     );
   });
 

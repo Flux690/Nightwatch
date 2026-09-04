@@ -252,6 +252,16 @@ describe("state inversion: persistence and reads are API-local", () => {
       expect((await listPage("limit=0")).status).toBe(400);
       expect((await listPage("offset=-1")).status).toBe(400);
     });
+
+    // The caller sent "abc", so naming NaN describes our own coercion rather
+    // than what they got wrong.
+    it("names the bound a bad limit missed, never the coercion behind it", async () => {
+      const body = (await (await listPage("limit=abc")).json()) as {
+        error: string;
+      };
+      expect(body.error).not.toMatch(/NaN/);
+      expect(body.error).toMatch(/limit/i);
+    });
   });
 });
 

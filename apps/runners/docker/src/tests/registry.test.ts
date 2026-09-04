@@ -24,8 +24,9 @@ describe("createDispatchRegistry", () => {
 
   it("refuses a command input that is not shaped like its schema", async () => {
     const logs = registry.get("GetDockerLogs")!;
+    // Path-qualified, so a nested miss says which field of which object.
     await expect(logs({ service: { project: "app" } })).rejects.toThrow(
-      /"service"/,
+      /"service\.service"/,
     );
     await expect(logs({})).rejects.toThrow(/"service"/);
   });

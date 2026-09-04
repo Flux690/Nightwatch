@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { PLATFORMS, isPlatform, serverNameError } from "@nightwarden/shared";
+import { serverNameError } from "@nightwarden/shared";
+import { mintTokenRequestSchema } from "@nightwarden/shared/schemas";
+import { parseRequest } from "../request-body.js";
 import {
   generateRunnerToken,
   deleteRunner,
@@ -13,49 +15,40 @@ export async function registerTokenRoutes(
 ): Promise<void> {
   // Generate a new runner token. The plaintext nwr_... value is returned
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
-  fastify.post<{
-    Body: { platform?: unknown; serverName?: string };
-  }>("/tokens", { preHandler: requireSession }, async (request, reply) => {
-    // Refused rather than defaulted: a guess here throws away the platform the
-    // frontend was told, and the row is what everything else reads.
-    const platform = request.body?.platform;
-    if (!isPlatform(platform)) {
-      return reply.code(400).send({
-        error: `platform is required and must be one of: ${PLATFORMS.join(", ")}`,
-      });
-    }
+  fastify.post(
+    "/tokens",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      // Platform is refused rather than defaulted: a guess throws away what the
+      // frontend was told, and the row is what everything else reads.
+      const body = parseRequest(mintTokenRequestSchema, request.body ?? {});
+      if (!body.ok) return reply.code(400).send({ error: body.error });
+      const { platform } = body.data;
 
-    // Required, because it is the first segment of every target key this runner
-    // will advertise: a nameless runner has nothing to address its services by.
-    const rawServerName = request.body?.serverName;
-    if (typeof rawServerName !== "string") {
-      return reply
-        .code(400)
-        .send({ error: "serverName is required and must be a string" });
-    }
-    const nameError = serverNameError(rawServerName);
-    if (nameError) return reply.code(400).send({ error: nameError });
-    const serverName = rawServerName.trim();
+      const nameError = serverNameError(body.data.serverName);
+      if (nameError) return reply.code(400).send({ error: nameError });
+      const serverName = body.data.serverName.trim();
 
-    try {
-      const generated = await generateRunnerToken(platform, serverName);
-      return reply.code(201).send({
-        id: generated.id,
-        token: generated.plaintext,
-        platform: generated.platform,
-        serverName: generated.serverName,
-        createdAt: generated.createdAt,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("UNIQUE constraint failed: runner.server_name")) {
-        return reply
-          .code(409)
-          .send({ error: "A runner with that server name already exists" });
+      try {
+        const generated = await generateRunnerToken(platform, serverName);
+        return reply.code(201).send({
+          id: generated.id,
+          token: generated.plaintext,
+          platform: generated.platform,
+          serverName: generated.serverName,
+          createdAt: generated.createdAt,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("UNIQUE constraint failed: runner.server_name")) {
+          return reply
+            .code(409)
+            .send({ error: "A runner with that server name already exists" });
+        }
+        throw err;
       }
-      throw err;
-    }
-  });
+    },
+  );
 
   // List all tokens (active and revoked). No plaintext is ever returned.
   fastify.get("/tokens", { preHandler: requireSession }, async () => ({

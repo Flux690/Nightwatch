@@ -4,11 +4,11 @@ import { promisify } from "node:util";
 import type {
   HostCpuResult,
   HostDiskResult,
-  HostDmesgInput,
   HostDmesgResult,
   HostMemoryResult,
   HostNetworkResult,
 } from "@nightwarden/shared";
+import type { HostDmesgInput } from "@nightwarden/shared/schemas";
 
 const exec = promisify(execFile);
 // Host /proc when the runner is containerized. Also read by manifest detection,

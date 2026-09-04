@@ -1,15 +1,8 @@
 // A Kubernetes workload is not a container: every result identifies the pod it
 // was read from, and every read reports names and shapes, never values.
 
-import type {
-  K8sWorkloadKind,
-  KubernetesWorkloadIdentity,
-} from "../service-identity.js";
+import type { K8sWorkloadKind } from "../service-identity.js";
 import type { LogLine } from "./common.js";
-
-export interface K8sWorkloadListInput {
-  namespace?: string;
-}
 
 export interface K8sWorkloadInstance {
   name: string;
@@ -33,15 +26,6 @@ export interface K8sWorkloadListResult {
   workloads: K8sWorkloadInstance[];
 }
 
-// No stderrOnly, because the Kubernetes log API merges the streams. No `until`
-// either: it has no end-time parameter, so one would be a filter posing as a query.
-export interface K8sLogsInput {
-  service: KubernetesWorkloadIdentity;
-  tailLines?: number;
-  since?: string;
-  contains?: string[];
-  excludes?: string[];
-}
 // A matched count means nothing without the size of what was searched: three
 // hits in the newest hundred lines is not three hits in the log.
 export interface K8sLogsResult {
@@ -85,9 +69,6 @@ export interface K8sContainerSpec {
   volumeMounts: Array<{ name: string; mountPath: string; readOnly: boolean }>;
 }
 
-export interface K8sConfigInput {
-  service: KubernetesWorkloadIdentity;
-}
 export interface K8sConfigResult {
   name: string;
   kind: K8sWorkloadKind;
@@ -106,10 +87,6 @@ export interface K8sConfigResult {
   nodeSelector: Record<string, string>;
   containers: K8sContainerSpec[];
   volumes: Array<{ name: string; kind: string }>;
-}
-
-export interface K8sStatsInput {
-  service: KubernetesWorkloadIdentity;
 }
 
 export interface K8sContainerStats {
@@ -146,13 +123,6 @@ export interface K8sStatsResult {
   podsOmitted?: number;
 }
 
-export interface K8sEventsInput {
-  service: KubernetesWorkloadIdentity;
-  sinceMinutes?: number;
-  // Kubernetes Normal events are high-volume; default true.
-  warningsOnly?: boolean;
-}
-
 export interface K8sEvent {
   type: "Normal" | "Warning";
   reason: string;
@@ -186,21 +156,12 @@ export interface K8sProcess {
   command: string;
 }
 
-export interface K8sProcessesInput {
-  service: KubernetesWorkloadIdentity;
-}
 export interface K8sProcessesResult {
   podName: string;
   containerName: string | null;
   processes: K8sProcess[];
 }
 
-// No delaySeconds: a rollout restart is an annotation patch with no delay to honour.
-export interface K8sRestartInput {
-  service: KubernetesWorkloadIdentity;
-  reason: string;
-  estimatedDowntimeSeconds: number;
-}
 export interface K8sRestartResult {
   success: boolean;
   startedAt: string;
@@ -208,9 +169,6 @@ export interface K8sRestartResult {
   generation: number;
 }
 
-export interface K8sRolloutStatusInput {
-  service: KubernetesWorkloadIdentity;
-}
 export interface K8sRolloutStatusResult {
   workload: string;
   namespace: string;
@@ -235,14 +193,6 @@ export interface K8sRolloutStatusResult {
   }>;
 }
 
-// Executed directly rather than through a shell, so args are passed through
-// untouched and no character in one is interpreted.
-export interface K8sExecInput {
-  service: KubernetesWorkloadIdentity;
-  executable: string;
-  args?: string[];
-  reason: string;
-}
 export interface K8sExecResult {
   exitCode: number;
   stdout: string;

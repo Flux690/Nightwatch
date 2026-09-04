@@ -31,6 +31,7 @@ import { SentryApiError, probeSentry } from "./sentry.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
+import { readable } from "../request-body.js";
 import { publicUrl } from "../public-url.js";
 import type {
   GitHubIntegrationStatus,
@@ -187,7 +188,7 @@ export async function registerIntegrationRoutes(
     async (request, reply) => {
       const parsed = ReposBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const stored = await getGitHubIntegration();
       const token = parsed.data.token ?? stored?.token ?? null;
@@ -215,7 +216,7 @@ export async function registerIntegrationRoutes(
     async (request, reply) => {
       const parsed = ConnectBodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { token, repo } = parsed.data;
       // The body schema regex guarantees exactly one slash with both sides
@@ -259,7 +260,7 @@ export async function registerIntegrationRoutes(
       }
       const parsed = RebindBodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const [owner, name] = parsed.data.repo.split("/") as [string, string];
       try {
@@ -314,7 +315,7 @@ export async function registerIntegrationRoutes(
     async (request, reply) => {
       const parsed = LokiConnectSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { url, authHeader, orgId } = parsed.data;
       try {
@@ -356,7 +357,7 @@ export async function registerIntegrationRoutes(
     async (request, reply) => {
       const parsed = SentryConnectSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { url, orgSlug, token } = parsed.data;
       try {

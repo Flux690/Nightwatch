@@ -1,7 +1,6 @@
-// LLM tool payload types for the Docker tools. A Docker service is a container;
-// nothing here describes a workload, and no input can hold a Kubernetes identity.
+// What the Docker tools answer with. Their inputs are schemas rather than types,
+// so they live beside the validation in ../schemas/docker-commands.ts.
 
-import type { DockerServiceIdentity } from "../service-identity.js";
 import type { LogLine } from "./common.js";
 
 export interface DockerContainerInstance {
@@ -23,17 +22,6 @@ export interface DockerServiceListResult {
   containers: DockerContainerInstance[];
 }
 
-// since/until are ISO 8601 and absent means the engine's default.
-// contains/excludes filter whole lines, because no engine filters server-side.
-export interface DockerLogsInput {
-  service: DockerServiceIdentity;
-  tailLines?: number;
-  since?: string;
-  until?: string;
-  contains?: string[];
-  excludes?: string[];
-  stderrOnly?: boolean;
-}
 // A matched count means nothing without the size of what was searched: three
 // hits in the newest hundred lines is not three hits in the log.
 export interface DockerLogsResult {
@@ -44,9 +32,6 @@ export interface DockerLogsResult {
   note: string;
 }
 
-export interface DockerConfigInput {
-  service: DockerServiceIdentity;
-}
 export interface DockerConfigResult {
   name: string;
   image: string;
@@ -65,9 +50,6 @@ export interface DockerConfigResult {
   startedAt: string;
 }
 
-export interface DockerStatsInput {
-  service: DockerServiceIdentity;
-}
 export interface DockerStatsResult {
   cpuPercent: number;
   memoryUsedBytes: number;
@@ -80,10 +62,6 @@ export interface DockerStatsResult {
   pids: number;
 }
 
-export interface DockerEventsInput {
-  service: DockerServiceIdentity;
-  sinceMinutes?: number;
-}
 export interface DockerEvent {
   timestamp: string;
   eventType: string;
@@ -94,9 +72,6 @@ export interface DockerEventsResult {
   events: DockerEvent[];
 }
 
-export interface DockerProcessesInput {
-  service: DockerServiceIdentity;
-}
 export interface DockerProcess {
   pid: number;
   ppid: number;
@@ -109,12 +84,6 @@ export interface DockerProcessesResult {
   processes: DockerProcess[];
 }
 
-export interface DockerRestartInput {
-  service: DockerServiceIdentity;
-  delaySeconds?: number;
-  reason: string;
-  estimatedDowntimeSeconds: number;
-}
 export interface DockerRestartResult {
   success: boolean;
   startedAt: string;
@@ -122,14 +91,6 @@ export interface DockerRestartResult {
   newStatus: string;
 }
 
-// Executed directly rather than through a shell, so args are passed through
-// untouched and no character in one is interpreted.
-export interface DockerExecInput {
-  service: DockerServiceIdentity;
-  executable: string;
-  args?: string[];
-  reason: string;
-}
 export interface DockerExecResult {
   exitCode: number;
   stdout: string;

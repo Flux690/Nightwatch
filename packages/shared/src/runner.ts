@@ -8,7 +8,11 @@ import type {
 // exactly one of these; it is never probed, and never negotiated at runtime.
 export type Platform = "docker" | "kubernetes";
 
-export const PLATFORMS: readonly Platform[] = ["docker", "kubernetes"];
+// A literal tuple, so a schema can take it directly rather than restating it.
+export const PLATFORMS = [
+  "docker",
+  "kubernetes",
+] as const satisfies readonly Platform[];
 
 export function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && PLATFORMS.some((p) => p === value);

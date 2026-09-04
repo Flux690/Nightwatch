@@ -37,16 +37,32 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     vi.unstubAllEnvs();
   });
 
-  it("POST /chat returns 400 when message is missing", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+  const post = async (body: unknown): Promise<Response> =>
+    await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `${SESSION}`,
-      },
-      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json", Cookie: `${SESSION}` },
+      body: JSON.stringify(body),
+    });
+
+  it("POST /chat returns 400 when message is missing", async () => {
+    const res = await post({});
+    expect(res.status).toBe(400);
+    // Names the field and what it needs, rather than a type mismatch the
+    // caller has to translate back into "you left it out".
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/message is required/i);
+  });
+
+  it("POST /chat refuses an investigation and says an alert opens one", async () => {
+    const res = await post({
+      message: "why is checkout slow",
+      kind: "investigation",
     });
     expect(res.status).toBe(400);
+    // The refusal has to carry its reason: a caller told only that the value is
+    // wrong will try another spelling rather than sending an alert.
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/alert/i);
   });
 
   it("POST /chat creates a session and returns its uuid", async () => {
