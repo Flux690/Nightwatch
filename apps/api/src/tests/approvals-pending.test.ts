@@ -47,7 +47,6 @@ const RESTART_TURN = (): ScriptedTurn => ({
       input: {
         target: "prod-1/web-01/web-01",
         reason: "r",
-        risk: "low",
         estimatedDowntimeSeconds: 1,
       },
     },

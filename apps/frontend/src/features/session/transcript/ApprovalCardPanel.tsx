@@ -7,7 +7,7 @@ import { CodeBlock } from "@/shared/ui/code-block";
 import { Textarea } from "@/shared/ui/textarea";
 import { SECTION_HEADING } from "@/shared/ui/Page";
 import type { ToolCallItem } from "./types.js";
-import { SHELL_TOOLS, targetOf } from "./toolPresentation.js";
+import { COMMAND_TOOLS, commandLineOf, targetOf } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
 import { GateCard } from "./GateCard.js";
 
@@ -20,29 +20,6 @@ function inputString(
 ): string | null {
   const value = input[key];
   return typeof value === "string" && value.trim() !== "" ? value : null;
-}
-
-// The exact argv, never a paraphrase: what the user reads has to be what
-// runs, or the approval is theatre.
-function commandOf(input: Record<string, unknown>): string | null {
-  const command = input["command"];
-  if (Array.isArray(command))
-    return command.map((part) => String(part)).join(" ");
-  return typeof command === "string" ? command : null;
-}
-
-// The three levels the schema asks for read as a sentence; anything else is
-// shown as the note it is rather than glued into a template.
-const RISK_SENTENCE: Record<string, string> = {
-  low: "The agent calls this low risk",
-  medium: "The agent calls this medium risk",
-  high: "The agent calls this high risk",
-};
-
-function riskLineOf(risk: string | null): string | null {
-  const said = risk?.trim() ?? "";
-  if (said === "") return null;
-  return RISK_SENTENCE[said.toLowerCase()] ?? said;
 }
 
 function ordinal(n: number): string {
@@ -59,7 +36,7 @@ function actionLabel(toolName: string, input: Record<string, unknown>): string {
   if (isTool(toolName, "RestartDockerService", "RestartK8sWorkload")) {
     return service ? `Restart ${service}` : "Restart service";
   }
-  if (isTool(toolName, ...SHELL_TOOLS)) return "Run this command";
+  if (isTool(toolName, ...COMMAND_TOOLS)) return "Run this command";
   return `Run ${toolName}`;
 }
 
@@ -78,12 +55,11 @@ export function ApprovalCardPanel({
   const [reason, setReason] = useState("");
 
   const { input } = item;
-  const command = commandOf(input);
+  const command = commandLineOf(input);
   const service = targetOf(input);
   // The one part of this card the agent authors. Required on every write tool,
   // so it is absent only on a row written before that was true.
   const why = inputString(input, "reason");
-  const riskLine = riskLineOf(inputString(input, "risk"));
 
   return (
     <GateCard data-testid="approval-card">
@@ -119,13 +95,9 @@ export function ApprovalCardPanel({
         </p>
       )}
 
-      {/* Facts about the call, plus the agent's own risk assessment. Its
-          opinion, labelled as such, sitting beside the command that lets you
-          judge it yourself. */}
       <div className="flex flex-wrap gap-4 text-sm text-ink-subtle">
         <span className="font-mono">{item.toolName}</span>
         {service !== null && <span className="font-mono">{service}</span>}
-        {riskLine !== null && <span>{riskLine}</span>}
       </div>
 
       {rejecting ? (

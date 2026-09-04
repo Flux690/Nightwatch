@@ -2,7 +2,7 @@
 // nothing here describes a workload, and no input can hold a Kubernetes identity.
 
 import type { DockerServiceIdentity } from "../service-identity.js";
-import type { LogLine, RiskLevel } from "./common.js";
+import type { LogLine } from "./common.js";
 
 export interface DockerContainerInstance {
   name: string;
@@ -113,7 +113,6 @@ export interface DockerRestartInput {
   service: DockerServiceIdentity;
   delaySeconds?: number;
   reason: string;
-  risk: RiskLevel;
   estimatedDowntimeSeconds: number;
 }
 export interface DockerRestartResult {
@@ -123,13 +122,15 @@ export interface DockerRestartResult {
   newStatus: string;
 }
 
-export interface DockerBashInput {
+// Executed directly rather than through a shell, so args are passed through
+// untouched and no character in one is interpreted.
+export interface DockerExecInput {
   service: DockerServiceIdentity;
-  command: string[];
+  executable: string;
+  args?: string[];
   reason: string;
-  risk: RiskLevel;
 }
-export interface DockerBashResult {
+export interface DockerExecResult {
   exitCode: number;
   stdout: string;
   stderr: string;

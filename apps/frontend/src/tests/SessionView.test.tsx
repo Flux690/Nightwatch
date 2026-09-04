@@ -944,7 +944,7 @@ describe("SessionView", () => {
               kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
-              input: { target: "prod-1/web-01/web-01", risk: "high" },
+              input: { target: "prod-1/web-01/web-01" },
               state: { phase: "awaiting_human", gate: "approval" },
             },
           },
@@ -1019,7 +1019,7 @@ describe("SessionView", () => {
               kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
-              input: { target: "prod-1/web-01/web-01", risk: "high" },
+              input: { target: "prod-1/web-01/web-01" },
               state: {
                 phase: "resolved",
                 decision: "approved",
@@ -1051,7 +1051,7 @@ describe("SessionView", () => {
           kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          input: { target: "prod-1/web-01/web-01", risk: "high" },
+          input: { target: "prod-1/web-01/web-01" },
           state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);
@@ -1061,7 +1061,6 @@ describe("SessionView", () => {
         expect(
           within(card).getByText("RestartDockerService"),
         ).toBeInTheDocument();
-        expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /restart/i }),
         ).toBeInTheDocument();
@@ -1101,7 +1100,7 @@ describe("SessionView", () => {
           kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          input: { target: "prod-1/web-01/web-01", risk: "high" },
+          input: { target: "prod-1/web-01/web-01" },
           state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);

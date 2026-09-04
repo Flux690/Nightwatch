@@ -478,7 +478,6 @@ describe("clarification interrupts", () => {
             input: {
               target: "clar-host/web-01/web-01",
               reason: "mixed",
-              risk: "low",
               estimatedDowntimeSeconds: 2,
             },
           },
@@ -493,7 +492,6 @@ describe("clarification interrupts", () => {
             input: {
               target: "clar-host/web-01/web-01",
               reason: "confirmed",
-              risk: "low",
               estimatedDowntimeSeconds: 2,
             },
           },

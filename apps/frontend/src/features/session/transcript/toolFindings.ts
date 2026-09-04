@@ -301,7 +301,7 @@ function execFinding(record: Record<string, unknown>): ToolFinding | null {
   return { text: `exit 0 · ${counted}`, tone: "normal" };
 }
 
-for (const name of ["DockerBash", "K8sBash", "Bash"]) {
+for (const name of ["DockerExec", "K8sExec", "Bash"]) {
   FORMATTERS[name] = execFinding;
 }
 

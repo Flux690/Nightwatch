@@ -433,7 +433,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Bash",
       description:
-        "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerBash or K8sBash when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
+        "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerExec or K8sExec when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
       input_schema: {
         type: "object",
         additionalProperties: false,

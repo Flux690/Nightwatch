@@ -404,7 +404,6 @@ describe("multi-runner routing", () => {
             input: {
               target: "db-02/postgres/postgres",
               reason: "OOM killed",
-              risk: "low",
               estimatedDowntimeSeconds: 5,
             },
           },

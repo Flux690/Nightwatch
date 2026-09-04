@@ -29,4 +29,17 @@ describe("createDispatchRegistry", () => {
     );
     await expect(logs({})).rejects.toThrow(/"service"/);
   });
+
+  // Nothing splits an executable on spaces, so a command line here would name a
+  // binary that does not exist; the refusal points at the field it belongs in.
+  it("refuses an executable holding arguments and names args instead", async () => {
+    const exec = registry.get("DockerExec")!;
+    await expect(
+      exec({
+        service: { project: "shop", service: "api" },
+        executable: "redis-cli info memory",
+        reason: "read the memory stats",
+      }),
+    ).rejects.toThrow(/"args"/);
+  });
 });

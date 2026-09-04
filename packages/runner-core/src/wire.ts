@@ -1,8 +1,6 @@
 // Decoding the untrusted side of the socket. A command's input arrives as JSON, so a
 // registry that asserted its shape would be trusting the sender; these read and check.
 
-import type { RiskLevel } from "@nightwarden/shared";
-
 function record(input: unknown): Record<string, unknown> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("command input must be an object");
@@ -55,14 +53,6 @@ export function optionalBoolean(
   return value;
 }
 
-export function requiredStringArray(input: unknown, key: string): string[] {
-  const value = record(input)[key];
-  if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
-    throw new Error(`"${key}" must be an array of strings`);
-  }
-  return value;
-}
-
 export function optionalStringArray(
   input: unknown,
   key: string,
@@ -85,11 +75,12 @@ export function nested(input: unknown, key: string): unknown {
   return value;
 }
 
-const RISKS: readonly RiskLevel[] = ["low", "medium", "high"];
-
-export function riskLevel(input: unknown, key = "risk"): RiskLevel {
+// A program name, never a command line: the runner execs it directly, so a
+// space here would name a binary that does not exist.
+export function executableName(input: unknown, key = "executable"): string {
   const value = requiredString(input, key);
-  const match = RISKS.find((r) => r === value);
-  if (!match) throw new Error(`"${key}" must be one of: ${RISKS.join(", ")}`);
-  return match;
+  if (/\s/.test(value)) {
+    throw new Error(`"${key}" must name one program: put arguments in "args"`);
+  }
+  return value;
 }

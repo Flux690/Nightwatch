@@ -1,3 +1,4 @@
+import { ARGS_PROPERTY, EXECUTABLE_PROPERTY } from "./exec.js";
 import { REASON_PROPERTY } from "./reason.js";
 import type { Tool } from "./types.js";
 
@@ -9,8 +10,8 @@ const TARGET_PROPERTY = {
     "The service's target key, copied exactly as it appears in the <fleet-summary> block or in a ListDockerServices result, for example web-01/shop/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
-// Read tools: run unattended, so each is a narrow typed question - never
-// arbitrary shell. Safety comes from the shape, not from review.
+// Read tools: run unattended, so each is a narrow typed question - never an
+// arbitrary command. Safety comes from the shape, not from review.
 export const DOCKER_TOOLS: Tool[] = [
   {
     schema: {
@@ -172,7 +173,7 @@ export const DOCKER_TOOLS: Tool[] = [
     schema: {
       name: "RestartDockerService",
       description:
-        "Restart a Docker service by restarting its container. This changes the Docker host, so calling it pauses you until a human approves or rejects it, and the service is briefly unavailable while it comes back. If the human rejects the call, you will be told so and the restart will not have happened.",
+        "Restart a Docker service by restarting its container. The service is briefly unavailable while it comes back.",
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -184,19 +185,13 @@ export const DOCKER_TOOLS: Tool[] = [
               "How many seconds to wait before restarting. Defaults to 0, which restarts immediately.",
           },
           reason: REASON_PROPERTY,
-          risk: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-            description:
-              "Your own assessment of how much damage this restart could do if it goes wrong. The human sees it labelled as your opinion, beside the facts of the call.",
-          },
           estimatedDowntimeSeconds: {
             type: "number",
             description:
               "How many seconds you expect the service to be unavailable for.",
           },
         },
-        required: ["target", "reason", "risk", "estimatedDowntimeSeconds"],
+        required: ["target", "reason", "estimatedDowntimeSeconds"],
       },
     },
     effect: "write",
@@ -207,29 +202,19 @@ export const DOCKER_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "DockerBash",
+      name: "DockerExec",
       description:
-        "Run a shell command inside a Docker service's container, as docker exec does. It runs inside the container and never on the Docker host itself. Because such a command is able to change things, calling it pauses you until a human approves or rejects it, even when the command you are running only reads. Use it to answer questions the typed Docker tools above do not cover, and to apply a fix once you know what the fix is.",
+        "Run one program inside a Docker service's container, as docker exec does. The program runs inside the container and never on the Docker host, and the result carries its exit code, its standard output and its standard error. NightWarden starts no shell, so every argument reaches the program exactly as you write it and characters such as |, > and ; are ordinary text; to use shell syntax, name a shell as the executable and pass the whole script as one argument. The effect of an arbitrary command cannot be known in advance, so every call is treated as a write until a person decides otherwise. Use it to answer a question the typed Docker tools above do not cover, and to apply a fix once you know what the fix is.",
       input_schema: {
         type: "object",
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
-          command: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "The command and its arguments, split into an array of strings, for example ['redis-cli', 'info', 'memory']. The human sees exactly this, joined by spaces, and approves that.",
-          },
+          executable: EXECUTABLE_PROPERTY,
+          args: ARGS_PROPERTY,
           reason: REASON_PROPERTY,
-          risk: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-            description:
-              "Your own assessment of how much damage this command could do if it goes wrong. A command that only reads is low. The human sees it labelled as your opinion.",
-          },
         },
-        required: ["target", "command", "reason", "risk"],
+        required: ["target", "executable", "reason"],
       },
     },
     effect: "write",

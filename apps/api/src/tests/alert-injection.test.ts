@@ -347,7 +347,6 @@ describe("mid-run alert injection (loop seam)", () => {
               input: {
                 target: `${SERVER}/web-01/web-01`,
                 reason: "test",
-                risk: "low",
                 estimatedDowntimeSeconds: 1,
               },
             },
@@ -449,7 +448,6 @@ describe("mid-run alert injection (loop seam)", () => {
               input: {
                 target: `${SERVER}/web-01/web-01`,
                 reason: "test",
-                risk: "low",
                 estimatedDowntimeSeconds: 1,
               },
             },

@@ -185,11 +185,11 @@ describe("findingFor", () => {
     });
   });
 
-  describe("shell tools", () => {
+  describe("command tools", () => {
     // The runner's container exec splits the streams; the repo sandbox returns
     // one combined `output`. Both must read.
     it("reads split stdout/stderr from the runner", () => {
-      const finding = findingFor("DockerBash", {
+      const finding = findingFor("DockerExec", {
         exitCode: 0,
         stdout: "used_memory:1604216\nmaxmemory:1048576",
         stderr: "",
@@ -206,7 +206,7 @@ describe("findingFor", () => {
     });
 
     it("surfaces a non-zero exit with its first stderr line", () => {
-      const finding = findingFor("DockerBash", {
+      const finding = findingFor("DockerExec", {
         exitCode: 1,
         stdout: "",
         stderr: "redis-cli: connection refused",

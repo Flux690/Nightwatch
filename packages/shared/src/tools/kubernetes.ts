@@ -5,7 +5,7 @@ import type {
   K8sWorkloadKind,
   KubernetesWorkloadIdentity,
 } from "../service-identity.js";
-import type { LogLine, RiskLevel } from "./common.js";
+import type { LogLine } from "./common.js";
 
 export interface K8sWorkloadListInput {
   namespace?: string;
@@ -199,7 +199,6 @@ export interface K8sProcessesResult {
 export interface K8sRestartInput {
   service: KubernetesWorkloadIdentity;
   reason: string;
-  risk: RiskLevel;
   estimatedDowntimeSeconds: number;
 }
 export interface K8sRestartResult {
@@ -236,13 +235,15 @@ export interface K8sRolloutStatusResult {
   }>;
 }
 
-export interface K8sBashInput {
+// Executed directly rather than through a shell, so args are passed through
+// untouched and no character in one is interpreted.
+export interface K8sExecInput {
   service: KubernetesWorkloadIdentity;
-  command: string[];
+  executable: string;
+  args?: string[];
   reason: string;
-  risk: RiskLevel;
 }
-export interface K8sBashResult {
+export interface K8sExecResult {
   exitCode: number;
   stdout: string;
   stderr: string;

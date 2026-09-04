@@ -3,8 +3,8 @@ import { setHeaderOptions } from "@kubernetes/client-node";
 import type * as k8s from "@kubernetes/client-node";
 import { kubernetesWorkloadKey } from "@nightwarden/shared";
 import type {
-  K8sBashInput,
-  K8sBashResult,
+  K8sExecInput,
+  K8sExecResult,
   K8sConfigInput,
   K8sConfigResult,
   K8sContainerSpec,
@@ -494,8 +494,8 @@ export async function restartWorkload(
 }
 
 export async function execInWorkload(
-  input: K8sBashInput,
-): Promise<K8sBashResult | NotFoundResult> {
+  input: K8sExecInput,
+): Promise<K8sExecResult | NotFoundResult> {
   const service = input.service;
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
@@ -509,15 +509,12 @@ export async function execInWorkload(
   );
   if ("found" in resolved) return resolved;
 
-  const [cmd, ...args] = input.command;
-  if (!cmd) throw new Error("command array must not be empty");
-
   const executedAt = new Date().toISOString();
   const { stdout, stderr, exitCode } = await execInPod(
     resolved.namespace,
     resolved.podName,
     resolved.containerName ?? "",
-    [cmd, ...args],
+    [input.executable, ...(input.args ?? [])],
   );
 
   return {

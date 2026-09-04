@@ -110,7 +110,7 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(names).toContain("GetDockerLogs");
       expect(names).toContain("ListDockerServices");
       expect(names).toContain("RestartDockerService");
-      expect(names).toContain("DockerBash");
+      expect(names).toContain("DockerExec");
       expect(names).not.toContain("GetK8sLogs");
       expect(names).not.toContain("GetK8sRolloutStatus");
       expect(names).not.toContain("GetK8sNodeStatus");
@@ -386,7 +386,6 @@ describe("toolset assembly by fleet capabilities", () => {
               input: {
                 target: "toolset-k8s-001/production/api-server",
                 reason: "K8s workload wedged",
-                risk: "low",
                 estimatedDowntimeSeconds: 10,
               },
             },

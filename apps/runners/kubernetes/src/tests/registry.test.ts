@@ -30,4 +30,17 @@ describe("createDispatchRegistry", () => {
       /"workload"/,
     );
   });
+
+  // Nothing splits an executable on spaces, so a command line here would name a
+  // binary that does not exist; the refusal points at the field it belongs in.
+  it("refuses an executable holding arguments and names args instead", async () => {
+    const exec = registry.get("K8sExec")!;
+    await expect(
+      exec({
+        service: { namespace: "shop", workload: "api" },
+        executable: "redis-cli info memory",
+        reason: "read the memory stats",
+      }),
+    ).rejects.toThrow(/"args"/);
+  });
 });

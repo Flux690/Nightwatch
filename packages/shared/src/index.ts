@@ -17,12 +17,7 @@ export {
   kubernetesWorkloadKey,
   parseTargetKey,
 } from "./service-identity.js";
-export type {
-  RiskLevel,
-  LogLine,
-  NotFoundResult,
-  FleetResult,
-} from "./tools/common.js";
+export type { LogLine, NotFoundResult, FleetResult } from "./tools/common.js";
 export type {
   DockerContainerInstance,
   DockerServiceListResult,
@@ -40,8 +35,8 @@ export type {
   DockerProcessesResult,
   DockerRestartInput,
   DockerRestartResult,
-  DockerBashInput,
-  DockerBashResult,
+  DockerExecInput,
+  DockerExecResult,
 } from "./tools/docker.js";
 export type {
   K8sWorkloadListInput,
@@ -67,8 +62,8 @@ export type {
   K8sRestartResult,
   K8sRolloutStatusInput,
   K8sRolloutStatusResult,
-  K8sBashInput,
-  K8sBashResult,
+  K8sExecInput,
+  K8sExecResult,
   K8sNodeCondition,
   K8sNode,
   K8sNodeStatusResult,

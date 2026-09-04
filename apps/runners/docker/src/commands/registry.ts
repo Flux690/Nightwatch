@@ -1,12 +1,11 @@
 import {
+  executableName,
   nested,
   optionalBoolean,
   optionalNumber,
   optionalString,
   optionalStringArray,
   requiredString,
-  requiredStringArray,
-  riskLevel,
   type CommandHandler,
 } from "@nightwarden/runner-core";
 import type { DockerServiceIdentity } from "@nightwarden/shared";
@@ -84,19 +83,18 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
           service: service(input),
           delaySeconds: optionalNumber(input, "delaySeconds"),
           reason: requiredString(input, "reason"),
-          risk: riskLevel(input),
           estimatedDowntimeSeconds:
             optionalNumber(input, "estimatedDowntimeSeconds") ?? 0,
         }),
     ],
     [
-      "DockerBash",
+      "DockerExec",
       async (input) =>
         execCommand({
           service: service(input),
-          command: requiredStringArray(input, "command"),
+          executable: executableName(input),
+          args: optionalStringArray(input, "args") ?? [],
           reason: requiredString(input, "reason"),
-          risk: riskLevel(input),
         }),
     ],
     ["GetHostMemory", async () => getHostMemory()],

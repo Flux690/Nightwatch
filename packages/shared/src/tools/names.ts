@@ -8,7 +8,7 @@ export const DOCKER_TOOL_NAMES = [
   "GetDockerStats",
   "GetDockerProcesses",
   "RestartDockerService",
-  "DockerBash",
+  "DockerExec",
   "GetHostCPU",
   "GetHostMemory",
   "GetHostDisk",
@@ -27,7 +27,7 @@ export const KUBERNETES_TOOL_NAMES = [
   "GetK8sNodeStatus",
   "GetK8sRolloutStatus",
   "RestartK8sWorkload",
-  "K8sBash",
+  "K8sExec",
 ] as const;
 
 /* Everything that runs inside the API and reaches no runner: what it queries,

@@ -61,7 +61,6 @@ describe("TranscriptItemRenderer", () => {
       input: {
         service: { project: "web-01", service: "web-01" },
         reason: "The health check has failed six times in a row.",
-        risk: "high",
       },
       state: { phase: "awaiting_human", gate: "approval" },
     };
@@ -81,13 +80,14 @@ describe("TranscriptItemRenderer", () => {
       expect(onResolve).toHaveBeenCalledWith("tu-gate", "approve", undefined);
     });
 
-    it("shows the exact command for a shell tool", () => {
+    it("shows the exact command for an exec tool", () => {
       wrap({
         ...approvalItem,
-        toolName: "DockerBash",
+        toolName: "DockerExec",
         input: {
           target: "encodr-prod/encodr/cache",
-          command: ["redis-cli", "CONFIG", "SET", "maxmemory", "8gb"],
+          executable: "redis-cli",
+          args: ["CONFIG", "SET", "maxmemory", "8gb"],
           reason: "writes are being rejected",
         },
       });

@@ -1,3 +1,4 @@
+import { ARGS_PROPERTY, EXECUTABLE_PROPERTY } from "./exec.js";
 import { REASON_PROPERTY } from "./reason.js";
 import type { Tool } from "./types.js";
 
@@ -17,8 +18,8 @@ const CONTAINER_PROPERTY = {
     "Which container to read, when the workload's pod runs more than one, for example an application container alongside a sidecar. Omit it for a single-container pod. If you omit it for a pod that has several, the result lists the containers you can choose from.",
 } as const;
 
-// Read tools: run unattended, so each is a narrow typed question - never
-// arbitrary shell. Safety comes from the shape, not from review.
+// Read tools: run unattended, so each is a narrow typed question - never an
+// arbitrary command. Safety comes from the shape, not from review.
 export const K8S_TOOLS: Tool[] = [
   {
     schema: {
@@ -227,26 +228,20 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "RestartK8sWorkload",
       description:
-        "Restart a Kubernetes workload by performing a rollout restart of its Deployment, StatefulSet or DaemonSet, which replaces its pods one batch at a time. This changes the cluster, so calling it pauses you until a human approves or rejects it. If the human rejects the call, you will be told so and the restart will not have happened.",
+        "Restart a Kubernetes workload by performing a rollout restart of its Deployment, StatefulSet or DaemonSet, which replaces its pods one batch at a time.",
       input_schema: {
         type: "object",
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           reason: REASON_PROPERTY,
-          risk: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-            description:
-              "Your own assessment of how much damage this restart could do if it goes wrong. The human sees it labelled as your opinion, beside the facts of the call.",
-          },
           estimatedDowntimeSeconds: {
             type: "number",
             description:
               "How many seconds you expect the workload to be degraded or unavailable for.",
           },
         },
-        required: ["target", "reason", "risk", "estimatedDowntimeSeconds"],
+        required: ["target", "reason", "estimatedDowntimeSeconds"],
       },
     },
     effect: "write",
@@ -257,30 +252,20 @@ export const K8S_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "K8sBash",
+      name: "K8sExec",
       description:
-        "Run a shell command inside a Kubernetes workload's pod, as kubectl exec does. It runs inside the pod and never on the node hosting it. Because such a command is able to change things, calling it pauses you until a human approves or rejects it, even when the command you are running only reads. Use it to answer questions the typed Kubernetes tools above do not cover, and to apply a fix once you know what the fix is.",
+        "Run one program inside a Kubernetes workload's pod, as kubectl exec does. The program runs inside the pod and never on the node hosting it, and the result carries its exit code, its standard output and its standard error. NightWarden starts no shell, so every argument reaches the program exactly as you write it and characters such as |, > and ; are ordinary text; to use shell syntax, name a shell as the executable and pass the whole script as one argument. The effect of an arbitrary command cannot be known in advance, so every call is treated as a write until a person decides otherwise. Use it to answer a question the typed Kubernetes tools above do not cover, and to apply a fix once you know what the fix is.",
       input_schema: {
         type: "object",
         additionalProperties: false,
         properties: {
           target: TARGET_PROPERTY,
           container: CONTAINER_PROPERTY,
-          command: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "The command and its arguments, split into an array of strings, for example ['redis-cli', 'info', 'memory']. The human sees exactly this, joined by spaces, and approves that.",
-          },
+          executable: EXECUTABLE_PROPERTY,
+          args: ARGS_PROPERTY,
           reason: REASON_PROPERTY,
-          risk: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-            description:
-              "Your own assessment of how much damage this command could do if it goes wrong. A command that only reads is low. The human sees it labelled as your opinion.",
-          },
         },
-        required: ["target", "command", "reason", "risk"],
+        required: ["target", "executable", "reason"],
       },
     },
     effect: "write",

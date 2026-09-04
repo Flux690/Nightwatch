@@ -11,9 +11,8 @@ export {
   optionalNumber,
   optionalString,
   requiredString,
-  requiredStringArray,
   optionalStringArray,
-  riskLevel,
+  executableName,
 } from "./wire.js";
 export { serverName, setServerName } from "./identity.js";
 export { logger } from "./logger.js";

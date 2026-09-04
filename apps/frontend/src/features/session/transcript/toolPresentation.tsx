@@ -31,9 +31,9 @@ import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
 const BODY_MAX_LINES = 8;
 
 // Shared with the approval card, which labels the same three as one action.
-export const SHELL_TOOLS: readonly ToolName[] = [
-  "DockerBash",
-  "K8sBash",
+export const COMMAND_TOOLS: readonly ToolName[] = [
+  "DockerExec",
+  "K8sExec",
   "Bash",
 ];
 
@@ -45,6 +45,17 @@ export function targetOf(input: Record<string, unknown>): string | null {
     return parseTargetKey(target)?.name ?? target;
   }
   return inputString(input, "server");
+}
+
+// The exec tools carry a program and its arguments; repo Bash carries a shell
+// string. Shared with the approval card, where what is read has to be what runs.
+export function commandLineOf(input: Record<string, unknown>): string | null {
+  const executable = input["executable"];
+  if (typeof executable === "string") {
+    const args = Array.isArray(input["args"]) ? input["args"].map(String) : [];
+    return [executable, ...args].join(" ");
+  }
+  return inputString(input, "command");
 }
 
 function outcomeOf(state: ToolCallState): ToolOutcome | undefined {
@@ -290,11 +301,9 @@ function ToolBody({
     }
 
     // Keyed on the tool name, not on an exitCode: plenty of results carry one
-    // without being a shell command and deserve their own shape.
-    if (isTool(toolName, ...SHELL_TOOLS)) {
-      const argv = Array.isArray(input["command"])
-        ? (input["command"] as unknown[]).map(String).join(" ")
-        : (inputString(input, "command") ?? "");
+    // without running a command and deserve their own shape.
+    if (isTool(toolName, ...COMMAND_TOOLS)) {
+      const argv = commandLineOf(input) ?? "";
       // Split streams from the runner, one combined `output` from the sandbox.
       const stdout =
         typeof record["stdout"] === "string"

@@ -60,7 +60,7 @@ function interrupt(toolUseId: string): FrontendEvent {
     kind: "tool_call",
     toolUseId,
     toolName: "RestartDockerService",
-    input: { risk: "high" },
+    input: {},
     state: { phase: "awaiting_human", gate: "approval" },
   });
 }

@@ -679,7 +679,7 @@ describe("the investigation record", () => {
       const restart = (id: string, target: string) => ({
         id,
         name: "RestartDockerService",
-        input: { target, reason: "r", risk: "low" },
+        input: { target, reason: "r" },
       });
       await appendCall(
         sessionId,
@@ -878,7 +878,7 @@ describe("the investigation record", () => {
             toolUses: [
               { id: "tu-withheld", name: "GetK8sLogs", input: { target: "x" } },
               { id: "tu-near", name: "RecordHypotheses", input: {} },
-              { id: "tu-far", name: "K8sExec", input: { command: "ls" } },
+              { id: "tu-far", name: "SendSlackMessage", input: {} },
             ],
             text: "",
           },
@@ -1024,10 +1024,10 @@ describe("the investigation record", () => {
         4,
         {
           id: "tu-refused",
-          name: "DockerBash",
-          input: { target: "prod-1/app/web", command: "df -h" },
+          name: "DockerExec",
+          input: { target: "prod-1/app/web", executable: "df", args: ["-h"] },
         },
-        'Tool "DockerBash" is not available in this investigation.',
+        'Tool "DockerExec" is not available in this investigation.',
         "2026-07-03T02:05:00.000Z",
         "system",
       );

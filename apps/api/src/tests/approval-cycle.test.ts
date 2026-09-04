@@ -82,7 +82,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -149,7 +148,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -258,7 +256,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -327,7 +324,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -395,7 +391,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -465,7 +460,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "concurrent",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -541,7 +535,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -607,7 +600,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "validation",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -673,7 +665,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -747,7 +738,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "mixed",
-              risk: "low",
               estimatedDowntimeSeconds: 2,
             },
           },
@@ -824,7 +814,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "critical",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },
@@ -888,7 +877,6 @@ describe("durable approval interrupts", () => {
             input: {
               target: "approval-host/web-01/web-01",
               reason: "wedged",
-              risk: "high",
               estimatedDowntimeSeconds: 5,
             },
           },

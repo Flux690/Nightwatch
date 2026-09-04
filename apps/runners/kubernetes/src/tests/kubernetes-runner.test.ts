@@ -1026,7 +1026,6 @@ describe("Kubernetes runner command handlers", () => {
       const result = await restartWorkload({
         service: K8S_SERVICE,
         reason: "service wedged",
-        risk: "low",
         estimatedDowntimeSeconds: 5,
       });
 
@@ -1065,7 +1064,6 @@ describe("Kubernetes runner command handlers", () => {
       const result = await restartWorkload({
         service: K8S_SERVICE,
         reason: "service wedged",
-        risk: "low",
         estimatedDowntimeSeconds: 5,
       });
 
@@ -1086,7 +1084,6 @@ describe("Kubernetes runner command handlers", () => {
       const result = await restartWorkload({
         service: K8S_SERVICE,
         reason: "log shipper wedged",
-        risk: "low",
         estimatedDowntimeSeconds: 5,
       });
 
@@ -1106,7 +1103,6 @@ describe("Kubernetes runner command handlers", () => {
       const result = await restartWorkload({
         service: K8S_SERVICE,
         reason: "service wedged",
-        risk: "low",
         estimatedDowntimeSeconds: 5,
       });
 
@@ -1129,7 +1125,6 @@ describe("Kubernetes runner command handlers", () => {
         restartWorkload({
           service: K8S_SERVICE,
           reason: "test",
-          risk: "low",
           estimatedDowntimeSeconds: 0,
         }),
       ).rejects.toThrow("forbidden: patch access denied");
@@ -1146,7 +1141,6 @@ describe("Kubernetes runner command handlers", () => {
         restartWorkload({
           service: K8S_SERVICE,
           reason: "test",
-          risk: "low",
           estimatedDowntimeSeconds: 0,
         }),
       ).rejects.toThrow("forbidden: get access denied");
@@ -1162,9 +1156,9 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await execInWorkload({
         service: K8S_SERVICE,
-        command: ["echo", "hello world"],
+        executable: "echo",
+        args: ["hello world"],
         reason: "test",
-        risk: "low",
       });
 
       expect(result).toMatchObject({
@@ -1210,9 +1204,9 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await execInWorkload({
         service: K8S_SERVICE,
-        command: ["grep", "nonexistent", "/dev/null"],
+        executable: "grep",
+        args: ["nonexistent", "/dev/null"],
         reason: "test",
-        risk: "low",
       });
 
       expect(result).toMatchObject({ exitCode: 2 });
@@ -1225,9 +1219,8 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await execInWorkload({
         service: K8S_SERVICE,
-        command: ["ls"],
+        executable: "ls",
         reason: "test",
-        risk: "low",
       });
 
       expect(result).toEqual({
@@ -1242,9 +1235,8 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await execInWorkload({
         service: K8S_SERVICE,
-        command: ["env"],
+        executable: "env",
         reason: "test",
-        risk: "low",
       });
 
       const { stdout } = result as { stdout: string };

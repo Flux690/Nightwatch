@@ -69,9 +69,9 @@ describe("execCommand handler", () => {
 
     const result = await execCommand({
       service: SERVICE,
-      command: ["echo", "ok"],
+      executable: "echo",
+      args: ["ok"],
       reason: "test",
-      risk: "low",
     });
 
     expect(result).toMatchObject({ exitCode: 0 });
@@ -83,9 +83,8 @@ describe("execCommand handler", () => {
 
     const result = await execCommand({
       service: SERVICE,
-      command: ["bad-cmd"],
+      executable: "bad-cmd",
       reason: "test",
-      risk: "low",
     });
 
     expect(result).toMatchObject({ exitCode: 1 });
@@ -105,9 +104,9 @@ describe("execCommand handler", () => {
 
     const result = await execCommand({
       service: SERVICE,
-      command: ["echo", "ok"],
+      executable: "echo",
+      args: ["ok"],
       reason: "test",
-      risk: "low",
     });
 
     expect(result).toEqual({
@@ -126,9 +125,8 @@ describe("execCommand handler", () => {
 
     const result = await execCommand({
       service: SERVICE,
-      command: ["env"],
+      executable: "env",
       reason: "test",
-      risk: "low",
     });
 
     const { stdout, stderr } = result as { stdout: string; stderr: string };
@@ -156,9 +154,8 @@ describe("execCommand handler", () => {
     await expect(
       execCommand({
         service: SERVICE,
-        command: ["ls"],
+        executable: "ls",
         reason: "test",
-        risk: "low",
       }),
     ).rejects.toThrow(
       "permission denied while trying to connect to the Docker daemon socket",

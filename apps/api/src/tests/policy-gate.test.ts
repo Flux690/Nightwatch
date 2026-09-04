@@ -198,7 +198,6 @@ describe("policy-gate: gating is driven by tool policy", () => {
             input: {
               target: "access-gate-host/svc-01/svc-01",
               reason: "service wedged",
-              risk: "low",
               estimatedDowntimeSeconds: 2,
             },
           },
@@ -341,7 +340,6 @@ describe("policy-gate: gating is driven by tool policy", () => {
             input: {
               target: "access-gate-host/svc-01/svc-01",
               reason: "confirmed by user",
-              risk: "low",
               estimatedDowntimeSeconds: 2,
             },
           },

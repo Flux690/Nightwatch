@@ -1,12 +1,11 @@
 import {
+  executableName,
   nested,
   optionalBoolean,
   optionalNumber,
   optionalString,
   optionalStringArray,
   requiredString,
-  requiredStringArray,
-  riskLevel,
   type CommandHandler,
 } from "@nightwarden/runner-core";
 import type { KubernetesWorkloadIdentity } from "@nightwarden/shared";
@@ -82,19 +81,18 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
         restartWorkload({
           service: service(input),
           reason: requiredString(input, "reason"),
-          risk: riskLevel(input),
           estimatedDowntimeSeconds:
             optionalNumber(input, "estimatedDowntimeSeconds") ?? 0,
         }),
     ],
     [
-      "K8sBash",
+      "K8sExec",
       async (input) =>
         execInWorkload({
           service: service(input),
-          command: requiredStringArray(input, "command"),
+          executable: executableName(input),
+          args: optionalStringArray(input, "args") ?? [],
           reason: requiredString(input, "reason"),
-          risk: riskLevel(input),
         }),
     ],
     [

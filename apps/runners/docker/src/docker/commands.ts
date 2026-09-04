@@ -2,8 +2,8 @@ import type Dockerode from "dockerode";
 import {
   deriveDockerServiceIdentity,
   dockerServiceKey,
-  type DockerBashInput,
-  type DockerBashResult,
+  type DockerExecInput,
+  type DockerExecResult,
   type DockerConfigInput,
   type DockerConfigResult,
   type DockerEvent,
@@ -345,19 +345,16 @@ async function waitForSettledStatus(
 }
 
 export async function execCommand(
-  input: DockerBashInput,
-): Promise<DockerBashResult | NotFoundResult> {
+  input: DockerExecInput,
+): Promise<DockerExecResult | NotFoundResult> {
   const executedAt = new Date().toISOString();
-  const [cmd, ...args] = input.command;
-  if (!cmd) throw new Error("command array must not be empty");
-
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved || !resolved.live) return noContainerResult(input.service);
   const container = resolved.container;
 
   const exec = await container.exec({
-    Cmd: [cmd, ...args],
+    Cmd: [input.executable, ...(input.args ?? [])],
     AttachStdout: true,
     AttachStderr: true,
   });

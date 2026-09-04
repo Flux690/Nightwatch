@@ -256,8 +256,8 @@ Of 45 tools, 38 read and 8 write. Only four suspend for approval, and the four w
 
 | Tool                                 | Effect | Policy    | Why                                                           |
 | ------------------------------------ | ------ | --------- | ------------------------------------------------------------- |
-| `RestartDockerService`, `DockerBash` | write  | `approve` | Leaves the API for a machine you own                          |
-| `RestartK8sWorkload`, `K8sBash`      | write  | `approve` | As above                                                      |
+| `RestartDockerService`, `DockerExec` | write  | `approve` | Leaves the API for a machine you own                          |
+| `RestartK8sWorkload`, `K8sExec`      | write  | `approve` | As above                                                      |
 | `Edit`, `Write`, `Bash`              | write  | `auto`    | Lands in a disposable sandbox container on a throwaway branch |
 | `OpenPullRequest`                    | write  | `auto`    | Opens a draft behind GitHub's own human merge gate            |
 
