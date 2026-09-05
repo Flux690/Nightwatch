@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   GitHubErrorCode,
   GitHubRepoPage,
@@ -15,6 +16,64 @@ export class GitHubApiError extends Error {
     super(message);
     this.name = "GitHubApiError";
   }
+}
+
+/* Shapes from GitHub's documented payloads. Adding a response field is
+   non-breaking by their own policy, so unknown keys pass and a rename fails. */
+const REPO_ROW = z.looseObject({
+  full_name: z.string(),
+  private: z.boolean(),
+  pushed_at: z.string().nullish(),
+  owner: z.looseObject({ type: z.string() }).nullish(),
+});
+
+const PULL_REQUEST = z.looseObject({
+  number: z.number(),
+  html_url: z.string(),
+  draft: z.boolean().nullish(),
+});
+
+const REPOSITORY = z.looseObject({ default_branch: z.string() });
+
+const COMMIT_ROW = z.looseObject({
+  sha: z.string(),
+  commit: z.looseObject({
+    message: z.string(),
+    author: z.looseObject({ name: z.string(), date: z.string() }).nullish(),
+  }),
+  parents: z.array(z.unknown()).nullish(),
+});
+
+const MERGED_PULL_REQUEST = z.looseObject({
+  number: z.number(),
+  title: z.string(),
+  html_url: z.string(),
+  updated_at: z.string().nullish(),
+  merged_at: z.string().nullish(),
+  merge_commit_sha: z.string().nullish(),
+  user: z.looseObject({ login: z.string() }).nullish(),
+});
+
+const PR_FILE = z.looseObject({ filename: z.string() });
+
+// The one field name a caller can act on, so a drift says which it was.
+function fieldPath(error: z.ZodError): string {
+  const issue = error.issues[0];
+  return issue === undefined || issue.path.length === 0
+    ? "the response body"
+    : issue.path.join(".");
+}
+
+/* Parsed rather than cast: a shape we cannot read is a failure the agent must
+   see, never an empty list it would read as "nothing changed". */
+function parse<T>(schema: z.ZodType<T>, body: unknown, what: string): T {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return parsed.data;
+  throw new GitHubApiError(
+    "bad_response",
+    0,
+    `GitHub answered ${what} in a shape this cannot read: ${fieldPath(parsed.error)} is wrong. Nothing was read, so treat this as unknown rather than as an absence.`,
+  );
 }
 
 function baseHeaders(token: string): Record<string, string> {
@@ -95,18 +154,17 @@ export async function listRepos(
       `GitHub returned ${res.status} listing repositories`,
     );
   }
-  // Shape is guaranteed by GitHub's documented /user/repos payload; fields are
-  // individually narrowed below, so a drifted payload degrades, never crashes.
-  const body = (await res.json()) as Array<Record<string, unknown>>;
-  const repos: GitHubRepoSummary[] = body.map((r) => {
-    const owner = r["owner"] as Record<string, unknown> | undefined;
-    return {
-      fullName: typeof r["full_name"] === "string" ? r["full_name"] : "",
-      private: r["private"] === true,
-      pushedAt: typeof r["pushed_at"] === "string" ? r["pushed_at"] : null,
-      ownerIsOrg: owner?.["type"] === "Organization",
-    };
-  });
+  const body = parse(
+    z.array(REPO_ROW),
+    await res.json(),
+    "listing repositories",
+  );
+  const repos: GitHubRepoSummary[] = body.map((r) => ({
+    fullName: r.full_name,
+    private: r.private,
+    pushedAt: r.pushed_at ?? null,
+    ownerIsOrg: r.owner?.type === "Organization",
+  }));
   const hasMore = /\brel="next"/.test(res.headers.get("link") ?? "");
   return { repos, hasMore, expiresAt: parseExpiryHeader(res) };
 }
@@ -153,9 +211,10 @@ export async function ownerIsOrganization(owner: string): Promise<boolean> {
       },
     });
     if (!res.ok) return false;
-    // Narrowed to the single field we read; see listRepos for the same policy.
-    const body = (await res.json()) as Record<string, unknown>;
-    return body["type"] === "Organization";
+    const body = z
+      .looseObject({ type: z.string() })
+      .safeParse(await res.json());
+    return body.success && body.data.type === "Organization";
   } catch {
     return false;
   }
@@ -173,12 +232,8 @@ interface PullRequestInfo {
   draft: boolean;
 }
 
-function toPullRequestInfo(pr: Record<string, unknown>): PullRequestInfo {
-  return {
-    number: typeof pr["number"] === "number" ? pr["number"] : 0,
-    url: typeof pr["html_url"] === "string" ? pr["html_url"] : "",
-    draft: pr["draft"] === true,
-  };
+function toPullRequestInfo(pr: z.infer<typeof PULL_REQUEST>): PullRequestInfo {
+  return { number: pr.number, url: pr.html_url, draft: pr.draft === true };
 }
 
 // One open PR per branch is the idempotency mechanism: the caller looks the
@@ -200,8 +255,11 @@ export async function findOpenPullRequestByBranch(
       `GitHub returned ${res.status} looking up pull requests`,
     );
   }
-  // Narrowed field-by-field below, same policy as listRepos.
-  const body = (await res.json()) as Array<Record<string, unknown>>;
+  const body = parse(
+    z.array(PULL_REQUEST),
+    await res.json(),
+    "looking up pull requests",
+  );
   const pr = body[0];
   return pr === undefined ? null : toPullRequestInfo(pr);
 }
@@ -219,11 +277,8 @@ export async function defaultBranch(
       `GitHub returned ${res.status} reading the repository`,
     );
   }
-  // Narrowed to the single field we read.
-  const body = (await res.json()) as Record<string, unknown>;
-  return typeof body["default_branch"] === "string"
-    ? body["default_branch"]
-    : "main";
+  return parse(REPOSITORY, await res.json(), "reading the repository")
+    .default_branch;
 }
 
 function isDraftUnsupported(status: number, bodyText: string): boolean {
@@ -271,9 +326,9 @@ export async function createPullRequest(
       `GitHub refused the pull request: ${(await res.text()).slice(0, 300)}`,
     );
   }
-  // Narrowed field-by-field in toPullRequestInfo.
-  const body = (await res.json()) as Record<string, unknown>;
-  return toPullRequestInfo(body);
+  return toPullRequestInfo(
+    parse(PULL_REQUEST, await res.json(), "creating a pull request"),
+  );
 }
 
 export async function updatePullRequest(
@@ -329,23 +384,14 @@ export async function listCommits(
       `GitHub returned ${res.status} listing commits`,
     );
   }
-  // Narrowed field-by-field, same policy as listRepos.
-  const body = (await res.json()) as Array<Record<string, unknown>>;
-  return body.map((c) => {
-    const commit = c["commit"] as Record<string, unknown> | undefined;
-    const commitAuthor = commit?.["author"] as
-      Record<string, unknown> | undefined;
-    const parents = c["parents"];
-    return {
-      sha: typeof c["sha"] === "string" ? c["sha"] : "",
-      message: typeof commit?.["message"] === "string" ? commit["message"] : "",
-      author:
-        typeof commitAuthor?.["name"] === "string" ? commitAuthor["name"] : "",
-      committedAt:
-        typeof commitAuthor?.["date"] === "string" ? commitAuthor["date"] : "",
-      parentCount: Array.isArray(parents) ? parents.length : 0,
-    };
-  });
+  const body = parse(z.array(COMMIT_ROW), await res.json(), "listing commits");
+  return body.map((c) => ({
+    sha: c.sha,
+    message: c.commit.message,
+    author: c.commit.author?.name ?? "",
+    committedAt: c.commit.author?.date ?? "",
+    parentCount: c.parents?.length ?? 0,
+  }));
 }
 
 interface MergedPullRequestInfo {
@@ -382,30 +428,30 @@ export async function listMergedPullRequests(
   // toISOString keeps them, so lexicographic order lies at window boundaries.
   const sinceMs = Date.parse(since);
   const untilMs = Date.parse(until);
-  // Narrowed field-by-field, same policy as listRepos.
-  const body = (await res.json()) as Array<Record<string, unknown>>;
+  const body = parse(
+    z.array(MERGED_PULL_REQUEST),
+    await res.json(),
+    "listing pull requests",
+  );
   const merged: MergedPullRequestInfo[] = [];
   for (const pr of body) {
     const updatedAt =
-      typeof pr["updated_at"] === "string" ? Date.parse(pr["updated_at"]) : NaN;
+      pr.updated_at === undefined || pr.updated_at === null
+        ? NaN
+        : Date.parse(pr.updated_at);
     if (!Number.isNaN(updatedAt) && updatedAt < sinceMs) break;
-    const mergedAt = pr["merged_at"];
-    if (typeof mergedAt !== "string") continue;
-    const mergedMs = Date.parse(mergedAt);
+    if (pr.merged_at === undefined || pr.merged_at === null) continue;
+    const mergedMs = Date.parse(pr.merged_at);
     if (Number.isNaN(mergedMs) || mergedMs < sinceMs || mergedMs > untilMs) {
       continue;
     }
-    const user = pr["user"] as Record<string, unknown> | undefined;
     merged.push({
-      number: typeof pr["number"] === "number" ? pr["number"] : 0,
-      title: typeof pr["title"] === "string" ? pr["title"] : "",
-      author: typeof user?.["login"] === "string" ? user["login"] : "",
-      mergedAt,
-      url: typeof pr["html_url"] === "string" ? pr["html_url"] : "",
-      mergeCommitSha:
-        typeof pr["merge_commit_sha"] === "string"
-          ? pr["merge_commit_sha"]
-          : "",
+      number: pr.number,
+      title: pr.title,
+      author: pr.user?.login ?? "",
+      mergedAt: pr.merged_at,
+      url: pr.html_url,
+      mergeCommitSha: pr.merge_commit_sha ?? "",
     });
   }
   return merged;
@@ -428,9 +474,10 @@ export async function listPullRequestFiles(
       `GitHub returned ${res.status} listing files for pull request #${prNumber}`,
     );
   }
-  // Narrowed field-by-field, same policy as listRepos.
-  const body = (await res.json()) as Array<Record<string, unknown>>;
-  return body.flatMap((f) =>
-    typeof f["filename"] === "string" ? [f["filename"]] : [],
+  const body = parse(
+    z.array(PR_FILE),
+    await res.json(),
+    `listing files for pull request #${prNumber}`,
   );
+  return body.map((f) => f.filename);
 }

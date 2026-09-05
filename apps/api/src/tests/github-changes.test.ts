@@ -354,4 +354,29 @@ describe("GetRecentChanges through the tool dispatch", () => {
     expect(toolOutcome.content).toContain("not configured");
     expect(mock.requests).toEqual([]);
   });
+
+  /* The rows above are written to match what the client reads, so both sides
+     agree by construction. A renamed field is what neither would catch. */
+  it("refuses a drifted commit row rather than reporting no changes", async () => {
+    await connectGitHub();
+    const mock = makeMock();
+    // `sha` renamed, which the field-by-field reading answered with "".
+    mock.commits = [
+      {
+        commit_sha: "abc1234",
+        commit: {
+          message: "fix the retry loop",
+          author: { name: "dev", date: FIRED_AT },
+        },
+        parents: [],
+      },
+    ];
+    installFetchMock(mock);
+
+    const result = await executeTool(tool, {}, await toolContext(ALERT));
+
+    expect(result.toolOutcome).toBe("system");
+    expect(result.content).toContain("shape this cannot read");
+    expect(result.content).toContain("treat this as unknown");
+  });
 });

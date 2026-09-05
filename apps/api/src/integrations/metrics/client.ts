@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AmpCredential, MetricsErrorCode } from "@nightwarden/shared";
 import { describeNetworkFailure } from "../reachability.js";
 import { signedRequest } from "./sigv4.js";
@@ -33,12 +34,63 @@ export interface MetricsEndpoint {
 export interface MetricsSeries {
   metric: Record<string, string>;
   values: Array<[number, string]>;
+  // Set where a point came from a native histogram, whose value is its
+  // observation count: a histogram has no single number to plot.
+  histogram?: true;
 }
 
 export interface MetricsQueryData {
   resultType: string;
   series: MetricsSeries[];
+  /* Prometheus and Thanos answer 200 with data and a warning when a store was
+     unreachable, so dropping these reports a partial read as a whole one. */
+  warnings: string[];
 }
+
+const LABELS = z.record(z.string(), z.string());
+const FLOAT_POINT = z.tuple([z.number(), z.string()]);
+// Only the count is read; buckets and sum ride along untouched.
+const HISTOGRAM_POINT = z.tuple([
+  z.number(),
+  z.looseObject({ count: z.string() }),
+]);
+
+const VECTOR_ITEM = z.looseObject({
+  metric: LABELS,
+  value: FLOAT_POINT.optional(),
+  histogram: HISTOGRAM_POINT.optional(),
+});
+
+// Prometheus documents a series as carrying values, histograms, or both.
+const MATRIX_ITEM = z.looseObject({
+  metric: LABELS,
+  values: z.array(FLOAT_POINT).optional(),
+  histograms: z.array(HISTOGRAM_POINT).optional(),
+});
+
+/* Four result types, not two. A scalar's result is a [time, value] pair rather
+   than a list, which reads as a list of two series to anything not checking. */
+const QUERY_DATA = z.discriminatedUnion("resultType", [
+  z.looseObject({
+    resultType: z.literal("vector"),
+    result: z.array(VECTOR_ITEM),
+  }),
+  z.looseObject({
+    resultType: z.literal("matrix"),
+    result: z.array(MATRIX_ITEM),
+  }),
+  z.looseObject({ resultType: z.literal("scalar"), result: FLOAT_POINT }),
+  z.looseObject({ resultType: z.literal("string"), result: FLOAT_POINT }),
+]);
+
+/* Unknown keys pass through everywhere: each product adds its own, and an
+   addition is the one change these APIs make. A rename fails loudly instead. */
+const QUERY_ENVELOPE = z.looseObject({
+  status: z.enum(["success", "error"]),
+  data: QUERY_DATA.optional(),
+  error: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+});
 
 // Server-side evaluation cap, kept under the tools' 30s budget so the source
 // gives up before the tool timeout turns the failure opaque.
@@ -96,90 +148,109 @@ async function metricsFetch(
   return res;
 }
 
-// The envelope is narrowed field-by-field so a drifted payload degrades into
-// a typed error, never a crash mid-investigation.
-async function parseEnvelope(
+// The one field name a caller can act on, so a drift says which it was.
+function fieldPath(error: z.ZodError): string {
+  const issue = error.issues[0];
+  return issue === undefined || issue.path.length === 0
+    ? "the response body"
+    : issue.path.join(".");
+}
+
+async function readJson(
   endpoint: MetricsEndpoint,
   res: Response,
-): Promise<MetricsQueryData> {
-  let body: Record<string, unknown>;
+  what: string,
+): Promise<unknown> {
   try {
-    body = (await res.json()) as Record<string, unknown>;
+    return await res.json();
   } catch {
     throw new MetricsApiError(
       "bad_response",
       res.status,
-      `${endpoint.name} returned a non-JSON body (HTTP ${res.status}) - is this URL a Prometheus-compatible API endpoint?`,
+      `${endpoint.name} returned a non-JSON body (HTTP ${res.status}) ${what} - is this URL a Prometheus-compatible API endpoint?`,
     );
   }
-  if (body["status"] === "error") {
+}
+
+/* Parsed rather than narrowed field by field: a shape we cannot read is a
+   failure the agent must see, never an empty result it would read as a finding. */
+function parse<T>(
+  schema: z.ZodType<T>,
+  body: unknown,
+  endpoint: MetricsEndpoint,
+  status: number,
+  what: string,
+): T {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return parsed.data;
+  throw new MetricsApiError(
+    "bad_response",
+    status,
+    `${endpoint.name} answered ${what} in a shape this cannot read: ${fieldPath(parsed.error)} is wrong. Nothing was read, so treat this as unknown rather than as an absence.`,
+  );
+}
+
+type QueryData = z.infer<typeof QUERY_DATA>;
+
+function seriesOf(data: QueryData): MetricsSeries[] {
+  if (data.resultType === "vector") {
+    return data.result.map((item) => {
+      if (item.value !== undefined) {
+        return { metric: item.metric, values: [item.value] };
+      }
+      if (item.histogram !== undefined) {
+        const [at, value] = item.histogram;
+        return {
+          metric: item.metric,
+          values: [[at, value.count] as [number, string]],
+          histogram: true as const,
+        };
+      }
+      return { metric: item.metric, values: [] };
+    });
+  }
+  if (data.resultType === "matrix") {
+    return data.result.map((item) => {
+      const floats = item.values ?? [];
+      const counts = (item.histograms ?? []).map(
+        ([at, value]): [number, string] => [at, value.count],
+      );
+      const values = [...floats, ...counts].sort((a, b) => a[0] - b[0]);
+      return {
+        metric: item.metric,
+        values,
+        ...(counts.length > 0 && { histogram: true as const }),
+      };
+    });
+  }
+  // A scalar and a string are one unlabelled reading, not a list of two.
+  return [{ metric: {}, values: [data.result] }];
+}
+
+async function parseEnvelope(
+  endpoint: MetricsEndpoint,
+  res: Response,
+): Promise<MetricsQueryData> {
+  const body = await readJson(endpoint, res, "a query");
+  const envelope = parse(QUERY_ENVELOPE, body, endpoint, res.status, "a query");
+  if (envelope.status === "error") {
     throw new MetricsApiError(
       "bad_query",
       res.status,
-      typeof body["error"] === "string" ? body["error"] : "query failed",
+      envelope.error ?? "query failed",
     );
   }
-  if (!res.ok || body["status"] !== "success") {
+  if (!res.ok || envelope.data === undefined) {
     throw new MetricsApiError(
       "bad_response",
       res.status,
       `${endpoint.name} returned ${res.status} without a success envelope`,
     );
   }
-  const data = body["data"] as Record<string, unknown> | undefined;
-  const resultType =
-    typeof data?.["resultType"] === "string" ? data["resultType"] : "";
-  const raw = Array.isArray(data?.["result"]) ? data["result"] : [];
-  return { resultType, series: raw.map(narrowSeries) };
-}
-
-// The success envelope every non-query endpoint answers with. `what` names the
-// call so a drifted payload says which read failed rather than only that one did.
-async function jsonBody(
-  endpoint: MetricsEndpoint,
-  res: Response,
-  what: string,
-): Promise<Record<string, unknown>> {
-  let body: Record<string, unknown>;
-  try {
-    body = (await res.json()) as Record<string, unknown>;
-  } catch {
-    throw new MetricsApiError(
-      "bad_response",
-      res.status,
-      `${endpoint.name} returned a non-JSON body (HTTP ${res.status}) ${what}`,
-    );
-  }
-  if (!res.ok || body["status"] !== "success") {
-    throw new MetricsApiError(
-      "bad_response",
-      res.status,
-      `${endpoint.name} returned ${res.status} ${what}`,
-    );
-  }
-  return body;
-}
-
-function narrowSeries(entry: unknown): MetricsSeries {
-  const e = (entry ?? {}) as Record<string, unknown>;
-  const metric: Record<string, string> = {};
-  if (typeof e["metric"] === "object" && e["metric"] !== null) {
-    for (const [k, v] of Object.entries(e["metric"])) {
-      if (typeof v === "string") metric[k] = v;
-    }
-  }
-  const values = Array.isArray(e["values"])
-    ? e["values"]
-    : Array.isArray(e["value"])
-      ? [e["value"]]
-      : [];
   return {
-    metric,
-    values: values.flatMap((pair): Array<[number, string]> => {
-      if (!Array.isArray(pair)) return [];
-      const [t, v] = pair as [unknown, unknown];
-      return typeof t === "number" && typeof v === "string" ? [[t, v]] : [];
-    }),
+    resultType: envelope.data.resultType,
+    series: seriesOf(envelope.data),
+    warnings: envelope.warnings ?? [],
   };
 }
 
@@ -220,59 +291,79 @@ interface FiringInstance {
   state: string;
 }
 
+/* The spec types a rule as a bare object, so these field names come from the
+   prose docs. A recording rule carries no state, which is why it is optional. */
+const RULE = z.looseObject({
+  name: z.string(),
+  // Optional because only the listing reads it: a recovery check needs the
+  // name and the alerts alone, and should not fail for a field it ignores.
+  query: z.string().optional(),
+  state: z.string().optional(),
+  alerts: z
+    .array(z.looseObject({ labels: LABELS.optional(), state: z.string() }))
+    .optional(),
+});
+
+const RULES_ENVELOPE = z.looseObject({
+  status: z.enum(["success", "error"]),
+  data: z
+    .looseObject({ groups: z.array(z.looseObject({ rules: z.array(RULE) })) })
+    .optional(),
+});
+
+async function ruleGroups(
+  endpoint: MetricsEndpoint,
+  path: string,
+): Promise<z.infer<typeof RULE>[] | null> {
+  const res = await metricsFetch(endpoint, path);
+  const body = await readJson(endpoint, res, "listing rules");
+  const envelope = parse(
+    RULES_ENVELOPE,
+    body,
+    endpoint,
+    res.status,
+    "listing rules",
+  );
+  if (!res.ok || envelope.status !== "success" || envelope.data === undefined) {
+    throw new MetricsApiError(
+      "bad_response",
+      res.status,
+      `${endpoint.name} returned ${res.status} listing rules`,
+    );
+  }
+  return envelope.data.groups.flatMap((group) => group.rules);
+}
+
 // The same rule on the same interval that fired the alert. `null` means no
 // rule by that name, which is not the same as "it is not firing".
 export async function firingInstancesOf(
   endpoint: MetricsEndpoint,
   ruleName: string,
 ): Promise<FiringInstance[] | null> {
-  const body = await jsonBody(
+  const rules = await ruleGroups(
     endpoint,
-    await metricsFetch(
-      endpoint,
-      `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
-    ),
-    "listing rules",
+    `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
   );
-  const groups = (body["data"] as Record<string, unknown> | undefined)?.[
-    "groups"
-  ];
-  if (!Array.isArray(groups)) return null;
-
-  const rules = groups.flatMap((group) => {
-    const list = (group as Record<string, unknown>)["rules"];
-    return Array.isArray(list) ? list : [];
-  });
+  if (rules === null) return null;
   /* The filter is a server-side hint, not a guarantee: an older Prometheus
      ignores rule_name[], and vmalert documents no support for it at all. */
-  const named = rules.filter(
-    (rule) => (rule as Record<string, unknown>)["name"] === ruleName,
-  );
+  const named = rules.filter((rule) => rule.name === ruleName);
   if (named.length === 0) return null;
-
-  return named.flatMap((rule) => {
-    const alerts = (rule as Record<string, unknown>)["alerts"];
-    if (!Array.isArray(alerts)) return [];
-    return alerts.flatMap((entry): FiringInstance[] => {
-      const alert = entry as Record<string, unknown>;
-      const state = alert["state"];
-      if (typeof state !== "string") return [];
-      const labels: Record<string, string> = {};
-      if (typeof alert["labels"] === "object" && alert["labels"] !== null) {
-        for (const [k, v] of Object.entries(alert["labels"])) {
-          if (typeof v === "string") labels[k] = v;
-        }
-      }
-      return [{ labels, state }];
-    });
-  });
+  return named.flatMap((rule) =>
+    (rule.alerts ?? []).map((alert) => ({
+      labels: alert.labels ?? {},
+      state: alert.state,
+    })),
+  );
 }
 
 // One alerting rule as the source holds it: the expression it evaluates and
 // whether it is currently firing.
 export interface AlertingRule {
   name: string;
-  query: string;
+  // Absent where the source did not report one, which is a gap in the answer
+  // rather than a rule that tests nothing.
+  query?: string;
   state: string;
   firingCount: number;
 }
@@ -280,52 +371,49 @@ export interface AlertingRule {
 export async function alertingRules(
   endpoint: MetricsEndpoint,
 ): Promise<AlertingRule[]> {
-  const body = await jsonBody(
-    endpoint,
-    await metricsFetch(endpoint, "/api/v1/rules?type=alert"),
-    "listing rules",
-  );
-  const groups = (body["data"] as Record<string, unknown> | undefined)?.[
-    "groups"
-  ];
-  if (!Array.isArray(groups)) return [];
-  return groups
-    .flatMap((group) => {
-      const list = (group as Record<string, unknown>)["rules"];
-      return Array.isArray(list) ? list : [];
-    })
-    .flatMap((entry): AlertingRule[] => {
-      const rule = entry as Record<string, unknown>;
-      const name = rule["name"];
-      const query = rule["query"];
-      if (typeof name !== "string" || typeof query !== "string") return [];
-      const alerts = Array.isArray(rule["alerts"]) ? rule["alerts"] : [];
-      return [
-        {
-          name,
-          query,
-          state: typeof rule["state"] === "string" ? rule["state"] : "unknown",
-          firingCount: alerts.length,
-        },
-      ];
-    });
+  const rules = await ruleGroups(endpoint, "/api/v1/rules?type=alert");
+  return (rules ?? []).map((rule) => ({
+    name: rule.name,
+    ...(rule.query !== undefined && { query: rule.query }),
+    state: rule.state ?? "unknown",
+    firingCount: (rule.alerts ?? []).length,
+  }));
 }
 
-// The names the source is currently storing, optionally narrowed by substring.
-// Matched here rather than server-side: /label/__name__/values takes no filter.
+const NAMES_ENVELOPE = z.looseObject({
+  status: z.enum(["success", "error"]),
+  data: z.array(z.string()).optional(),
+});
+
+/* The window is passed because VictoriaMetrics defaults this endpoint to the
+   day so far, where Prometheus defaults to all time, and answers no differently. */
 export async function metricNames(
   endpoint: MetricsEndpoint,
   contains: string | null,
+  startIso: string,
+  endIso: string,
 ): Promise<string[]> {
-  const body = await jsonBody(
+  const query = new URLSearchParams({ start: startIso, end: endIso });
+  const res = await metricsFetch(
     endpoint,
-    await metricsFetch(endpoint, "/api/v1/label/__name__/values"),
+    `/api/v1/label/__name__/values?${query.toString()}`,
+  );
+  const body = await readJson(endpoint, res, "listing metric names");
+  const envelope = parse(
+    NAMES_ENVELOPE,
+    body,
+    endpoint,
+    res.status,
     "listing metric names",
   );
-  const data = body["data"];
-  const all = Array.isArray(data)
-    ? data.filter((v): v is string => typeof v === "string")
-    : [];
+  if (!res.ok || envelope.status !== "success") {
+    throw new MetricsApiError(
+      "bad_response",
+      res.status,
+      `${endpoint.name} returned ${res.status} listing metric names`,
+    );
+  }
+  const all = envelope.data ?? [];
   if (contains === null) return all;
   const needle = contains.toLowerCase();
   return all.filter((name) => name.toLowerCase().includes(needle));
@@ -340,28 +428,51 @@ export interface MetricMetadata {
   help: string;
 }
 
+const METADATA_ENVELOPE = z.looseObject({
+  status: z.enum(["success", "error"]),
+  data: z
+    .record(
+      z.string(),
+      z.array(
+        z.looseObject({
+          type: z.string().optional(),
+          unit: z.string().optional(),
+          help: z.string().optional(),
+        }),
+      ),
+    )
+    .optional(),
+});
+
 export async function metricMetadata(
   endpoint: MetricsEndpoint,
   metric: string,
 ): Promise<MetricMetadata | null> {
-  const body = await jsonBody(
+  const res = await metricsFetch(
     endpoint,
-    await metricsFetch(
-      endpoint,
-      `/api/v1/metadata?metric=${encodeURIComponent(metric)}`,
-    ),
+    `/api/v1/metadata?metric=${encodeURIComponent(metric)}`,
+  );
+  const body = await readJson(endpoint, res, "reading metric metadata");
+  const envelope = parse(
+    METADATA_ENVELOPE,
+    body,
+    endpoint,
+    res.status,
     "reading metric metadata",
   );
-  const data = body["data"];
-  if (typeof data !== "object" || data === null) return null;
-  const entries = (data as Record<string, unknown>)[metric];
-  const first = Array.isArray(entries) ? entries[0] : undefined;
-  if (typeof first !== "object" || first === null) return null;
-  const row = first as Record<string, unknown>;
+  if (!res.ok || envelope.status !== "success") {
+    throw new MetricsApiError(
+      "bad_response",
+      res.status,
+      `${endpoint.name} returned ${res.status} reading metric metadata`,
+    );
+  }
+  const row = envelope.data?.[metric]?.[0];
+  if (row === undefined) return null;
   return {
     metric,
-    type: typeof row["type"] === "string" ? row["type"] : "unknown",
-    unit: typeof row["unit"] === "string" ? row["unit"] : "",
-    help: typeof row["help"] === "string" ? row["help"] : "",
+    type: row.type ?? "unknown",
+    unit: row.unit ?? "",
+    help: row.help ?? "",
   };
 }

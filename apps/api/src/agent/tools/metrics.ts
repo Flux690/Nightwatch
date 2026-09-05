@@ -16,7 +16,7 @@ import {
 } from "../../integrations/metrics/sources.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { fitWithinBudget } from "./result-budget.js";
-import { apiTool } from "./schema.js";
+import { apiTool, optionalText } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
@@ -24,6 +24,7 @@ interface MetricsQueryResult {
   resultType: string;
   series: MetricsSeries[];
   seriesOmitted?: number;
+  note?: string;
 }
 
 export interface MetricsRangeResult extends MetricsQueryResult {
@@ -35,6 +36,7 @@ export interface MetricsRangeResult extends MetricsQueryResult {
 interface MetricNamesResult {
   names: string[];
   namesOmitted?: number;
+  note: string;
 }
 
 interface AlertRulesResult {
@@ -52,6 +54,9 @@ const TARGET_POINTS_PER_SERIES = 200;
 // Enough to recognise a naming scheme and pick the right metric; a fleet's full
 // name list runs to thousands and would drown the turn that asked for it.
 const MAX_METRIC_NAMES = 100;
+/* VictoriaMetrics defaults the label endpoints to the day so far where
+   Prometheus defaults to all time, so the window is always stated. */
+const NAME_WINDOW_MINUTES = 10_080;
 const MAX_ALERT_RULES = 50;
 
 // Capped by count, then by size: a range query returns twenty series of two
@@ -59,10 +64,22 @@ const MAX_ALERT_RULES = 50;
 function capSeries(data: MetricsQueryData): MetricsQueryResult {
   const { kept, dropped } = fitWithinBudget(data.series.slice(0, MAX_SERIES));
   const omitted = data.series.length - MAX_SERIES + dropped;
+  const notes = [
+    ...data.warnings.map(
+      (warning) =>
+        `The source reported a warning, so this reading may be partial rather than the whole window: ${warning}`,
+    ),
+    ...(kept.some((series) => series.histogram === true)
+      ? [
+          "A series marked histogram is a native histogram, and its value is the count of observations rather than a measurement. Read a percentile with histogram_quantile() instead of treating these numbers as the metric.",
+        ]
+      : []),
+  ];
   return {
     resultType: data.resultType,
     series: kept,
     ...(omitted > 0 && { seriesOmitted: omitted }),
+    ...(notes.length > 0 && { note: notes.join(" ") }),
   };
 }
 
@@ -81,6 +98,14 @@ async function resolveMetricsSource(): Promise<
 
 // An empty series is not a reading of zero: a metric name that does not exist
 // answers identically, and the window is what makes emptiness mean anything.
+function withEmpty(
+  result: MetricsQueryResult,
+  query: string,
+  label: string,
+): string {
+  return [result.note, emptyNote(query, label)].filter(Boolean).join(" ");
+}
+
 function emptyNote(query: string, label: string): string {
   return `${label} evaluated "${query}" and it matched no series. That is not a reading of zero: a metric name that does not exist, a label that never had this value, and a genuinely absent target all answer this way. Check the name with ListMetricNames before treating this as evidence of anything.`;
 }
@@ -98,6 +123,10 @@ function corrective(err: unknown): ToolExecuteResult {
         content: `The source rejected the query: ${err.message}. Fix the PromQL and retry.`,
         toolOutcome: "system",
       };
+    }
+    // A shape this cannot read will not read differently on a second attempt.
+    if (err.code === "bad_response") {
+      return { content: err.message, toolOutcome: "system" };
     }
     return {
       content: `Metrics request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
@@ -151,7 +180,7 @@ const QUERY_METRICS_RANGE_INPUT = z.object({
 });
 
 const LIST_METRIC_NAMES_INPUT = z.object({
-  contains: z.string().optional().meta({
+  contains: optionalText.meta({
     description:
       "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
   }),
@@ -165,7 +194,7 @@ const GET_METRIC_METADATA_INPUT = z.object({
 });
 
 const LIST_ALERT_RULES_INPUT = z.object({
-  contains: z.string().optional().meta({
+  contains: optionalText.meta({
     description:
       "Case-insensitive substring the rule name must contain. Omit to list every rule.",
   }),
@@ -196,7 +225,10 @@ export const METRICS_TOOLS: Tool[] = [
         const result: MetricsQueryResult = capSeries(data);
         if (result.series.length === 0) {
           return {
-            content: { ...result, note: emptyNote(query, source.label) },
+            content: {
+              ...result,
+              note: withEmpty(result, query, source.label),
+            },
             toolOutcome: "expected_miss",
           };
         }
@@ -259,7 +291,10 @@ export const METRICS_TOOLS: Tool[] = [
         };
         if (result.series.length === 0) {
           return {
-            content: { ...result, note: emptyNote(query, source.label) },
+            content: {
+              ...result,
+              note: withEmpty(result, query, source.label),
+            },
             toolOutcome: "expected_miss",
           };
         }
@@ -282,13 +317,20 @@ export const METRICS_TOOLS: Tool[] = [
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
-      const contains = input.contains?.trim();
+      const contains = input.contains ?? null;
       try {
-        const names = await metricNames(source.query, contains || null);
+        const end = new Date();
+        const start = new Date(end.getTime() - NAME_WINDOW_MINUTES * 60_000);
+        const names = await metricNames(
+          source.query,
+          contains,
+          start.toISOString(),
+          end.toISOString(),
+        );
+        const searched = `Names stored between ${start.toISOString()} and ${end.toISOString()} were searched. A metric last written before that window is not listed here, which is not the same as it never existing.`;
         if (names.length === 0) {
           return {
-            content:
-              "No metric names matched. Widen the substring, or drop it to see what this source stores at all.",
+            content: `No metric names matched. ${searched} Widen the substring, or drop it to see what this source stores at all.`,
             toolOutcome: "expected_miss",
           };
         }
@@ -297,6 +339,7 @@ export const METRICS_TOOLS: Tool[] = [
           ...(names.length > MAX_METRIC_NAMES && {
             namesOmitted: names.length - MAX_METRIC_NAMES,
           }),
+          note: searched,
         };
         return { content: result };
       } catch (err) {
@@ -318,11 +361,11 @@ export const METRICS_TOOLS: Tool[] = [
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const { metric } = input;
-      /* VictoriaMetrics answers this endpoint empty for every metric, so reporting
-         the emptiness states a fact about the server, not about the metric. */
+      /* Stating the condition rather than the limitation: on VictoriaMetrics an
+         empty answer is a flag left off as readily as an undeclared metric. */
       if (!source.capabilities.metricMetadata) {
         return {
-          content: `${source.label} does not implement the metric metadata API - it answers with an empty result for every metric, so nothing here can tell you the type or unit of "${metric.trim()}". This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,
+          content: `${source.label} may not serve metric metadata: it needs v1.130.0 or newer with -enableMetadata set, and answers empty for every metric otherwise. So nothing here can tell you the type or unit of "${metric.trim()}", and nothing here can tell you which of those two it is. This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,
           toolOutcome: "expected_miss",
         };
       }
@@ -361,7 +404,7 @@ export const METRICS_TOOLS: Tool[] = [
           toolOutcome: "permission",
         };
       }
-      const contains = input.contains?.trim();
+      const contains = input.contains ?? null;
       const needle = contains ? contains.toLowerCase() : null;
       try {
         const rules = await alertingRules(source.rules);

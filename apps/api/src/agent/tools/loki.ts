@@ -227,6 +227,10 @@ function corrective(err: unknown): ToolExecuteResult {
         toolOutcome: "system",
       };
     }
+    // A shape this cannot read will not read differently on a second attempt.
+    if (err.code === "bad_response") {
+      return { content: err.message, toolOutcome: "system" };
+    }
     return {
       content: `Loki request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
       toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",

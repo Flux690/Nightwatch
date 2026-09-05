@@ -5,8 +5,8 @@ import type { MetricsSourceKind } from "@nightwarden/shared";
 export interface MetricsPreset {
   // The product's own name, as its vendor writes it.
   label: string;
-  /* VictoriaMetrics serves an empty placeholder for every metric ever queried,
-     so absence there is a fact about the server and not about the metric. */
+  /* False where an empty answer says nothing about the metric, so the result
+     states the condition instead of reporting the metric as undeclared. */
   metricMetadata: boolean;
   /* False means a rules URL must be configured separately or recovery is never
      confirmed: VictoriaMetrics serves rules only from vmalert. */
@@ -21,6 +21,8 @@ export const METRICS_PRESETS: Record<MetricsSourceKind, MetricsPreset> = {
   },
   victoriametrics: {
     label: "VictoriaMetrics",
+    // Served since v1.130.0, and only with -enableMetadata set, so an empty
+    // answer cannot tell an undeclared metric from a flag left off.
     metricMetadata: false,
     rulesOnQueryEndpoint: false,
   },
@@ -42,9 +44,9 @@ export const METRICS_PRESETS: Record<MetricsSourceKind, MetricsPreset> = {
   },
   amp: {
     label: "Amazon Managed Prometheus",
-    // Unverified against a live workspace: AMP's rule management API is a
-    // separate AWS surface, not necessarily this Prometheus-shaped one.
     metricMetadata: true,
+    // AWS lists ListRules among its Prometheus-compatible APIs, on the same
+    // workspace path as the query endpoint.
     rulesOnQueryEndpoint: true,
   },
 };

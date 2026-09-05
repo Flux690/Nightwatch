@@ -2,7 +2,12 @@
 // each integration's types sit beside the others without colliding.
 
 export type GitHubErrorCode =
-  "invalid_token" | "sso_required" | "repo_not_found" | "network";
+  | "invalid_token"
+  | "sso_required"
+  | "repo_not_found"
+  | "network"
+  // A payload we cannot read, which no retry and no credential change fixes.
+  | "bad_response";
 
 export interface GitHubIntegrationStatus {
   configured: boolean;

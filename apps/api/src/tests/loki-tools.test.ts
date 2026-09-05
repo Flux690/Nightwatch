@@ -33,6 +33,8 @@ interface LokiMock {
   }>;
   streams: unknown[];
   matrix: unknown[];
+  // The whole body, for a payload that has drifted from what Loki documents.
+  body?: unknown;
   labels: string[];
   values: string[];
   series: unknown[];
@@ -80,6 +82,7 @@ function installLokiMock(mock: LokiMock): void {
         if (mock.status === "error") {
           return new Response(mock.errorText ?? "parse error", { status: 400 });
         }
+        if (mock.body !== undefined) return json(mock.body);
         // QueryLogs sends direction; QueryLogMetrics sends step.
         const isLogs = params.get("direction") !== null;
         return json({
@@ -380,5 +383,29 @@ describe("Loki tools through the tool dispatch", () => {
     const params = mock.requests[0]!.params;
     const end = nsToMs(params.get("end")!);
     expect(Math.abs(end - Date.now())).toBeLessThan(5_000);
+  });
+
+  /* The mock above emits only the shapes the client already read, so it agrees
+     with it by construction. This is the case neither side would have caught. */
+  it("refuses a drifted payload rather than reading it as no log lines", async () => {
+    await connect();
+    // `stream` renamed, which the field-by-field reading answered with [].
+    mock.body = {
+      status: "success",
+      data: {
+        resultType: "streams",
+        result: [{ labels: { app: "api" }, values: [["1757100000000", "x"]] }],
+      },
+    };
+
+    const result = await executeTool(
+      logs,
+      { query: '{app="api"}' },
+      await toolContext(null),
+    );
+
+    expect(result.toolOutcome).toBe("system");
+    expect(result.content).toContain("shape this cannot read");
+    expect(result.content).toContain("treat this as unknown");
   });
 });

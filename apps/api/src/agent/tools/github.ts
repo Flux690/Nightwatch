@@ -82,6 +82,9 @@ export function classifyGitHubError(err: unknown): ToolOutcome {
       // with 404 as readily as with 403, so both are the user's to widen.
       if (err.status === 0 || err.status >= 500) return "retryable";
       return err.status === 403 || err.status === 404 ? "permission" : "system";
+    // A shape this cannot read will not read differently on a second attempt.
+    case "bad_response":
+      return "system";
   }
 }
 
@@ -100,6 +103,8 @@ export function gitHubErrorDetail(err: GitHubApiError): string {
         return `GitHub would not serve this. ${err.message} The token authenticated, so this is its repository permissions rather than the credential.`;
       }
       return `GitHub could not serve the request. ${err.message} The token authenticated; this is not a credentials problem.`;
+    case "bad_response":
+      return err.message;
   }
 }
 

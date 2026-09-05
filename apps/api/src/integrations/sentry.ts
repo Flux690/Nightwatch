@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { describeNetworkFailure } from "./reachability.js";
 import type { SentryErrorCode } from "@nightwarden/shared";
 
@@ -128,13 +129,18 @@ async function readJson(
   }
 }
 
-function rows(body: unknown): Array<Record<string, unknown>> {
-  return Array.isArray(body)
-    ? body.filter(
-        (row): row is Record<string, unknown> =>
-          typeof row === "object" && row !== null && !Array.isArray(row),
-      )
-    : [];
+const ROWS = z.array(z.looseObject({}));
+
+/* A page that is not a list is a failure, not an empty page: filtering to an
+   empty array reports "nothing found" for a body nobody could read. */
+function rows(body: unknown, status: number): Array<Record<string, unknown>> {
+  const parsed = ROWS.safeParse(body);
+  if (parsed.success) return parsed.data;
+  throw new SentryApiError(
+    "bad_response",
+    status,
+    "Sentry answered with something other than a list of rows, so nothing was read. Treat this as unknown rather than as an absence.",
+  );
 }
 
 async function getList(
@@ -145,7 +151,7 @@ async function getList(
 ): Promise<SentryPage<Record<string, unknown>>> {
   const res = await sentryFetch(conn, path, params);
   const { body, nextCursor } = await readJson(res, scope);
-  return { rows: rows(body), nextCursor };
+  return { rows: rows(body, res.status), nextCursor };
 }
 
 export interface IssueSearch {
@@ -203,9 +209,15 @@ export async function latestEvent(
     params,
   );
   const { body } = await readJson(res, "event:read");
-  return typeof body === "object" && body !== null && !Array.isArray(body)
-    ? (body as Record<string, unknown>)
-    : {};
+  const parsed = z.looseObject({}).safeParse(body);
+  if (!parsed.success) {
+    throw new SentryApiError(
+      "bad_response",
+      res.status,
+      "Sentry answered with something other than an event object, so nothing was read. Treat this as unknown rather than as an event carrying no detail.",
+    );
+  }
+  return parsed.data;
 }
 
 // No time parameters exist on this endpoint, so the distribution it returns

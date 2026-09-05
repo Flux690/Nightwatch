@@ -105,6 +105,13 @@ function ladderContent(err: unknown): LadderContent {
             orgApprovalUrl: body.orgApprovalUrl,
           }),
         };
+      // Reachable and authenticated, so neither a retry nor a new token helps.
+      case "bad_response":
+        return {
+          title: "GitHub answered in a shape NightWarden cannot read",
+          detail: err.message,
+          showRegenerate: false,
+        };
       default:
         return {
           title: "GitHub unreachable",

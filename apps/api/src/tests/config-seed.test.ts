@@ -148,15 +148,20 @@ describe("first-boot integration seed from the environment", () => {
     vi.unstubAllGlobals();
   });
 
+  /* Two shapes, because the two probes are two APIs: an instant query answers
+     with a result envelope, and Loki's label listing with a bare array. */
   function answering(ok: boolean): ReturnType<typeof vi.fn> {
-    return vi.fn(async () =>
-      ok
-        ? new Response(JSON.stringify({ status: "success", data: [] }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          })
-        : new Response("nope", { status: 502 }),
-    );
+    return vi.fn(async (input: unknown) => {
+      if (!ok) return new Response("nope", { status: 502 });
+      const url = input instanceof Request ? input.url : String(input);
+      const data = url.includes("/api/v1/query")
+        ? { resultType: "vector", result: [] }
+        : [];
+      return new Response(JSON.stringify({ status: "success", data }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
   }
 
   it("seeds Prometheus and Loki once the probe answers", async () => {

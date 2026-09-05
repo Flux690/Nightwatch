@@ -38,6 +38,8 @@ interface SentryMock {
   commits: unknown[];
   link: string | null;
   status: number;
+  // The whole body, for a payload that is not the list Sentry documents.
+  body?: unknown;
 }
 
 function makeMock(): SentryMock {
@@ -68,15 +70,19 @@ function installSentryMock(mock: SentryMock): void {
       if (mock.status !== 200) {
         return new Response("nope", { status: mock.status });
       }
-      const body = parsed.pathname.endsWith("/commits/")
-        ? mock.commits
-        : parsed.pathname.includes("/releases/")
-          ? mock.releases
-          : parsed.pathname.endsWith("/values/")
-            ? mock.tagValues
-            : parsed.pathname.includes("/events/latest/")
-              ? mock.event
-              : mock.issues;
+      const body =
+        mock.body !== undefined
+          ? mock.body
+          : parsed.pathname.endsWith("/commits/")
+            ? mock.commits
+            : parsed.pathname.includes("/releases/")
+              ? mock.releases
+              : parsed.pathname.endsWith("/values/")
+                ? mock.tagValues
+                : parsed.pathname.includes("/events/latest/")
+                  ? mock.event
+                  : mock.issues;
+
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: {
@@ -483,5 +489,20 @@ describe("Sentry tools through the tool dispatch", () => {
       expect(result.toolOutcome).toBe("permission");
       expect(result.content).toContain("project:read");
     });
+  });
+
+  /* The mock returns the list the client already read, so it agrees with it by
+     construction. An error body served with 200 is what neither would catch. */
+  it("refuses a page that is not a list rather than reporting no issues", async () => {
+    await connect();
+    mock.body = {
+      detail: "You do not have permission to perform this action.",
+    };
+
+    const result = await executeTool(search, {}, await toolContext(ALERT));
+
+    expect(result.toolOutcome).toBe("system");
+    expect(result.content).toContain("other than a list of rows");
+    expect(result.content).toContain("rather than as an absence");
   });
 });

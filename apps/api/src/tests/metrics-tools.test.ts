@@ -29,6 +29,9 @@ interface PromMock {
   result: unknown[];
   status: "success" | "error";
   error?: string;
+  // The whole body, for the shapes `result` cannot express: a scalar, a
+  // histogram, a warning beside the data, or a payload that has drifted.
+  body?: unknown;
 }
 
 function makeMock(): PromMock {
@@ -70,6 +73,7 @@ function installPromMock(mock: PromMock): void {
           400,
         );
       }
+      if (mock.body !== undefined) return json(mock.body);
       return json({
         status: "success",
         data: {
@@ -474,9 +478,11 @@ describe("metrics tools through the tool dispatch", () => {
           await toolContext(ALERT),
         );
 
-        expect(result.content).toContain("does not implement");
+        expect(result.content).toContain("-enableMetadata");
         // The distinction that matters: this says nothing about the metric.
         expect(result.content).toContain("says nothing about whether");
+        // Nor which of the two produced the emptiness.
+        expect(result.content).toContain("which of those two");
         // Not asked at all - the answer is known before the call.
         expect(mock.requests).toHaveLength(0);
       });
@@ -513,6 +519,129 @@ describe("metrics tools through the tool dispatch", () => {
         expect(result.toolOutcome).toBe("permission");
         expect(result.content).toContain("No metrics source is connected");
       }
+    });
+  });
+
+  /* Payloads copied from Prometheus's own documented examples. The fakes above
+     emit only the two shapes the client already read, so they agree by
+     construction and could never have caught any of these. */
+  describe("result shapes the Prometheus API documents", () => {
+    it("reads a scalar as the one value it is, not as two empty series", async () => {
+      await connect();
+      mock.body = {
+        status: "success",
+        data: { resultType: "scalar", result: [1757100000, "3"] },
+      };
+
+      const result = await executeTool(
+        instant,
+        { query: "scalar(sum(up))" },
+        await toolContext(ALERT),
+      );
+
+      const content = JSON.parse(result.content) as {
+        resultType: string;
+        series: Array<{ values: Array<[number, string]> }>;
+      };
+      expect(result.toolOutcome).toBeUndefined();
+      expect(content.resultType).toBe("scalar");
+      expect(content.series).toHaveLength(1);
+      expect(content.series[0]!.values).toEqual([[1757100000, "3"]]);
+    });
+
+    it("names a native histogram instead of reporting it as no data", async () => {
+      await connect();
+      mock.body = {
+        status: "success",
+        data: {
+          resultType: "matrix",
+          result: [
+            {
+              metric: { __name__: "http_request_duration_seconds" },
+              histograms: [
+                [1757100000, { count: "60", sum: "120", buckets: [] }],
+              ],
+            },
+          ],
+        },
+      };
+
+      const result = await executeTool(
+        range,
+        { query: "http_request_duration_seconds" },
+        await toolContext(ALERT),
+      );
+
+      const content = JSON.parse(result.content) as {
+        series: Array<{ histogram?: true; values: Array<[number, string]> }>;
+        note?: string;
+      };
+      expect(content.series[0]!.histogram).toBe(true);
+      expect(content.series[0]!.values).toEqual([[1757100000, "60"]]);
+      expect(content.note).toContain("histogram_quantile()");
+    });
+
+    it("reports a warning beside the data, since the read may be partial", async () => {
+      await connect();
+      mock.body = {
+        status: "success",
+        warnings: ["1 store failed: store-2 unreachable"],
+        data: {
+          resultType: "vector",
+          result: [{ metric: { job: "api" }, value: [1757100000, "7"] }],
+        },
+      };
+
+      const result = await executeTool(
+        instant,
+        { query: "up" },
+        await toolContext(ALERT),
+      );
+
+      const content = JSON.parse(result.content) as { note?: string };
+      expect(content.note).toContain("store-2 unreachable");
+      expect(content.note).toContain("may be partial");
+    });
+
+    /* The pairing that hides a Thanos outage: a store is down, so nothing comes
+       back, and the emptiness reads as a healthy zero unless the warning shows. */
+    it("keeps the warning when the partial read returned nothing at all", async () => {
+      await connect();
+      mock.body = {
+        status: "success",
+        warnings: ["1 store failed: store-2 unreachable"],
+        data: { resultType: "vector", result: [] },
+      };
+
+      const result = await executeTool(
+        instant,
+        { query: "up" },
+        await toolContext(ALERT),
+      );
+
+      const content = JSON.parse(result.content) as { note: string };
+      expect(result.toolOutcome).toBe("expected_miss");
+      expect(content.note).toContain("store-2 unreachable");
+      expect(content.note).toContain("not a reading of zero");
+    });
+
+    it("refuses a drifted payload rather than reading it as an empty result", async () => {
+      await connect();
+      // `result` renamed, which the field-by-field reading answered with [].
+      mock.body = {
+        status: "success",
+        data: { resultType: "vector", results: [] },
+      };
+
+      const result = await executeTool(
+        instant,
+        { query: "up" },
+        await toolContext(ALERT),
+      );
+
+      expect(result.toolOutcome).toBe("system");
+      expect(result.content).toContain("shape this cannot read");
+      expect(result.content).toContain("treat this as unknown");
     });
   });
 });

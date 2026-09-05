@@ -65,6 +65,18 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Fixed
 
+- **A response NightWarden cannot read is now reported as unreadable, instead of as an empty result.** Every reply from your metrics source, Loki, Sentry and GitHub used to be read field by field, and any field that did not look as expected became an empty list or a blank string. An investigation was therefore told "no changes were merged" or "no log lines matched" when the truth was that the answer could not be parsed at all, which is indistinguishable from a healthy service. Each response is now checked against the shape its vendor documents, and a reply that does not match fails the tool call with the field named, so the agent records an unknown rather than a finding. — `0.5.4`
+
+- **A metrics query that returns one number now reports that number.** A PromQL expression producing a single value, such as `scalar(sum(up))`, came back as two series with no data points, because a scalar's result is a `[time, value]` pair and it was being read as a list. — `0.5.4`
+
+- **A native histogram is now named instead of appearing to hold nothing.** Histogram series carry their points under different keys, so a query against one showed a series with zero points. The result now reports the observation count per point, says that is what it is, and tells the agent to use `histogram_quantile()` for a percentile. — `0.5.4`
+
+- **A partial read is no longer presented as a complete one.** Prometheus, Thanos and Mimir answer with data _and_ a warning when part of the query could not be served, typically because a store was unreachable. Those warnings were dropped, so a six-hour window that returned two hours of data read as the whole window, and an investigation could date an incident wrong. Every metrics result now carries them, including when the partial read returned nothing at all. — `0.5.4`
+
+- **Metric name discovery on VictoriaMetrics no longer silently covers only today.** VictoriaMetrics defaults its label endpoints to the day so far, where Prometheus defaults to all time, so `ListMetricNames` could omit a metric that had existed for a year but had not been written since midnight, and the agent would read that as the metric not existing. The window is now sent explicitly and stated in the result. — `0.5.4`
+
+- **Two integration cards no longer state something untrue.** VictoriaMetrics is described as needing `-enableMetadata` and v1.130.0 for metric metadata, rather than as never implementing it; and the Amazon Managed Prometheus card no longer warns that recovery confirmation is unverified, which AWS's own `ListRules` API settles. — `0.5.4`
+
 - **A Sentry result can be cited, so an exception or a release can support a claim.** The five Sentry tools answered and were rendered, but were never issued an evidence id, and a hypothesis needs at least one citation - so a cause found in a stack trace or a release timeline could not be recorded at all unless something else happened to back it. Sentry also now counts as its own evidence family, so a claim resting on Sentry plus metrics or logs reads as corroborated rather than cited. — `0.4.2`
 
 - The log tools no longer claim to filter down to error and warning lines. They never did: the newest lines are read and only your own `contains` and `excludes` narrow them. An agent told otherwise read a thin result as a quiet service. — `0.3.171` (`f49f9c8`)

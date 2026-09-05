@@ -351,13 +351,17 @@ A runner is optional. A metrics source, Loki or Sentry alone is a working instal
 
 **A result that shows less than the tool searched says so**: what was looked at, what was left out, and what the call cannot speak for. An empty list that cannot distinguish "nothing happened" from "we did not look there" is a defect, because the agent reads both as the first and stops. Where the gap cannot be closed the result states the limit rather than guessing past it. A wrong fact is worse than a stated unknown, and a stated unknown is itself a finding.
 
-Three instances of that rule:
+Five instances of that rule:
 
 **Log windows.** Loki and Docker logs take `since` and `until`, so the agent can walk backwards through a noisy period. Kubernetes logs take only `since`, because the Kubernetes API has no end-time parameter at all, and the tool says where that limit comes from. When a result is capped it names the timestamp of its oldest line, which is the cursor for the next call.
 
 **Log filtering.** `contains` keeps lines holding any of the given words; `excludes` drops them and is applied first. Both match plain text, case-insensitively, on whole lines - deliberately not regular expressions, because a pattern the model wrote, run over hundreds of thousands of lines on your server, is a risk the runner would be wearing on your behalf. **The tail is read before any filtering**, so the result carries how many lines were actually searched: two matches out of two hundred and two matches out of two hundred thousand are different findings.
 
 **Expired Kubernetes events.** Kubernetes deletes events on a timer, commonly an hour, and does not report what that timer is. An empty event list can mean healthy or aged-out, so the result says which window was searched, how many events sit before it, and that a window past the common TTL may be asking for events that no longer exist. A deleted pod's events stay unattributable: an event carries no owner reference, and matching on name prefixes is a guess.
+
+**An unreadable answer.** Every reply from a metrics source, Loki, Sentry or GitHub is parsed against the shape its vendor documents, in `integrations/`. A reply that does not match fails the call with the field named, because reading a response field by field turns any surprise into an empty list, and an empty list reaches the agent as "nothing happened". Unknown keys pass through, since an addition is the change these APIs actually make; a rename is what fails. Each parser requires only what its own reader reads, so a recovery check does not fail for a field only the listing uses.
+
+**A partial read.** Prometheus, Thanos and Mimir answer with data _and_ a warning when part of a query could not be served. Every metrics result carries those warnings, including when the partial read returned nothing at all - a store being down and a healthy zero otherwise look identical. A native histogram is named as one, since its points hold an observation count rather than a measurement, and metric-name discovery states the window it searched, because VictoriaMetrics defaults those endpoints to the day so far where Prometheus defaults to all time.
 
 ### The control plane is invisible to its own agent
 
@@ -393,7 +397,7 @@ Five cards - **Prometheus**, **VictoriaMetrics**, **Grafana Mimir**, **Thanos**,
 
 **The rules URL is separate from the query URL, and worth filling in.** It is the address NightWarden asks whether the rule that fired still holds. On Prometheus and Thanos it is the same URL. On VictoriaMetrics it is vmalert, a separate binary, because vmsingle and vmselect do not serve alerting rules at all. On Grafana Cloud it is your Grafana stack behind a service account token, which is also how a Grafana-managed alert rule is reached whatever you query for metrics. Left empty, queries still work but investigations opened by those alerts can never reach `resolved` on their own, and the card says so.
 
-**What a source cannot answer, it says.** VictoriaMetrics does not implement the metric metadata API and returns empty for every metric that has ever existed, so asking it what a metric measures reports that limitation rather than reporting the metric as undeclared - which would be a fact about VictoriaMetrics dressed as a fact about your metric.
+**What a source cannot answer, it says.** VictoriaMetrics serves metric metadata only from v1.130.0 and only with `-enableMetadata` set, so an empty answer there cannot tell an undeclared metric from a flag left off. Asking it what a metric measures states that condition rather than reporting the metric as undeclared, which would be a fact about the server dressed as a fact about your metric.
 
 ### Logs
 

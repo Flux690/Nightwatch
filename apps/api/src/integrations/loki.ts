@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { describeNetworkFailure } from "./reachability.js";
 export type LokiErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
@@ -108,9 +109,9 @@ async function readData(res: Response): Promise<unknown> {
       `Loki returned ${res.status}${text ? `: ${text}` : ""}`,
     );
   }
-  let body: Record<string, unknown>;
+  let body: unknown;
   try {
-    body = (await res.json()) as Record<string, unknown>;
+    body = await res.json();
   } catch {
     throw new LokiApiError(
       "bad_response",
@@ -118,52 +119,70 @@ async function readData(res: Response): Promise<unknown> {
       `Loki returned a non-JSON body (HTTP ${res.status}) - is this URL a Loki API endpoint?`,
     );
   }
-  if (body["status"] !== "success") {
+  const envelope = parse(ENVELOPE, body, res.status, "a query");
+  if (envelope.status !== "success") {
     throw new LokiApiError(
       "bad_response",
       res.status,
       "Loki returned without a success envelope",
     );
   }
-  return body["data"];
+  return envelope.data;
 }
 
-function narrowLabels(raw: unknown): Record<string, string> {
-  const labels: Record<string, string> = {};
-  if (typeof raw === "object" && raw !== null) {
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === "string") labels[k] = v;
-    }
-  }
-  return labels;
-}
+const LABELS = z.record(z.string(), z.string());
 
-function narrowStream(entry: unknown): LokiStream {
-  const e = (entry ?? {}) as Record<string, unknown>;
-  const values = Array.isArray(e["values"]) ? e["values"] : [];
-  return {
-    labels: narrowLabels(e["stream"]),
-    values: values.flatMap((pair): Array<[string, string]> => {
-      if (!Array.isArray(pair)) return [];
-      const [ts, line] = pair as [unknown, unknown];
-      return typeof ts === "string" && typeof line === "string"
-        ? [[ts, line]]
-        : [];
+/* Shapes from Loki's own HTTP API reference. Unknown keys pass through, since
+   an addition is the only change it makes; a rename fails loudly instead. */
+const ENVELOPE = z.looseObject({
+  status: z.string(),
+  data: z.unknown(),
+});
+
+const STREAM_DATA = z.looseObject({
+  resultType: z.literal("streams"),
+  result: z.array(
+    z.looseObject({
+      stream: LABELS,
+      // Nanosecond epochs, which Loki sends as strings because they overflow.
+      values: z.array(z.tuple([z.string(), z.string()])),
     }),
-  };
+  ),
+});
+
+const METRIC_DATA = z.looseObject({
+  resultType: z.literal("matrix"),
+  result: z.array(
+    z.looseObject({
+      metric: LABELS,
+      values: z.array(z.tuple([z.number(), z.string()])),
+    }),
+  ),
+});
+
+// The one field name a caller can act on, so a drift says which it was.
+function fieldPath(error: z.ZodError): string {
+  const issue = error.issues[0];
+  return issue === undefined || issue.path.length === 0
+    ? "the response body"
+    : issue.path.join(".");
 }
 
-function narrowMetricSeries(entry: unknown): LokiMetricSeries {
-  const e = (entry ?? {}) as Record<string, unknown>;
-  const values = Array.isArray(e["values"]) ? e["values"] : [];
-  return {
-    metric: narrowLabels(e["metric"]),
-    values: values.flatMap((pair): Array<[number, string]> => {
-      if (!Array.isArray(pair)) return [];
-      const [t, v] = pair as [unknown, unknown];
-      return typeof t === "number" && typeof v === "string" ? [[t, v]] : [];
-    }),
-  };
+/* Parsed rather than narrowed field by field: a shape we cannot read is a
+   failure the agent must see, never an empty result it would read as a finding. */
+function parse<T>(
+  schema: z.ZodType<T>,
+  body: unknown,
+  status: number,
+  what: string,
+): T {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return parsed.data;
+  throw new LokiApiError(
+    "bad_response",
+    status,
+    `Loki answered ${what} in a shape this cannot read: ${fieldPath(parsed.error)} is wrong. Nothing was read, so treat this as unknown rather than as an absence.`,
+  );
 }
 
 export async function queryLogRange(
@@ -188,9 +207,13 @@ export async function queryLogRange(
       direction: "backward",
     },
   );
-  const data = (await readData(res)) as Record<string, unknown> | undefined;
-  const raw = Array.isArray(data?.["result"]) ? data["result"] : [];
-  return { streams: raw.map(narrowStream) };
+  const data = parse(STREAM_DATA, await readData(res), res.status, "log lines");
+  return {
+    streams: data.result.map((entry) => ({
+      labels: entry.stream,
+      values: entry.values,
+    })),
+  };
 }
 
 export async function queryMetricRange(
@@ -214,18 +237,24 @@ export async function queryMetricRange(
       step: String(stepSeconds),
     },
   );
-  const data = (await readData(res)) as Record<string, unknown> | undefined;
-  const resultType =
-    typeof data?.["resultType"] === "string" ? data["resultType"] : "";
-  const raw = Array.isArray(data?.["result"]) ? data["result"] : [];
-  return { resultType, series: raw.map(narrowMetricSeries) };
+  const data = parse(
+    METRIC_DATA,
+    await readData(res),
+    res.status,
+    "log metrics",
+  );
+  return {
+    resultType: data.resultType,
+    series: data.result.map((entry) => ({
+      metric: entry.metric,
+      values: entry.values,
+    })),
+  };
 }
 
-function stringList(data: unknown): string[] {
-  return Array.isArray(data)
-    ? data.filter((v): v is string => typeof v === "string")
-    : [];
-}
+/* Loki omits `data` entirely when a window holds no labels, which is an empty
+   listing rather than a shape it failed to send. */
+const STRING_LIST = z.array(z.string()).nullish();
 
 // GET (no secrets in the path): a window bounds discovery to labels seen around
 // the incident. Loki does the filtering; we only pass the range.
@@ -246,7 +275,13 @@ export async function labelNames(
     orgId,
     `/loki/api/v1/labels?${qs.toString()}`,
   );
-  return stringList(await readData(res));
+  const data = parse(
+    STRING_LIST,
+    await readData(res),
+    res.status,
+    "label names",
+  );
+  return data ?? [];
 }
 
 export async function labelValues(
@@ -267,7 +302,13 @@ export async function labelValues(
     orgId,
     `/loki/api/v1/label/${encodeURIComponent(label)}/values?${qs.toString()}`,
   );
-  return stringList(await readData(res));
+  const data = parse(
+    STRING_LIST,
+    await readData(res),
+    res.status,
+    "label values",
+  );
+  return data ?? [];
 }
 
 // The label sets of streams matching a selector, so the agent can narrow
@@ -291,8 +332,13 @@ export async function series(
     orgId,
     `/loki/api/v1/series?${qs.toString()}`,
   );
-  const data = await readData(res);
-  return Array.isArray(data) ? data.map(narrowLabels) : [];
+  const data = parse(
+    z.array(LABELS).nullish(),
+    await readData(res),
+    res.status,
+    "matching streams",
+  );
+  return data ?? [];
 }
 
 // A recent-window label listing proves the URL, the credential and the

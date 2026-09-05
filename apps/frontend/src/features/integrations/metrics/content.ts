@@ -66,7 +66,7 @@ export const METRICS_SOURCE_CONTENT: Record<
       "VictoriaMetrics has none of its own; this is what vmauth expects.",
     tenant: false,
     warnings: [
-      "VictoriaMetrics does not implement the metric metadata API. It answers with an empty result for every metric, so investigations read a metric's type from its behaviour instead of asking.",
+      "Metric metadata needs -enableMetadata on your VictoriaMetrics, and v1.130.0 or newer. Without it the metadata endpoint answers empty for every metric, so investigations read a metric's type from its behaviour instead of asking.",
     ],
   },
   mimir: {
@@ -102,8 +102,6 @@ export const METRICS_SOURCE_CONTENT: Record<
     auth: ["aws"],
     authHelp: "An IAM user or role with query access to this workspace.",
     tenant: false,
-    warnings: [
-      "AMP's rules confirmation is unverified against a live workspace. If it does not work, leave the rules URL empty and rely on your alert source's resolved notification instead.",
-    ],
+    warnings: [],
   },
 };

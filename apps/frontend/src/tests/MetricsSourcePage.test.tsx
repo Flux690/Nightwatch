@@ -129,12 +129,12 @@ describe("MetricsSourcePage", () => {
     expect(screen.getByText("http://vmselect:8481")).toBeInTheDocument();
   });
 
-  it("warns that VictoriaMetrics answers nothing for metric metadata", async () => {
+  it("names what VictoriaMetrics needs before it serves metric metadata", async () => {
     stubApi(NOT_CONNECTED);
     renderPage("victoriametrics");
 
     expect(
-      await screen.findByText(/does not implement the metric metadata API/),
+      await screen.findByText(/-enableMetadata on your VictoriaMetrics/),
     ).toBeInTheDocument();
   });
 
