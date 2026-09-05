@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { getLokiIntegration } from "../../integrations/store.js";
 import {
   LokiApiError,
@@ -11,6 +12,7 @@ import {
 } from "../../integrations/loki.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
+import { apiTool, optionalText } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
@@ -79,18 +81,96 @@ const DISCOVERY_LOOKFORWARD_MINUTES = 5;
 const MAX_LABELS = 200;
 const MAX_SERIES_MATCHES = 50;
 
-function clampedNumber(
-  input: Record<string, unknown>,
-  key: string,
-  fallback: number,
-  max: number,
-): number {
-  const raw = input[key];
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-    return fallback;
-  }
-  return Math.min(raw, max);
-}
+// Absent means the alert; blank is the model skipping the field, which is the
+// same thing. Refused only when it is a string no date can be read from.
+const until = optionalText
+  .refine((raw) => raw === undefined || !Number.isNaN(Date.parse(raw)), {
+    message:
+      "must be an ISO 8601 timestamp, for example 2026-08-10T11:23:00Z. Copy it from a tool result rather than composing one.",
+  })
+  .meta({
+    description:
+      "Where the window ends, as an ISO 8601 timestamp, so you can read a moment other than the alert. The window becomes the lookbackMinutes ending here. Use it to look at when something started, taking the time from a QueryLogMetrics series, or to continue past a result that hit its budget by passing the ts of the oldest line you received. Defaults to the alert.",
+  });
+
+const QUERY_LOGS_INPUT = z.object({
+  query: z.string().trim().min(1, "must be a LogQL string").meta({
+    description:
+      'The LogQL query, which must begin with a stream selector in braces, for example {namespace="shop", app="api"} |= "error".',
+  }),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOG_LIMIT)
+    .default(DEFAULT_LOG_LIMIT)
+    .meta({
+      description: `How many lines to return at most, newest first. A whole number from 1 to ${MAX_LOG_LIMIT}, defaulting to ${DEFAULT_LOG_LIMIT}.`,
+    }),
+  lookbackMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOG_LOOKBACK_MINUTES)
+    .meta({
+      description: `How many minutes before the alert to search. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, which is one week, defaulting to ${DEFAULT_LOG_LOOKBACK_MINUTES}.`,
+    }),
+  lookforwardMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOG_LOOKFORWARD_MINUTES)
+    .meta({
+      description: `How many minutes after the alert to search, never extending past now. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, defaulting to ${DEFAULT_LOG_LOOKFORWARD_MINUTES}. Ignored when until is given.`,
+    }),
+  until,
+});
+
+const QUERY_LOG_METRICS_INPUT = z.object({
+  query: z.string().trim().min(1, "must be a LogQL string").meta({
+    description:
+      "The metric-style LogQL expression. It has to produce a range vector, which means using a function such as rate() or count_over_time() with a range in square brackets.",
+  }),
+  lookbackMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_METRIC_LOOKBACK_MINUTES)
+    .meta({
+      description: `How many minutes before the alert to include. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, which is one week, defaulting to ${DEFAULT_METRIC_LOOKBACK_MINUTES}.`,
+    }),
+  lookforwardMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_METRIC_LOOKFORWARD_MINUTES)
+    .meta({
+      description: `How many minutes after the alert to include, which is how you tell whether it recovered, never extending past now. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, defaulting to ${DEFAULT_METRIC_LOOKFORWARD_MINUTES}.`,
+    }),
+  stepSeconds: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .meta({
+      description: `How far apart the sampled points are, as a whole number of seconds, 1 or more. Omit this and a step is chosen that fits roughly ${TARGET_POINTS_PER_SERIES} points across the window.`,
+    }),
+});
+
+const DISCOVER_LOG_LABELS_INPUT = z.object({
+  label: optionalText.meta({
+    description:
+      "A label name whose values you want listed, for example 'app'. Omit it to list the label names instead.",
+  }),
+  selector: optionalText.meta({
+    description:
+      'A partial LogQL selector, for example {namespace="shop"}, whose matching streams you want the full label sets of.',
+  }),
+});
 
 // Evidence windows never extend into the future; metrics/logs after the alert
 // are still evidence (did it recover?) up to now.
@@ -122,13 +202,6 @@ function aimedWindow(
 
 // Absent is the alert; unparseable is the model's mistake and is corrected
 // rather than silently read as absent.
-function parseUntil(raw: unknown): Date | null | "invalid" {
-  if (raw === undefined || raw === null || raw === "") return null;
-  if (typeof raw !== "string") return "invalid";
-  const at = new Date(raw);
-  return Number.isNaN(at.getTime()) ? "invalid" : at;
-}
-
 function nsToIso(ns: string): string {
   try {
     const d = new Date(Number(BigInt(ns) / 1_000_000n));
@@ -180,91 +253,28 @@ function capMetricSeries(data: LokiMetricData): {
 }
 
 export const LOKI_TOOLS: Tool[] = [
-  {
-    schema: {
-      name: "QueryLogs",
-      description:
-        'Read individual log lines from the connected Loki, selected with a LogQL query such as {app="api"} |= "error". Lines come back newest first, from a window around the alert or around now if no alert started this session. Every LogQL query has to begin with a label selector in braces, so if you do not already know which labels select this service, call DiscoverLogLabels first. Narrow the query itself with filters such as |= and |~ rather than fetching everything and reading through it.',
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: {
-            type: "string",
-            description:
-              'The LogQL query, which must begin with a stream selector in braces, for example {namespace="shop", app="api"} |= "error".',
-          },
-          limit: {
-            type: "number",
-            description:
-              "How many lines to return at most, newest first. Defaults to 100, and the maximum is 1000.",
-          },
-          lookbackMinutes: {
-            type: "number",
-            description:
-              "How many minutes before the alert to search. Defaults to 60, and the maximum is 10080, which is one week.",
-          },
-          lookforwardMinutes: {
-            type: "number",
-            description:
-              "How many minutes after the alert to search. Defaults to 5, and never extends past now. Ignored when until is given.",
-          },
-          until: {
-            type: "string",
-            description:
-              "Where the window ends, as an ISO 8601 timestamp, so you can read a moment other than the alert. The window becomes the lookbackMinutes ending here. Use it to look at when something started, taking the time from a QueryLogMetrics series, or to continue past a result that hit its budget by passing the ts of the oldest line you received. Defaults to the alert.",
-          },
-        },
-        required: ["query"],
-      },
-    },
+  apiTool({
+    name: "QueryLogs",
+    description:
+      'Read individual log lines from the connected Loki, selected with a LogQL query such as {app="api"} |= "error". Lines come back newest first, from a window around the alert or around now if no alert started this session. Every LogQL query has to begin with a label selector in braces, so if you do not already know which labels select this service, call DiscoverLogLabels first. Narrow the query itself with filters such as |= and |~ rather than fetching everything and reading through it.',
+    input: QUERY_LOGS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "logs",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
-      const query = input["query"];
-      if (typeof query !== "string" || query.trim() === "") {
-        return {
-          content: "query must be a LogQL string",
-          toolOutcome: "system",
-        };
-      }
-
-      const until = parseUntil(input["until"]);
-      if (until === "invalid") {
-        return {
-          content:
-            "until must be an ISO 8601 timestamp, for example 2026-08-10T11:23:00Z. Copy it from a tool result rather than composing one.",
-          toolOutcome: "system",
-        };
-      }
-
-      const limit = Math.round(
-        clampedNumber(input, "limit", DEFAULT_LOG_LIMIT, MAX_LOG_LIMIT),
-      );
-      const lookbackMinutes = clampedNumber(
-        input,
-        "lookbackMinutes",
-        DEFAULT_LOG_LOOKBACK_MINUTES,
-        MAX_LOOKBACK_MINUTES,
-      );
+      const { query, lookbackMinutes, lookforwardMinutes } = input;
+      const limit = Math.round(input.limit);
       const { start, end } =
-        until === null
+        input.until === undefined
           ? await anchoredWindow(
               ctx.sessionId,
               lookbackMinutes,
-              clampedNumber(
-                input,
-                "lookforwardMinutes",
-                DEFAULT_LOG_LOOKFORWARD_MINUTES,
-                MAX_LOOKBACK_MINUTES,
-              ),
+              lookforwardMinutes,
             )
-          : aimedWindow(until, lookbackMinutes);
+          : aimedWindow(new Date(input.until), lookbackMinutes);
 
       try {
         const data = await queryLogRange(
@@ -347,80 +357,36 @@ export const LOKI_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "QueryLogMetrics",
-      description:
-        'Count or rate log lines in the connected Loki using a metric-style LogQL expression, for example sum(rate({app="api"} |= "error" [5m])), across a window around the alert. Use this when you want a number derived from logs that Prometheus does not record, such as how often a particular message appears. When you want to read the lines themselves, use QueryLogs. Keep the number of returned series small with aggregations, because only the first twenty are returned.',
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: {
-            type: "string",
-            description:
-              "The metric-style LogQL expression. It has to produce a range vector, which means using a function such as rate() or count_over_time() with a range in square brackets.",
-          },
-          lookbackMinutes: {
-            type: "number",
-            description:
-              "How many minutes before the alert to include. Defaults to 180, and the maximum is 10080, which is one week.",
-          },
-          lookforwardMinutes: {
-            type: "number",
-            description:
-              "How many minutes after the alert to include, which is how you tell whether it recovered. Defaults to 30, and never extends past now.",
-          },
-          stepSeconds: {
-            type: "number",
-            description:
-              "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
-          },
-        },
-        required: ["query"],
-      },
-    },
+  }),
+  apiTool({
+    name: "QueryLogMetrics",
+    description:
+      'Count or rate log lines in the connected Loki using a metric-style LogQL expression, for example sum(rate({app="api"} |= "error" [5m])), across a window around the alert. Use this when you want a number derived from logs that Prometheus does not record, such as how often a particular message appears. When you want to read the lines themselves, use QueryLogs. Keep the number of returned series small with aggregations, because only the first twenty are returned.',
+    input: QUERY_LOG_METRICS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "metric",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
-      const query = input["query"];
-      if (typeof query !== "string" || query.trim() === "") {
-        return {
-          content: "query must be a LogQL string",
-          toolOutcome: "system",
-        };
-      }
+      const { query, stepSeconds } = input;
 
       const { start, end } = await anchoredWindow(
         ctx.sessionId,
-        clampedNumber(
-          input,
-          "lookbackMinutes",
-          DEFAULT_METRIC_LOOKBACK_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ),
-        clampedNumber(
-          input,
-          "lookforwardMinutes",
-          DEFAULT_METRIC_LOOKFORWARD_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ),
+        input.lookbackMinutes,
+        input.lookforwardMinutes,
       );
       const windowSeconds = Math.max(
         1,
         Math.round((end.getTime() - start.getTime()) / 1000),
       );
+      // Capped at the window: a step wider than what was asked for returns one
+      // point, which reads as a flat series rather than as a bad step.
       const step = Math.round(
-        clampedNumber(
-          input,
-          "stepSeconds",
-          Math.max(15, Math.ceil(windowSeconds / TARGET_POINTS_PER_SERIES)),
+        Math.min(
+          stepSeconds ??
+            Math.max(15, Math.ceil(windowSeconds / TARGET_POINTS_PER_SERIES)),
           windowSeconds,
         ),
       );
@@ -447,35 +413,16 @@ export const LOKI_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "DiscoverLogLabels",
-      description:
-        "Find out which labels select a particular service's logs in Loki. There is no fixed convention for these, so you cannot guess them reliably; call this before QueryLogs whenever you do not already know the selector. Called with no arguments it lists the label names present around the alert. Given a label name it lists that label's values. Given a partial selector it lists the label sets of the streams that match, so you can narrow down from there.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          label: {
-            type: "string",
-            description:
-              "A label name whose values you want listed, for example 'app'. Omit it to list the label names instead.",
-          },
-          selector: {
-            type: "string",
-            description:
-              'A partial LogQL selector, for example {namespace="shop"}, whose matching streams you want the full label sets of.',
-          },
-        },
-        required: [],
-      },
-    },
+  }),
+  apiTool({
+    name: "DiscoverLogLabels",
+    description:
+      "Find out which labels select a particular service's logs in Loki. There is no fixed convention for these, so you cannot guess them reliably; call this before QueryLogs whenever you do not already know the selector. Called with no arguments it lists the label names present around the alert. Given a label name it lists that label's values. Given a partial selector it lists the label sets of the streams that match, so you can narrow down from there.",
+    input: DISCOVER_LOG_LABELS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();
       if (integration === null) return notConfigured();
@@ -490,8 +437,8 @@ export const LOKI_TOOLS: Tool[] = [
       const windowEnd = end.toISOString();
 
       try {
-        const selector = input["selector"];
-        if (typeof selector === "string" && selector.trim() !== "") {
+        const { selector } = input;
+        if (selector !== undefined) {
           const all = await series(baseUrl, auth, orgId, selector, start, end);
           const matches = all.slice(0, MAX_SERIES_MATCHES);
           const omitted = all.length - matches.length;
@@ -510,8 +457,8 @@ export const LOKI_TOOLS: Tool[] = [
           return { content: result };
         }
 
-        const label = input["label"];
-        if (typeof label === "string" && label.trim() !== "") {
+        const { label } = input;
+        if (label !== undefined) {
           const all = await labelValues(
             baseUrl,
             auth,
@@ -556,5 +503,5 @@ export const LOKI_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 ];

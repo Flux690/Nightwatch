@@ -3,78 +3,104 @@
 
 import { z } from "zod";
 import {
-  RECORD_HYPOTHESIS_SCHEMA,
-  SUBMIT_INVESTIGATION_REPORT_SCHEMA,
-} from "../prompts/report.js";
-import {
   recordHypothesis,
   submitReport,
   type RecordOutcome,
 } from "../report.js";
+import { apiTool, optionalText } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // Prose the record cannot do without. A blank one is the model skipping the
 // field, which stores a row nobody can read.
 const prose = z.string().trim().min(1);
 
-// A model that omits one wrote a thinner report, not a broken one, and failing
-// the call would discard the fields it did fill in.
-const optionalProse = z
-  .string()
-  .optional()
-  .transform((s) => s?.trim())
-  .transform((s) => (s === "" ? undefined : s));
-
+// Reasoning before conclusion: a verdict field ahead of the finding that
+// settles it makes the model commit before it explains.
 const RECORD_HYPOTHESIS_INPUT = z.object({
-  statement: prose,
-  verdict: z.enum([
-    "root_cause",
-    "trigger",
-    "symptom",
-    "contributing_factor",
-    "disproven",
-  ]),
+  statement: prose.meta({
+    description:
+      "The explanation you tested, stated so that it can be proved or disproved. Name the thing you mean: a container, a file, a metric, a commit. 'Check database connectivity' says nothing; 'the cache bump in PR #482 leaks memory in payments-worker' can be tested.",
+  }),
   // Allowed to be blank: the finding is the model's reasoning, and an empty one
   // is a thin record rather than an unreadable one.
-  finding: z.string(),
-  evidenceIds: z.array(z.string()).min(1),
-  // Required by the schema and empty when it replaces nothing, which is what an
-  // optional field has to look like under Anthropic's tool-schema rules.
-  supersedes: optionalProse,
-});
-
-/* All declared required on the schema the model is shown, so accepting a blank
-   made the contract a suggestion. The report turn names the field it refused. */
-const SUBMIT_REPORT_INPUT = z.object({
-  headline: prose,
-  affected: prose,
-  summary: prose,
-  timeline: z.array(
-    z.object({
-      at: prose,
-      what: prose,
-      lane: z.enum(["change", "signal", "agent"]).optional(),
-      evidenceId: optionalProse,
+  finding: z.string().meta({
+    description:
+      "What the cited results actually showed, and why that settles it this way, in complete sentences. This is read beneath your statement by someone who was not here, so it has to explain rather than remind: quote the value, the line or the timestamp that decided it, and say what it means. Two or three sentences is usually right; a fragment is not.",
+  }),
+  evidenceIds: z
+    .array(z.string())
+    .min(
+      1,
+      "a verdict needs at least one citation: pass the ids of the tool calls whose results settled it",
+    )
+    .meta({
+      description:
+        'The evidence ids of the tool calls whose results show this claim is true. A result that can back a claim opens with an "evidenceId" field, written e1, e2, e3 and so on. A tool that reads nothing about your system carries no evidence id and cannot be cited. Cite only calls whose results you have already read: tools you ask for in this reply have not run yet, their results reach you in your next message, and a claim citing one of them is refused. The user sees each cited result rendered underneath the claim, so cite the call whose output shows what you are asserting. At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal. If any id you give names no answered call, none of them is recorded.',
     }),
-  ),
-  impact: prose,
-  recommendation: prose,
+  verdict: z
+    .enum([
+      "root_cause",
+      "trigger",
+      "symptom",
+      "contributing_factor",
+      "disproven",
+    ])
+    .meta({
+      description:
+        "'root_cause' is the underlying condition that made the failure possible. 'trigger' is the event that set it off. 'symptom' is something the real cause produced downstream. 'contributing_factor' made the failure worse or more likely without causing it. 'disproven' means you tested it and it is not so. Most published analyses identify a trigger rather than a root cause, so do not reach for 'root_cause' when 'trigger' or 'symptom' is what the evidence shows.",
+    }),
+  supersedes: optionalText.meta({
+    description:
+      "The id of an earlier claim on this record that this one replaces, written h1, h2, h3 as it was given back to you when you recorded it. Use it only when you now believe that claim was wrong or incomplete, not merely to add to it. The claim you name is not deleted: it stays on the record beside this one, so the reader can see where you changed your mind. Omit it when this replaces nothing, which is the ordinary case.",
+  }),
 });
 
-// Names the fields that failed: the model gets exactly one more attempt, and
-// "invalid input" tells it nothing about which one.
-function malformed(message: string): ToolExecuteResult {
-  return { content: message, toolOutcome: "system" };
-}
-
-function fieldErrors(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => {
-      const path = issue.path.join(".");
-      return path === "" ? issue.message : `${path}: ${issue.message}`;
-    })
-    .join("; ");
-}
+const SUBMIT_REPORT_INPUT = z.object({
+  headline: prose.meta({
+    description:
+      "One sentence, under about 120 characters, naming what broke and why. This is the line someone reads at three in the morning before deciding whether to get up, and often the only line they read. State the cause, not the symptom: 'the retry loop added in PR #482 exhausted the payments-api connection pool', never 'payments-api returned errors'.",
+  }),
+  affected: prose.meta({
+    description:
+      "A short noun phrase naming who or what was hit, for the band at the top of the report: 'the checkout path', 'all payments-api pods in prod'. Not a sentence, and not a duplicate of the impact field below, which says for how long and how badly.",
+  }),
+  summary: prose.meta({
+    description:
+      "Two or three sentences expanding the headline: what broke, why, and where it stands now. Name the service, the value and the change.",
+  }),
+  timeline: z
+    .array(
+      z.object({
+        at: prose.meta({
+          description:
+            "When it happened, as an ISO 8601 timestamp taken from a tool result, an alert, or a commit. Never a guess.",
+        }),
+        what: prose.meta({
+          description: "One sentence, in the past tense.",
+        }),
+        lane: z.enum(["change", "signal", "agent"]).optional().meta({
+          description:
+            "Which strand this moment belongs to. 'change' is something a human or a deploy did to the system: a merge, a rollout, a config edit. 'signal' is the system reacting: an alert firing, a metric crossing a threshold, a pod restarting. 'agent' is something you did while investigating. Writes you released are added for you and are not any of these.",
+        }),
+        evidenceId: optionalText.meta({
+          description:
+            "The evidence id of the tool call that shows this happened, written e1, e2, e3 as it appears on that result. Omit it when no single call does.",
+        }),
+      }),
+    )
+    .meta({
+      description:
+        "What happened, earliest first. Include only moments that matter: the change that set it up, the failure, and anything you did about it. Every write you released is added for you, so do not list those.",
+    }),
+  impact: prose.meta({
+    description:
+      "Who or what was affected and for how long, in a sentence. If you cannot tell from what you read, say so plainly rather than estimating.",
+  }),
+  recommendation: prose.meta({
+    description:
+      "What the user should do, in the present or future tense, never as a claim that something has already been done: what you ran is recorded separately and shown to them. If a write you released already fixed it, say what would stop it recurring.",
+  }),
+});
 
 // A refusal is the record holding its ground, not a fault: the tool worked and
 // what was asked for is not available.
@@ -85,48 +111,32 @@ function toResult(recording: RecordOutcome): ToolExecuteResult {
 }
 
 export const REPORT_TOOLS: Tool[] = [
-  {
-    schema: RECORD_HYPOTHESIS_SCHEMA,
+  apiTool({
+    name: "RecordHypothesis",
+    description:
+      "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis and name the one it replaces in 'supersedes', rather than trying to correct that one. RecordHypothesis records a claim by citing the tool calls whose results show that claim. RecordHypothesis reads nothing about your system, so a call to RecordHypothesis carries no evidence id, and no claim can cite a call to RecordHypothesis.",
+    input: RECORD_HYPOTHESIS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
-    on: "api",
-    execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const parsed = RECORD_HYPOTHESIS_INPUT.safeParse(input);
-      if (!parsed.success) {
-        // Citations get their own sentence: it is the rule most often broken and
-        // the only one where the fix is "go and cite a call you made".
-        const citations = parsed.error.issues.some((i) =>
-          i.path.includes("evidenceIds"),
-        )
-          ? " A verdict needs at least one citation: pass the ids of the tool calls whose results settled it."
-          : "";
-        return malformed(
-          `That hypothesis could not be recorded - ${fieldErrors(parsed.error)}.${citations}`,
-        );
-      }
-      return toResult(await recordHypothesis(ctx.sessionId, parsed.data));
-    },
-  },
+    execute: async (input, ctx): Promise<ToolExecuteResult> =>
+      toResult(await recordHypothesis(ctx.sessionId, input)),
+  }),
 ];
 
 /* Never in the toolset: offering it alongside the investigation tools would let
    a run write itself up in the middle of working. */
-export const SUBMIT_REPORT_TOOL: Tool = {
-  schema: SUBMIT_INVESTIGATION_REPORT_SCHEMA,
+export const SUBMIT_REPORT_TOOL: Tool = apiTool({
+  name: "SubmitInvestigationReport",
+  description:
+    "Write up the investigation you have just finished, for the user who will read it in the morning. Your findings are already on the record and are rendered beneath what you write here, so do not restate them: no verdicts, no hypotheses, no re-copied citations. Write the things the record has no room for.",
+  input: SUBMIT_REPORT_INPUT,
   effect: "read",
   policy: "auto",
   evidenceKind: "text",
-  on: "api",
   execute: async (input, ctx): Promise<ToolExecuteResult> => {
-    const parsed = SUBMIT_REPORT_INPUT.safeParse(input);
-    if (!parsed.success) {
-      return malformed(
-        `That report could not be recorded - ${fieldErrors(parsed.error)}. Every field named above is required and none may be blank; the timeline array may be empty.`,
-      );
-    }
     const { headline, affected, summary, timeline, impact, recommendation } =
-      parsed.data;
+      input;
     return toResult(
       await submitReport(ctx.sessionId, {
         headline,
@@ -145,4 +155,4 @@ export const SUBMIT_REPORT_TOOL: Tool = {
       }),
     );
   },
-};
+});

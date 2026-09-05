@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { getSentryIntegration } from "../../integrations/store.js";
 import {
   SentryApiError,
@@ -10,6 +11,7 @@ import {
 } from "../../integrations/sentry.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
+import { apiTool, optionalText } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 const DEFAULT_LOOKBACK_MINUTES = 60;
@@ -55,45 +57,14 @@ function list(row: Row, key: string): Row[] {
     : [];
 }
 
-function strings(input: Record<string, unknown>, key: string): string[] {
-  const value = input[key];
-  return Array.isArray(value)
-    ? value.filter((v): v is string => typeof v === "string" && v !== "")
-    : [];
-}
-
-function clampedNumber(
-  input: Record<string, unknown>,
-  key: string,
-  fallback: number,
-  max: number,
-): number {
-  const raw = input[key];
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-    return fallback;
-  }
-  return Math.min(Math.round(raw), max);
-}
-
 // Evidence windows never extend into the future; errors after the alert are
 // still evidence (did it stop?) up to now.
 async function anchoredWindow(
   sessionId: string,
-  input: Record<string, unknown>,
+  back: number,
+  forward: number,
 ): Promise<{ anchor: Date; start: Date; end: Date }> {
   const anchor = await alertAnchorFor(sessionId);
-  const back = clampedNumber(
-    input,
-    "lookbackMinutes",
-    DEFAULT_LOOKBACK_MINUTES,
-    MAX_LOOKBACK_MINUTES,
-  );
-  const forward = clampedNumber(
-    input,
-    "lookforwardMinutes",
-    DEFAULT_LOOKFORWARD_MINUTES,
-    MAX_LOOKBACK_MINUTES,
-  );
   return {
     anchor,
     start: new Date(anchor.getTime() - back * 60_000),
@@ -330,89 +301,143 @@ function toRelease(row: Row, anchor: Date): SentryReleaseRow {
   };
 }
 
+const environments = z.array(z.string()).optional();
+const cursor = optionalText;
+const issueId = z.string().meta({
+  description:
+    "The Sentry issue id, copied from the id field of a SearchSentryIssues result.",
+});
+
+const window = {
+  lookbackMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOOKBACK_MINUTES)
+    .meta({
+      description: `How many minutes before the alert to search. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, which is one week, defaulting to ${DEFAULT_LOOKBACK_MINUTES}.`,
+    }),
+  lookforwardMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOOKFORWARD_MINUTES)
+    .meta({
+      description: `How many minutes after the alert to search, never extending past now. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, defaulting to ${DEFAULT_LOOKFORWARD_MINUTES}.`,
+    }),
+};
+
+const SEARCH_ISSUES_INPUT = z.object({
+  query: z.string().default("").meta({
+    description:
+      "Sentry issue search syntax. Defaults to an empty string, which returns issues of every status. Sentry's own default of is:unresolved is never applied for you, so ask for it explicitly if you want it.",
+  }),
+  projects: z.array(z.string()).optional().meta({
+    description:
+      "Sentry project slugs to search. Omit to search every project the token can reach.",
+  }),
+  environments: environments.meta({
+    description:
+      "Sentry environment names to search, for example production. Omit to search every environment.",
+  }),
+  sort: z.enum(["freq", "date", "new", "user", "trends"]).default("freq").meta({
+    description:
+      "How to order results: freq by event count (which is what spiked), date by last seen, new by first seen, user by people affected. Defaults to freq.",
+  }),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_ISSUE_LIMIT)
+    .default(DEFAULT_ISSUE_LIMIT)
+    .meta({
+      description: `How many issues to return at most. A whole number from 1 to ${MAX_ISSUE_LIMIT}, defaulting to ${DEFAULT_ISSUE_LIMIT}.`,
+    }),
+  ...window,
+  cursor: cursor.meta({
+    description:
+      "Fetch the next page, using the nextCursor value from a previous result of this tool. Omit for the first page.",
+  }),
+});
+
+const LATEST_EVENT_INPUT = z.object({
+  issueId,
+  environments: environments.meta({
+    description:
+      "Restrict to these Sentry environment names. Omit to take the latest event from any environment.",
+  }),
+});
+
+const TAG_VALUES_INPUT = z.object({
+  issueId,
+  key: z.string().meta({
+    description:
+      "The tag to break the issue down by, for example server_name or release.",
+  }),
+  environments: environments.meta({
+    description:
+      "Restrict to these Sentry environment names. Omit to cover every environment.",
+  }),
+});
+
+const RELEASES_INPUT = z.object({
+  projects: z.array(z.string()).optional().meta({
+    description:
+      "Sentry project slugs to list releases for. Omit to cover every project the token can reach.",
+  }),
+  query: optionalText.meta({
+    description:
+      "Match releases whose version contains this text. Omit to list every release.",
+  }),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_RELEASE_COUNT)
+    .default(DEFAULT_RELEASE_COUNT)
+    .meta({
+      description: `How many releases to return at most, newest first. A whole number from 1 to ${MAX_RELEASE_COUNT}, defaulting to ${DEFAULT_RELEASE_COUNT}.`,
+    }),
+  cursor: cursor.meta({
+    description:
+      "Fetch the next page of older releases, using the nextCursor value from a previous result of this tool.",
+  }),
+});
+
+const RELEASE_COMMITS_INPUT = z.object({
+  version: z.string().meta({
+    description:
+      "The release version, copied verbatim from the version field of a GetSentryReleases result.",
+  }),
+  cursor: cursor.meta({
+    description:
+      "Fetch the next page, using the nextCursor value from a previous result of this tool.",
+  }),
+});
+
 export const SENTRY_TOOLS: Tool[] = [
-  {
-    schema: {
-      name: "SearchSentryIssues",
-      description:
-        "List the errors Sentry recorded around the alert, newest activity first by default. Each result carries its title, where it happened, its level, how many events and users it affected, and which Sentry project it belongs to. Use it to find out whether anything was throwing while the alert fired, then call GetSentryLatestEvent on an issue id to read one in full. Search with Sentry's own issue syntax in the query argument, for example `is:unresolved level:error` or `release:api@1.4.2`; pass an empty string to search every issue whatever its status.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: {
-            type: "string",
-            description:
-              "Sentry issue search syntax. Defaults to an empty string, which returns issues of every status. Sentry's own default of is:unresolved is never applied for you, so ask for it explicitly if you want it.",
-          },
-          projects: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Sentry project slugs to search. Omit to search every project the token can reach.",
-          },
-          environments: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Sentry environment names to search, for example production. Omit to search every environment.",
-          },
-          sort: {
-            type: "string",
-            enum: ["freq", "date", "new", "user", "trends"],
-            description:
-              "How to order results: freq by event count (which is what spiked), date by last seen, new by first seen, user by people affected. Defaults to freq.",
-          },
-          limit: {
-            type: "number",
-            description:
-              "How many issues to return at most. Defaults to 25, and the maximum is 100.",
-          },
-          lookbackMinutes: {
-            type: "number",
-            description:
-              "How many minutes before the alert to search. Defaults to 60, and the maximum is 10080, which is one week.",
-          },
-          lookforwardMinutes: {
-            type: "number",
-            description:
-              "How many minutes after the alert to search. Defaults to 5, and never extends past now.",
-          },
-          cursor: {
-            type: "string",
-            description:
-              "Fetch the next page, using the nextCursor value from a previous result of this tool. Omit for the first page.",
-          },
-        },
-        required: [],
-      },
-    },
+  apiTool({
+    name: "SearchSentryIssues",
+    description:
+      "List the errors Sentry recorded around the alert, newest activity first by default. Each result carries its title, where it happened, its level, how many events and users it affected, and which Sentry project it belongs to. Use it to find out whether anything was throwing while the alert fired, then call GetSentryLatestEvent on an issue id to read one in full. Search with Sentry's own issue syntax in the query argument, for example `is:unresolved level:error` or `release:api@1.4.2`; pass an empty string to search every issue whatever its status.",
+    input: SEARCH_ISSUES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
-      const projects = strings(input, "projects");
-      const environments = strings(input, "environments");
-      const rawQuery = input["query"];
-      const query = typeof rawQuery === "string" ? rawQuery : "";
-      const rawSort = input["sort"];
-      const sort =
-        typeof rawSort === "string" &&
-        ["freq", "date", "new", "user", "trends"].includes(rawSort)
-          ? rawSort
-          : "freq";
-      const limit = clampedNumber(
-        input,
-        "limit",
-        DEFAULT_ISSUE_LIMIT,
-        MAX_ISSUE_LIMIT,
+      const { query, sort, limit, cursor } = input;
+      const projects = input.projects ?? [];
+      const environments = input.environments ?? [];
+      const { start, end } = await anchoredWindow(
+        ctx.sessionId,
+        input.lookbackMinutes,
+        input.lookforwardMinutes,
       );
-      const cursor = input["cursor"];
-      const { start, end } = await anchoredWindow(ctx.sessionId, input);
 
       try {
         const page = await searchIssues(conn, {
@@ -423,7 +448,7 @@ export const SENTRY_TOOLS: Tool[] = [
           limit,
           start,
           end,
-          cursor: typeof cursor === "string" && cursor !== "" ? cursor : null,
+          cursor: cursor ?? null,
         });
         const { kept, dropped } = fitWithinBudget(page.rows.map(toIssue));
         const notes: string[] = [
@@ -471,48 +496,21 @@ export const SENTRY_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "GetSentryLatestEvent",
-      description:
-        "Read the most recent occurrence of one Sentry issue in full: its exception and stack trace, the tags it carried, and the release the code was running when it happened. Take the issue id from SearchSentryIssues. Library and runtime stack frames are dropped where Sentry marked which frames are the application's own, and the result says how many were dropped.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          issueId: {
-            type: "string",
-            description:
-              "The Sentry issue id, copied from the id field of a SearchSentryIssues result.",
-          },
-          environments: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Restrict to these Sentry environment names. Omit to take the latest event from any environment.",
-          },
-        },
-        required: ["issueId"],
-      },
-    },
+  }),
+  apiTool({
+    name: "GetSentryLatestEvent",
+    description:
+      "Read the most recent occurrence of one Sentry issue in full: its exception and stack trace, the tags it carried, and the release the code was running when it happened. Take the issue id from SearchSentryIssues. Library and runtime stack frames are dropped where Sentry marked which frames are the application's own, and the result says how many were dropped.",
+    input: LATEST_EVENT_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
-      const issueId = input["issueId"];
-      if (typeof issueId !== "string" || issueId.trim() === "") {
-        return {
-          content:
-            "issueId must be a Sentry issue id, copied from a SearchSentryIssues result.",
-          toolOutcome: "system",
-        };
-      }
-      const environments = strings(input, "environments");
+      const { issueId } = input;
+      const environments = input.environments ?? [];
 
       try {
         const event = await latestEvent(conn, issueId, environments);
@@ -571,60 +569,21 @@ export const SENTRY_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "GetSentryIssueTagValues",
-      description:
-        "Break one Sentry issue down by a tag, so you can tell whether it hit one host or all of them. Useful keys are server_name, release, environment, url and browser. Each value comes back with how many events carried it and when it was first and last seen. Sentry offers no time filter here, so this distribution covers the whole life of the issue rather than the window around the alert, and the result says so.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          issueId: {
-            type: "string",
-            description:
-              "The Sentry issue id, copied from the id field of a SearchSentryIssues result.",
-          },
-          key: {
-            type: "string",
-            description:
-              "The tag to break the issue down by, for example server_name or release.",
-          },
-          environments: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Restrict to these Sentry environment names. Omit to cover every environment.",
-          },
-        },
-        required: ["issueId", "key"],
-      },
-    },
+  }),
+  apiTool({
+    name: "GetSentryIssueTagValues",
+    description:
+      "Break one Sentry issue down by a tag, so you can tell whether it hit one host or all of them. Useful keys are server_name, release, environment, url and browser. Each value comes back with how many events carried it and when it was first and last seen. Sentry offers no time filter here, so this distribution covers the whole life of the issue rather than the window around the alert, and the result says so.",
+    input: TAG_VALUES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
-      const issueId = input["issueId"];
-      const key = input["key"];
-      if (typeof issueId !== "string" || issueId.trim() === "") {
-        return {
-          content:
-            "issueId must be a Sentry issue id, copied from a SearchSentryIssues result.",
-          toolOutcome: "system",
-        };
-      }
-      if (typeof key !== "string" || key.trim() === "") {
-        return {
-          content: "key must be a Sentry tag name, for example server_name.",
-          toolOutcome: "system",
-        };
-      }
-      const environments = strings(input, "environments");
+      const { issueId, key } = input;
+      const environments = input.environments ?? [];
 
       try {
         const raw = await issueTagValues(conn, issueId, key, environments);
@@ -669,67 +628,30 @@ export const SENTRY_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "GetSentryReleases",
-      description:
-        "List the releases Sentry knows about, newest first, each with when its last deploy finished and how long before or after the alert that was. Use it to find out whether something shipped just before the alert fired. Nothing is filtered by time, because a release that caused a slow failure can predate the alert by days; read relativeToAlert on each one and decide for yourself. newGroups is how many new issues Sentry first saw in that release.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          projects: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Sentry project slugs to list releases for. Omit to cover every project the token can reach.",
-          },
-          query: {
-            type: "string",
-            description:
-              "Match releases whose version contains this text. Omit to list every release.",
-          },
-          limit: {
-            type: "number",
-            description:
-              "How many releases to return at most, newest first. Defaults to 20, and the maximum is 100.",
-          },
-          cursor: {
-            type: "string",
-            description:
-              "Fetch the next page of older releases, using the nextCursor value from a previous result of this tool.",
-          },
-        },
-        required: [],
-      },
-    },
+  }),
+  apiTool({
+    name: "GetSentryReleases",
+    description:
+      "List the releases Sentry knows about, newest first, each with when its last deploy finished and how long before or after the alert that was. Use it to find out whether something shipped just before the alert fired. Nothing is filtered by time, because a release that caused a slow failure can predate the alert by days; read relativeToAlert on each one and decide for yourself. newGroups is how many new issues Sentry first saw in that release.",
+    input: RELEASES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "change",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
-      const projects = strings(input, "projects");
-      const rawQuery = input["query"];
-      const limit = clampedNumber(
-        input,
-        "limit",
-        DEFAULT_RELEASE_COUNT,
-        MAX_RELEASE_COUNT,
-      );
-      const cursor = input["cursor"];
+      const { limit, cursor } = input;
+      const projects = input.projects ?? [];
       const anchor = await alertAnchorFor(ctx.sessionId);
 
       try {
         const page = await listReleases(
           conn,
           projects,
-          typeof rawQuery === "string" && rawQuery !== "" ? rawQuery : null,
+          input.query ?? null,
           limit,
-          typeof cursor === "string" && cursor !== "" ? cursor : null,
+          cursor ?? null,
         );
         const { kept, dropped } = fitWithinBudget(
           page.rows.map((row) => toRelease(row, anchor)),
@@ -774,54 +696,23 @@ export const SENTRY_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "GetSentryReleaseCommits",
-      description:
-        "List the commits that went out in one release, with their authors, messages, repositories and pull requests. Take the version from GetSentryReleases. suspectCommitType, where Sentry set it, marks a commit Sentry associates with an error. This only answers when the Sentry project has a repository integration configured; without one a release carries no commits and the result says which case it is.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          version: {
-            type: "string",
-            description:
-              "The release version, copied verbatim from the version field of a GetSentryReleases result.",
-          },
-          cursor: {
-            type: "string",
-            description:
-              "Fetch the next page, using the nextCursor value from a previous result of this tool.",
-          },
-        },
-        required: ["version"],
-      },
-    },
+  }),
+  apiTool({
+    name: "GetSentryReleaseCommits",
+    description:
+      "List the commits that went out in one release, with their authors, messages, repositories and pull requests. Take the version from GetSentryReleases. suspectCommitType, where Sentry set it, marks a commit Sentry associates with an error. This only answers when the Sentry project has a repository integration configured; without one a release carries no commits and the result says which case it is.",
+    input: RELEASE_COMMITS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "change",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
-      const version = input["version"];
-      if (typeof version !== "string" || version.trim() === "") {
-        return {
-          content:
-            "version must be a release version, copied from a GetSentryReleases result.",
-          toolOutcome: "system",
-        };
-      }
-      const cursor = input["cursor"];
+      const { version, cursor } = input;
 
       try {
-        const page = await releaseCommits(
-          conn,
-          version,
-          typeof cursor === "string" && cursor !== "" ? cursor : null,
-        );
+        const page = await releaseCommits(conn, version, cursor ?? null);
         const { kept, dropped } = fitWithinBudget(
           page.rows.map((row) => ({
             id: str(row, "id"),
@@ -864,5 +755,5 @@ export const SENTRY_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 ];

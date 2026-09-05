@@ -1,5 +1,5 @@
 import { executeTool, resolvePolicy } from "./tools/toolset.js";
-import { questionOptionOverflow } from "./tools/elicitations.js";
+import { parseInput } from "./tools/schema.js";
 import { isToolFailure } from "./tools/types.js";
 import type { OfferedToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
@@ -133,14 +133,17 @@ export async function processToolUses(params: {
     if (!entry) {
       // Nothing to execute either way: an elicitation's answer comes from a
       // person, so it suspends rather than running.
-      if (offered.elicitations.some((e) => e.schema.name === tool.name)) {
-        // The schema declares the cap; providers honour maxItems unevenly.
-        // Nothing suspends, because nothing valid arrived.
-        const overflow = questionOptionOverflow(tool.input);
-        if (overflow !== null) {
+      const elicitation = offered.elicitations.find(
+        (e) => e.schema.name === tool.name,
+      );
+      if (elicitation) {
+        // Parsed here because an elicitation has no execute to parse in, and
+        // nothing suspends until a valid question has arrived.
+        const parsed = parseInput(elicitation.input, tool.input);
+        if (!parsed.ok) {
           toolResults.push({
             tool_use_id: tool.id,
-            content: overflow,
+            content: parsed.failure.content,
             is_error: true,
             toolOutcome: "system",
           });

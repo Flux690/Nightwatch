@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import type { EvidenceKind, Platform, ToolOutcome } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
 
@@ -51,6 +52,9 @@ export type ToolPolicy = "auto" | "approve";
 
 interface ToolCommon {
   schema: ToolSchema;
+  // The same object the schema was generated from. executeTool parses with it
+  // before dispatch, so no handler validates its own arguments.
+  input: z.ZodObject;
   effect: "read" | "write";
   policy: ToolPolicy;
   // Declared here for the reason `policy` is: a separate list is one that gets
@@ -70,10 +74,12 @@ export type Tool = ToolCommon &
   (
     | {
         on: "api";
-        execute(
-          input: Record<string, unknown>,
+        /* A property, not a method: shorthand is bivariant and would accept a
+           handler typed to another tool's schema. `apiTool` is the only way in. */
+        execute: (
+          input: unknown,
           ctx: ToolExecuteContext,
-        ): Promise<ToolExecuteResult>;
+        ) => Promise<ToolExecuteResult>;
       }
     | { on: "runner"; routeBy: "service" }
     | { on: "runner"; routeBy: "server"; platform: Platform }

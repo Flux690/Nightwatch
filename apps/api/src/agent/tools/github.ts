@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ToolOutcome } from "@nightwarden/shared";
 import { getGitHubIntegration } from "../../integrations/store.js";
 import { alertAnchorFor } from "./alert-anchor.js";
@@ -9,6 +10,7 @@ import {
   listPullRequestFiles,
   GitHubApiError,
 } from "../../integrations/github.js";
+import { apiTool } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire, so they live
@@ -42,19 +44,22 @@ export interface GetRecentChangesResult {
   note?: string;
 }
 
-const DEFAULT_WINDOW_HOURS = 24;
 const MAX_WINDOW_HOURS = 168;
 // Each file list is one extra GitHub call, so a bulk-merge window cannot fan
 // out unbounded; PRs beyond the cap are still listed, just without files.
 const FILES_FETCH_CAP = 15;
 
-function windowHoursFrom(input: Record<string, unknown>): number {
-  const raw = input["windowHours"];
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-    return DEFAULT_WINDOW_HOURS;
-  }
-  return Math.min(raw, MAX_WINDOW_HOURS);
-}
+const RECENT_CHANGES_INPUT = z.object({
+  windowHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_WINDOW_HOURS)
+    .default(24)
+    .meta({
+      description: `How many hours before the alert to look back. A whole number from 1 to ${MAX_WINDOW_HOURS}, which is one week, defaulting to 24.`,
+    }),
+});
 
 function isPermissionStatus(err: unknown): boolean {
   return (
@@ -160,29 +165,15 @@ async function pullRequestsWithFiles(
 }
 
 export const GITHUB_TOOLS: Tool[] = [
-  {
-    schema: {
-      name: "GetRecentChanges",
-      description:
-        "List the pull requests merged and the commits landed on the connected repository's default branch in the window ending when the alert fired, or ending now if no alert started this session. Call this early, because not knowing what changed is the most common reason an investigation reaches the wrong conclusion. Note carefully that this tells you what was merged, not what was deployed. Before you name a change as the cause, confirm it actually reached the running system by checking the running image tag or when the service last restarted.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          windowHours: {
-            type: "number",
-            description:
-              "How many hours before the alert to look back. Defaults to 24, and the maximum is 168, which is one week.",
-          },
-        },
-        required: [],
-      },
-    },
+  apiTool({
+    name: "GetRecentChanges",
+    description:
+      "List the pull requests merged and the commits landed on the connected repository's default branch in the window ending when the alert fired, or ending now if no alert started this session. Call this early, because not knowing what changed is the most common reason an investigation reaches the wrong conclusion. Note carefully that this tells you what was merged, not what was deployed. Before you name a change as the cause, confirm it actually reached the running system by checking the running image tag or when the service last restarted.",
+    input: RECENT_CHANGES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "change",
     timeoutMs: 60_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getGitHubIntegration();
       if (integration === null) {
@@ -197,7 +188,7 @@ export const GITHUB_TOOLS: Tool[] = [
       // The window ends at the alert: a change merged after it fired cannot have caused it.
       const windowEnd = await alertAnchorFor(ctx.sessionId);
       const windowStart = new Date(
-        windowEnd.getTime() - windowHoursFrom(input) * 3_600_000,
+        windowEnd.getTime() - input.windowHours * 3_600_000,
       );
       const since = windowStart.toISOString();
       const until = windowEnd.toISOString();
@@ -262,5 +253,5 @@ export const GITHUB_TOOLS: Tool[] = [
         };
       }
     },
-  },
+  }),
 ];

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { executeTool } from "../agent/tools/toolset.js";
 import {
@@ -23,6 +24,7 @@ function toolReturning(content: unknown): Tool {
       description: "",
       input_schema: { type: "object", properties: {} },
     },
+    input: z.object({}),
     effect: "read",
     policy: "auto",
     evidenceKind: "text",

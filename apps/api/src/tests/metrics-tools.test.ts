@@ -250,7 +250,22 @@ describe("metrics tools through the tool dispatch", () => {
     expect(end - start).toBeLessThan(180 * 60_000 + 5_000);
   });
 
-  it("caps lookback at 7 days and the result at 20 series with an omitted count", async () => {
+  /* Refused rather than quietly shortened: a window cut to a fraction of what
+     was asked for reads back as a fortnight that held nothing. */
+  it("refuses a lookback beyond 7 days and names the field", async () => {
+    await connect();
+    const result = await executeTool(
+      range,
+      { query: "up", lookbackMinutes: 999_999 },
+      await toolContext(ALERT),
+    );
+
+    expect(String(result.content)).toMatch(/lookbackMinutes/);
+    expect(result.toolOutcome).toBe("system");
+    expect(mock.requests).toHaveLength(0);
+  });
+
+  it("caps the result at 20 series with an omitted count", async () => {
     await connect();
     mock.result = Array.from({ length: 25 }, (_, i) => ({
       metric: { name: `svc-${i}` },
@@ -258,7 +273,7 @@ describe("metrics tools through the tool dispatch", () => {
     }));
     const result = await executeTool(
       range,
-      { query: "up", lookbackMinutes: 999_999 },
+      { query: "up", lookbackMinutes: 10_080 },
       await toolContext(ALERT),
     );
 

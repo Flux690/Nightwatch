@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   MetricsApiError,
   alertingRules,
@@ -15,6 +16,7 @@ import {
 } from "../../integrations/metrics/sources.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { fitWithinBudget } from "./result-budget.js";
+import { apiTool } from "./schema.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
@@ -51,19 +53,6 @@ const TARGET_POINTS_PER_SERIES = 200;
 // name list runs to thousands and would drown the turn that asked for it.
 const MAX_METRIC_NAMES = 100;
 const MAX_ALERT_RULES = 50;
-
-function clampedNumber(
-  input: Record<string, unknown>,
-  key: string,
-  fallback: number,
-  max: number,
-): number {
-  const raw = input[key];
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-    return fallback;
-  }
-  return Math.min(raw, max);
-}
 
 // Capped by count, then by size: a range query returns twenty series of two
 // hundred points each, which is several times what one result may occupy.
@@ -121,50 +110,86 @@ function corrective(err: unknown): ToolExecuteResult {
   };
 }
 
+const promql = z.string().trim().min(1, "must be a PromQL string");
+
+const QUERY_METRICS_INPUT = z.object({
+  query: promql.meta({ description: "The PromQL expression to evaluate." }),
+  at: z.enum(["now", "alert"]).optional().meta({
+    description:
+      "Which moment to evaluate at. 'now', the default, reads the current value. 'alert' reads the value as of the instant the alert that opened this investigation fired; on a session no alert opened, it means the same as 'now'.",
+  }),
+});
+
+const QUERY_METRICS_RANGE_INPUT = z.object({
+  query: promql.meta({ description: "The PromQL expression to evaluate." }),
+  lookbackMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOOKBACK_MINUTES)
+    .meta({
+      description: `How many minutes before the alert to include. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, which is one week, defaulting to ${DEFAULT_LOOKBACK_MINUTES}.`,
+    }),
+  lookforwardMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LOOKBACK_MINUTES)
+    .default(DEFAULT_LOOKFORWARD_MINUTES)
+    .meta({
+      description: `How many minutes after the alert to include, which is how you tell whether it recovered, never extending past now. A whole number from 1 to ${MAX_LOOKBACK_MINUTES}, defaulting to ${DEFAULT_LOOKFORWARD_MINUTES}.`,
+    }),
+  stepSeconds: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .meta({
+      description: `How far apart the sampled points are, as a whole number of seconds, 1 or more. Omit this and a step is chosen that fits roughly ${TARGET_POINTS_PER_SERIES} points across the window.`,
+    }),
+});
+
+const LIST_METRIC_NAMES_INPUT = z.object({
+  contains: z.string().optional().meta({
+    description:
+      "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
+  }),
+});
+
+const GET_METRIC_METADATA_INPUT = z.object({
+  metric: z.string().trim().min(1, "must be a metric name").meta({
+    description:
+      "The exact metric name, as it appears in ListMetricNames or in a series you have already queried.",
+  }),
+});
+
+const LIST_ALERT_RULES_INPUT = z.object({
+  contains: z.string().optional().meta({
+    description:
+      "Case-insensitive substring the rule name must contain. Omit to list every rule.",
+  }),
+});
+
 export const METRICS_TOOLS: Tool[] = [
-  {
-    schema: {
-      name: "QueryMetrics",
-      description:
-        "Evaluate a PromQL expression against the connected metrics source at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: {
-            type: "string",
-            description: "The PromQL expression to evaluate.",
-          },
-          at: {
-            type: "string",
-            enum: ["now", "alert"],
-            description:
-              "Which moment to evaluate at. 'now', the default, reads the current value. 'alert' reads the value as of the instant the alert that opened this investigation fired; on a session no alert opened, it means the same as 'now'.",
-          },
-        },
-        required: ["query"],
-      },
-    },
+  apiTool({
+    name: "QueryMetrics",
+    description:
+      "Evaluate a PromQL expression against the connected metrics source at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
+    input: QUERY_METRICS_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "metric",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
-      const query = input["query"];
-      if (typeof query !== "string" || query.trim() === "") {
-        return {
-          content: "query must be a PromQL string",
-          toolOutcome: "system",
-        };
-      }
+      const { query } = input;
       try {
         const data = await instantQuery(
           source.query,
           query,
-          input["at"] === "alert"
+          input.at === "alert"
             ? (await alertAnchorFor(ctx.sessionId)).toISOString()
             : undefined,
         );
@@ -180,70 +205,24 @@ export const METRICS_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
-  {
-    schema: {
-      name: "QueryMetricsRange",
-      description:
-        "Evaluate a PromQL expression against the connected metrics source across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: {
-            type: "string",
-            description: "The PromQL expression to evaluate.",
-          },
-          lookbackMinutes: {
-            type: "number",
-            description:
-              "How many minutes before the alert to include. Defaults to 180, and the maximum is 10080, which is one week.",
-          },
-          lookforwardMinutes: {
-            type: "number",
-            description:
-              "How many minutes after the alert to include, which is how you tell whether it recovered. Defaults to 30, and never extends past now.",
-          },
-          stepSeconds: {
-            type: "number",
-            description:
-              "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
-          },
-        },
-        required: ["query"],
-      },
-    },
+  }),
+  apiTool({
+    name: "QueryMetricsRange",
+    description:
+      "Evaluate a PromQL expression against the connected metrics source across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
+    input: QUERY_METRICS_RANGE_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "metric",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
-      const query = input["query"];
-      if (typeof query !== "string" || query.trim() === "") {
-        return {
-          content: "query must be a PromQL string",
-          toolOutcome: "system",
-        };
-      }
+      const { query, stepSeconds } = input;
 
       const anchor = await alertAnchorFor(ctx.sessionId);
-      const lookbackMs =
-        clampedNumber(
-          input,
-          "lookbackMinutes",
-          DEFAULT_LOOKBACK_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ) * 60_000;
-      const lookforwardMs =
-        clampedNumber(
-          input,
-          "lookforwardMinutes",
-          DEFAULT_LOOKFORWARD_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ) * 60_000;
+      const lookbackMs = input.lookbackMinutes * 60_000;
+      const lookforwardMs = input.lookforwardMinutes * 60_000;
       // Metrics after the alert are evidence too (did it recover?), but the
       // window never extends into the future.
       const end = new Date(
@@ -254,11 +233,12 @@ export const METRICS_TOOLS: Tool[] = [
         1,
         Math.round((end.getTime() - start.getTime()) / 1000),
       );
+      // Capped at the window: a step wider than it returns one point, which
+      // reads as a flat series rather than as a step chosen too coarsely.
       const step = Math.round(
-        clampedNumber(
-          input,
-          "stepSeconds",
-          Math.max(15, Math.ceil(windowSeconds / TARGET_POINTS_PER_SERIES)),
+        Math.min(
+          stepSeconds ??
+            Math.max(15, Math.ceil(windowSeconds / TARGET_POINTS_PER_SERIES)),
           windowSeconds,
         ),
       );
@@ -288,42 +268,23 @@ export const METRICS_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 
-  {
-    schema: {
-      name: "ListMetricNames",
-      description:
-        "List the metric names this source is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          contains: {
-            type: "string",
-            description:
-              "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
-          },
-        },
-        required: [],
-      },
-    },
+  apiTool({
+    name: "ListMetricNames",
+    description:
+      "List the metric names this source is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
+    input: LIST_METRIC_NAMES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
-      const contains = input["contains"];
+      const contains = input.contains?.trim();
       try {
-        const names = await metricNames(
-          source.query,
-          typeof contains === "string" && contains.trim() !== ""
-            ? contains.trim()
-            : null,
-        );
+        const names = await metricNames(source.query, contains || null);
         if (names.length === 0) {
           return {
             content:
@@ -342,42 +303,21 @@ export const METRICS_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 
-  {
-    schema: {
-      name: "GetMetricMetadata",
-      description:
-        "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Not every source stores this, and the result says so when it does not.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          metric: {
-            type: "string",
-            description:
-              "The exact metric name, as it appears in ListMetricNames or in a series you have already queried.",
-          },
-        },
-        required: ["metric"],
-      },
-    },
+  apiTool({
+    name: "GetMetricMetadata",
+    description:
+      "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Not every source stores this, and the result says so when it does not.",
+    input: GET_METRIC_METADATA_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
-      const metric = input["metric"];
-      if (typeof metric !== "string" || metric.trim() === "") {
-        return {
-          content:
-            "metric must be a metric name, for example container_memory_usage_bytes. It was missing or empty.",
-          toolOutcome: "system",
-        };
-      }
+      const { metric } = input;
       /* VictoriaMetrics answers this endpoint empty for every metric, so reporting
          the emptiness states a fact about the server, not about the metric. */
       if (!source.capabilities.metricMetadata) {
@@ -399,31 +339,17 @@ export const METRICS_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 
-  {
-    schema: {
-      name: "ListAlertRules",
-      description:
-        "List the alerting rules this source evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          contains: {
-            type: "string",
-            description:
-              "Case-insensitive substring the rule name must contain. Omit to list every rule.",
-          },
-        },
-        required: [],
-      },
-    },
+  apiTool({
+    name: "ListAlertRules",
+    description:
+      "List the alerting rules this source evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
+    input: LIST_ALERT_RULES_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 30_000,
-    on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
@@ -435,11 +361,8 @@ export const METRICS_TOOLS: Tool[] = [
           toolOutcome: "permission",
         };
       }
-      const contains = input["contains"];
-      const needle =
-        typeof contains === "string" && contains.trim() !== ""
-          ? contains.trim().toLowerCase()
-          : null;
+      const contains = input.contains?.trim();
+      const needle = contains ? contains.toLowerCase() : null;
       try {
         const rules = await alertingRules(source.rules);
         const matched =
@@ -451,7 +374,7 @@ export const METRICS_TOOLS: Tool[] = [
             content:
               needle === null
                 ? `${source.label} returned no alerting rules. That is not proof it evaluates none: a VictoriaMetrics query endpoint answers this the same way, with an empty list, when the rules actually live in vmalert.`
-                : `No alerting rule name contains "${contains as string}".`,
+                : `No alerting rule name contains "${contains}".`,
             toolOutcome: "expected_miss",
           };
         }
@@ -466,5 +389,5 @@ export const METRICS_TOOLS: Tool[] = [
         return corrective(err);
       }
     },
-  },
+  }),
 ];

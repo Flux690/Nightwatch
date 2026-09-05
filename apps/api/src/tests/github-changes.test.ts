@@ -232,17 +232,34 @@ describe("GetRecentChanges through the tool dispatch", () => {
     expect(end).toBeLessThanOrEqual(after);
   });
 
-  it("caps the windowHours input at 7 days", async () => {
+  /* Refused rather than quietly shortened: a window silently cut to a seventh
+     of what was asked for reads back as a week that held nothing. */
+  it("refuses a windowHours beyond 7 days and names the field", async () => {
     await connectGitHub();
     const mock = makeMock();
     installFetchMock(mock);
 
-    await executeTool(tool, { windowHours: 10_000 }, await toolContext(ALERT));
+    const result = await executeTool(
+      tool,
+      { windowHours: 10_000 },
+      await toolContext(ALERT),
+    );
+
+    expect(result.content).toMatch(/windowHours/);
+    expect(result.toolOutcome).toBe("system");
+    expect(mock.requests).toHaveLength(0);
+  });
+
+  it("looks back 7 days when asked for exactly the maximum", async () => {
+    await connectGitHub();
+    const mock = makeMock();
+    installFetchMock(mock);
+
+    await executeTool(tool, { windowHours: 168 }, await toolContext(ALERT));
 
     const commitsUrl = mock.requests.find((u) => u.includes("/commits?"));
     const since = new URL(commitsUrl!).searchParams.get("since");
-    const expectedStart = Date.parse(FIRED_AT) - 168 * 3_600_000;
-    expect(Date.parse(since!)).toBe(expectedStart);
+    expect(Date.parse(since!)).toBe(Date.parse(FIRED_AT) - 168 * 3_600_000);
   });
 
   it("excludes merge commits and squash-merge commits from the direct-commit list", async () => {

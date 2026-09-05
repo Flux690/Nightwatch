@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { proxyDir, workspacesDir } from "../../paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../integrations/store.js";
@@ -32,7 +33,8 @@ import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
 import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
 import type { ToolOutcome } from "@nightwarden/shared";
-import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
+import { apiTool } from "./schema.js";
+import type { Tool, ToolExecuteContext } from "./types.js";
 
 export const COMMIT_AUTHOR = {
   name: "NightWarden",
@@ -219,26 +221,6 @@ async function runRepoTool<T>(
   }
 }
 
-function requireString(
-  input: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = input[key];
-  return typeof value === "string" ? value : null;
-}
-
-function optionalNumber(
-  input: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = input[key];
-  return typeof value === "number" ? value : undefined;
-}
-
-function badInput(message: string): ToolExecuteResult {
-  return { content: message, toolOutcome: "system" };
-}
-
 // The session reference stays plain text: a link would come from PUBLIC_URL,
 // which is the operator's address and not GitHub's to reach.
 async function composePrBody(
@@ -277,195 +259,145 @@ async function composePrBody(
 
 // Edit, Write and Bash write, and still run unapproved: the write lands in a
 // disposable container on a throwaway branch a human merges or does not.
+const repoPath = z.string().meta({
+  description: "The file's path relative to the repository root.",
+});
+
+const READ_INPUT = z.object({
+  path: z.string().meta({
+    description:
+      "The file's path relative to the repository root, for example src/server.ts.",
+  }),
+  offset: z.number().int().optional().meta({
+    description:
+      "Which line to start reading from, counting from 1, as a whole number. Defaults to the first line.",
+  }),
+  limit: z.number().int().optional().meta({
+    description:
+      "How many lines to return, as a whole number. Both the default and the maximum are 2000.",
+  }),
+});
+
+const EDIT_INPUT = z.object({
+  path: repoPath,
+  old_string: z.string().meta({
+    description:
+      "The exact text to replace, copied from what Read returned, without the line numbers.",
+  }),
+  new_string: z.string().meta({
+    description: "The text to put in its place.",
+  }),
+  replace_all: z.boolean().optional().meta({
+    description:
+      "Set this to true to replace every occurrence rather than requiring exactly one. Defaults to false.",
+  }),
+});
+
+const WRITE_INPUT = z.object({
+  path: repoPath,
+  content: z.string().meta({
+    description:
+      "The file's complete contents. Anything already in the file is replaced.",
+  }),
+});
+
+const BASH_INPUT = z.object({
+  command: z.string().meta({ description: "The shell command line to run." }),
+  cwd: z.string().optional().meta({
+    description:
+      "The directory to run in, relative to the repository root. Defaults to the repository root itself.",
+  }),
+});
+
+const OPEN_PULL_REQUEST_INPUT = z.object({
+  title: z.string().meta({
+    description:
+      "The pull request's title: a short imperative summary of the fix, such as 'Raise the worker memory limit'.",
+  }),
+  body: z.string().optional().meta({
+    description:
+      "What the cause was, why this change addresses it, and what you ran to verify that it works.",
+  }),
+});
+
 export const REPO_TOOLS: Tool[] = [
-  {
-    schema: {
-      name: "Read",
-      description:
-        "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line, and you must read a file with this before you may edit it.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          path: {
-            type: "string",
-            description:
-              "The file's path relative to the repository root, for example src/server.ts.",
-          },
-          offset: {
-            type: "number",
-            description:
-              "Which line to start reading from, counting from 1. Defaults to the first line.",
-          },
-          limit: {
-            type: "number",
-            description:
-              "How many lines to return. Both the default and the maximum are 2000.",
-          },
-        },
-        required: ["path"],
-      },
-    },
+  apiTool({
+    name: "Read",
+    description:
+      "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line, and you must read a file with this before you may edit it.",
+    input: READ_INPUT,
     effect: "read",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 60_000,
-    on: "api",
-    execute: async (input, ctx) => {
-      const path = requireString(input, "path");
-      if (path === null) {
-        return Promise.resolve(badInput("path (string) is required."));
-      }
+    execute: async (input: z.infer<typeof READ_INPUT>, ctx) => {
+      const { path, offset, limit } = input;
       return await runRepoTool(
         ctx,
         async (ws) =>
           await readRepoFile(ws, {
             path,
-            ...(optionalNumber(input, "offset") !== undefined && {
-              offset: optionalNumber(input, "offset"),
-            }),
-            ...(optionalNumber(input, "limit") !== undefined && {
-              limit: optionalNumber(input, "limit"),
-            }),
+            ...(offset !== undefined && { offset }),
+            ...(limit !== undefined && { limit }),
           }),
       );
     },
-  },
-  {
-    schema: {
-      name: "Edit",
-      description:
-        "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read, or created it with Write, earlier in this session. The result is a diff showing what changed.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          path: {
-            type: "string",
-            description: "The file's path relative to the repository root.",
-          },
-          old_string: {
-            type: "string",
-            description:
-              "The exact text to replace, copied from what Read returned, without the line numbers.",
-          },
-          new_string: {
-            type: "string",
-            description: "The text to put in its place.",
-          },
-          replace_all: {
-            type: "boolean",
-            description:
-              "Set this to true to replace every occurrence rather than requiring exactly one. Defaults to false.",
-          },
-        },
-        required: ["path", "old_string", "new_string"],
-      },
-    },
+  }),
+  apiTool({
+    name: "Edit",
+    description:
+      "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read, or created it with Write, earlier in this session. The result is a diff showing what changed.",
+    input: EDIT_INPUT,
     effect: "write",
     policy: "auto",
     evidenceKind: "diff",
     timeoutMs: 60_000,
-    on: "api",
-    execute: async (input, ctx) => {
-      const path = requireString(input, "path");
-      const oldString = requireString(input, "old_string");
-      const newString = requireString(input, "new_string");
-      if (path === null || oldString === null || newString === null) {
-        return Promise.resolve(
-          badInput("path, old_string and new_string (strings) are required."),
-        );
-      }
+    execute: async (input: z.infer<typeof EDIT_INPUT>, ctx) => {
+      const { path, old_string, new_string, replace_all } = input;
       return await runRepoTool(
         ctx,
         async (ws) =>
           await editRepoFile(ws, {
             path,
-            old_string: oldString,
-            new_string: newString,
-            replace_all: input["replace_all"] === true,
+            old_string,
+            new_string,
+            replace_all: replace_all === true,
           }),
       );
     },
-  },
-  {
-    schema: {
-      name: "Write",
-      description:
-        "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session, and creating one leaves it editable without that. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          path: {
-            type: "string",
-            description: "The file's path relative to the repository root.",
-          },
-          content: {
-            type: "string",
-            description:
-              "The file's complete contents. Anything already in the file is replaced.",
-          },
-        },
-        required: ["path", "content"],
-      },
-    },
+  }),
+  apiTool({
+    name: "Write",
+    description:
+      "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session, and creating one leaves it editable without that. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
+    input: WRITE_INPUT,
     effect: "write",
     policy: "auto",
     evidenceKind: "diff",
     timeoutMs: 60_000,
-    on: "api",
-    execute: async (input, ctx) => {
-      const path = requireString(input, "path");
-      const content = requireString(input, "content");
-      if (path === null || content === null) {
-        return Promise.resolve(
-          badInput("path and content (strings) are required."),
-        );
-      }
+    execute: async (input: z.infer<typeof WRITE_INPUT>, ctx) => {
+      const { path, content } = input;
       return await runRepoTool(
         ctx,
         async (ws) => await writeRepoFile(ws, { path, content }),
       );
     },
-  },
-  {
-    schema: {
-      name: "Bash",
-      description:
-        "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerExec or K8sExec when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          command: {
-            type: "string",
-            description: "The shell command line to run.",
-          },
-          cwd: {
-            type: "string",
-            description:
-              "The directory to run in, relative to the repository root. Defaults to the repository root itself.",
-          },
-        },
-        required: ["command"],
-      },
-    },
+  }),
+  apiTool({
+    name: "Bash",
+    description:
+      "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerExec or K8sExec when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
+    input: BASH_INPUT,
     effect: "write",
     policy: "auto",
     evidenceKind: "text",
     timeoutMs: 300_000,
-    on: "api",
-    execute: async (input, ctx) => {
-      const command = requireString(input, "command");
-      if (command === null) {
-        return Promise.resolve(badInput("command (string) is required."));
-      }
-      const cwd = requireString(input, "cwd");
+    execute: async (input: z.infer<typeof BASH_INPUT>, ctx) => {
+      const { command, cwd } = input;
       return await runRepoTool(ctx, async (ws) => {
         const result = await execInRepo(
           ws,
-          { command, ...(cwd !== null && { cwd }) },
+          { command, ...(cwd !== undefined && { cwd }) },
           ctx.toolTimeoutMs,
         );
         // The provision-time install outcome rides the first Bash result -
@@ -476,30 +408,12 @@ export const REPO_TOOLS: Tool[] = [
           : { ...result, output: `${note}\n\n${result.output}` };
       });
     },
-  },
-  {
-    schema: {
-      name: "OpenPullRequest",
-      description:
-        "Propose the repository changes you made in this session as a draft pull request for a human to review. Verify your change with Bash before calling this, and say in the body what you ran. You can call it more than once: this session's branch has at most one open pull request, so a later call updates the existing one with your newest commits rather than opening a second. Details of the incident and a reference to this session are added to the body for you. If you have not committed any changes, it tells you there is nothing to propose, which is an answer about the branch rather than a failure.",
-      input_schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          title: {
-            type: "string",
-            description:
-              "The pull request's title: a short imperative summary of the fix, such as 'Raise the worker memory limit'.",
-          },
-          body: {
-            type: "string",
-            description:
-              "What the cause was, why this change addresses it, and what you ran to verify that it works.",
-          },
-        },
-        required: ["title"],
-      },
-    },
+  }),
+  apiTool({
+    name: "OpenPullRequest",
+    description:
+      "Propose the repository changes you made in this session as a draft pull request for a human to review. Verify your change with Bash before calling this, and say in the body what you ran. You can call it more than once: this session's branch has at most one open pull request, so a later call updates the existing one with your newest commits rather than opening a second. Details of the incident and a reference to this session are added to the body for you. If you have not committed any changes, it tells you there is nothing to propose, which is an answer about the branch rather than a failure.",
+    input: OPEN_PULL_REQUEST_INPUT,
     // Unapproved on purpose: the PR is a proposal, GitHub's human merge is the
     // gate, and gating creation would stall the 3am AFK flow this exists for.
     effect: "write",
@@ -509,11 +423,9 @@ export const REPO_TOOLS: Tool[] = [
     // second call after a crash refreshes the proposal rather than opening one.
     idempotent: true,
     timeoutMs: 600_000,
-    on: "api",
-    execute: async (input, ctx) => {
-      const title = requireString(input, "title");
-      if (title === null) return badInput("title (string) is required.");
-      const modelBody = requireString(input, "body") ?? "";
+    execute: async (input: z.infer<typeof OPEN_PULL_REQUEST_INPUT>, ctx) => {
+      const { title } = input;
+      const modelBody = input.body ?? "";
       const result = await runRepoTool(
         ctx,
         async (ws) =>
@@ -539,7 +451,7 @@ export const REPO_TOOLS: Tool[] = [
         ? { ...result, toolOutcome: "expected_miss" }
         : result;
     },
-  },
+  }),
 ];
 
 export const REPO_TOOL_NAMES: ReadonlySet<string> = new Set(

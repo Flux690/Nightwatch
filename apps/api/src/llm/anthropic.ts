@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
+import { anthropicToolSchema } from "./schema-dialects.js";
 import { resolveDefault } from "./reasoning.js";
 import { messagePartsToText } from "@nightwarden/shared";
 import type {
@@ -219,6 +220,7 @@ export class AnthropicProvider implements LLMProvider {
           // name is one of these. Optional fields stay optional on Anthropic.
           tools: tools.map((t) => ({
             ...t,
+            input_schema: anthropicToolSchema(t.input_schema),
             strict: true,
           })) as Anthropic.Beta.BetaTool[],
           /* Compatible with adaptive thinking, which is what thinkingParams

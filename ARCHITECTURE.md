@@ -245,6 +245,14 @@ The marker means something only because of the strip. Unstripped it is worse tha
 
 Other tags are section labels, not voices, and stay out of this namespace: `<alert>` and `<group>` fence text the sender wrote, `<fleet-summary>` is a landmark the addressing rules name, `<previous-report>` labels a quotation of the model's own earlier words.
 
+### How a tool is declared
+
+**A tool's shape is written once, as a Zod object, and the schema the model reads is generated from it.** `apiTool` in `agent/tools/schema.ts` declares an api-side tool, binding that object to the handler so the two cannot name different shapes: the handler's parameter type is inferred from the schema rather than annotated beside it. `Tool`'s `execute` is a property rather than a method for that reason alone - method shorthand is bivariant, so it would accept a handler typed to another tool's schema. `declareTool` serves the runner-routed tools and the elicitation, which carry no handler. `executeTool` parses with the object before dispatch, so no handler validates its own arguments, and a runner-routed call is checked before it reaches a monitored host. Field descriptions ride on `.meta()`, and **property order follows the Zod object's declaration order** - reordering fields there reorders what the model is asked for, which is why `RecordHypothesis` puts its finding ahead of its verdict.
+
+**Three rules govern a bound, and none of them names a provider.** Zod enforces every bound at runtime, always, whichever provider the run picked; that is the only guarantee. The description states every bound, always, because a description is written before anyone knows which provider will run - `tool-schema.test.ts` fails a field whose own description does not state its bound, and an argument past a bound is refused rather than quietly clamped. And each provider's schema carries the maximum that provider accepts.
+
+**Which keywords a provider accepts is that provider's business.** `toolSchema` emits the whole generated schema, and `llm/schema-dialects.ts` reduces it per provider from that provider's published list: `anthropicToolSchema` keeps `minItems` at 0 or 1 and `default`, `openAIToolSchema` keeps neither and additionally widens every optional field into a nullable union, because OpenAI's strict mode requires all of them. Both drop the numeric and string bounds neither grammar can express. The reducers copy rather than edit, since one generated schema is read by whichever provider the run picked. `tool-schema.test.ts` asserts per dialect that no keyword outside that provider's list survives at any depth, so a tool adding one fails the build rather than reaching a request.
+
 ### The gate
 
 **What a tool does and what the operator permits are two facts, recorded apart.** Both are declared on the tool in `agent/tools/types.ts`, so there is no separate list that could fall out of step.
@@ -252,7 +260,7 @@ Other tags are section labels, not voices, and stay out of this namespace: `<ale
 - `effect` is `read` or `write`, a property of the call.
 - `policy` is `auto` or `approve`, resolved per call by `resolvePolicy`.
 
-Of 45 tools, 38 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
+Of 45 tools, 37 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
 
 | Tool                                 | Effect | Policy    | Why                                                           |
 | ------------------------------------ | ------ | --------- | ------------------------------------------------------------- |

@@ -1,4 +1,5 @@
 import { executeRunnerTool } from "../executor.js";
+import { parseInput } from "./schema.js";
 import { stripHarnessMarker } from "../harness-marker.js";
 import {
   DEFAULT_TOOL_TIMEOUT_MS,
@@ -79,10 +80,15 @@ export async function executeTool(
       toolCallCeilingMs,
     ),
   };
+  /* Parsed once here rather than in each handler, so a tool declares its shape
+     and receives it: the arguments reaching a runner are checked too. */
+  const parsed = parseInput(tool.input, input);
+  if (!parsed.ok)
+    return { content: parsed.failure.content, toolOutcome: "system" };
   const result =
     tool.on === "api"
-      ? await tool.execute(input, effectiveCtx)
-      : await executeRunnerTool(tool, input, effectiveCtx);
+      ? await tool.execute(parsed.data, effectiveCtx)
+      : await executeRunnerTool(tool, parsed.data, effectiveCtx);
   // Stripped here rather than per tool: a log line or a file is the outside
   // world speaking, and this is the one door all of it comes through.
   const content = stripHarnessMarker(

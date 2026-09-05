@@ -10,6 +10,7 @@ import type {
   ToolName,
 } from "@nightwarden/shared";
 import { resolveDefault } from "./reasoning.js";
+import { openAIToolSchema } from "./schema-dialects.js";
 import type {
   ChatResponse,
   LLMProvider,
@@ -181,48 +182,6 @@ function maxCompletionTokens(
   return typeof contextLength === "number" && max >= contextLength ? null : max;
 }
 
-// Strict mode requires every property in `required`, an optional one typed as
-// a union with null. Anthropic has no such rule, so the schemas are bent here.
-function openAIStrictSchema(
-  schema: ToolSchema["input_schema"],
-): Record<string, unknown> {
-  const nullable = (value: unknown): unknown => {
-    if (typeof value !== "object" || value === null) return value;
-    const shape = { ...(value as Record<string, unknown>) };
-    if (shape["type"] === "object") return strictObject(shape);
-    if (shape["type"] === "array" && shape["items"] !== undefined) {
-      shape["items"] = nullable(shape["items"]);
-    }
-    return shape;
-  };
-
-  const strictObject = (
-    object: Record<string, unknown>,
-  ): Record<string, unknown> => {
-    const properties = (object["properties"] ?? {}) as Record<string, unknown>;
-    const required = new Set((object["required"] ?? []) as string[]);
-    const widened: Record<string, unknown> = {};
-    for (const [name, property] of Object.entries(properties)) {
-      const mapped = nullable(property) as Record<string, unknown>;
-      widened[name] =
-        required.has(name) || typeof mapped["type"] !== "string"
-          ? mapped
-          : { ...mapped, type: [mapped["type"], "null"] };
-    }
-    return {
-      ...object,
-      properties: widened,
-      required: Object.keys(widened),
-      additionalProperties: false,
-    };
-  };
-
-  return strictObject(schema as unknown as Record<string, unknown>) as Record<
-    string,
-    unknown
-  >;
-}
-
 export class OpenRouterProvider implements LLMProvider {
   private readonly client: OpenAI;
   private readonly model: string;
@@ -287,7 +246,7 @@ export class OpenRouterProvider implements LLMProvider {
             name: t.name,
             description: t.description,
             strict: true,
-            parameters: openAIStrictSchema(t.input_schema),
+            parameters: openAIToolSchema(t.input_schema),
           },
         })),
         ...this.reasoningParam(),
