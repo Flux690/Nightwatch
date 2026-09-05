@@ -96,7 +96,7 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Run.** One execution of the agent loop inside a session. A session suspended for approval resumes as a new run against the same session. There is no state beside the status: `running` is claimed by a conditional UPDATE, so the row is the mutex as well as the word, and anything left `running` at boot was killed by the restart.
 
-**Alert.** One notification from the monitoring stack, identified by its fingerprint **and** the instant it started. A fingerprint hashes the labels, so the same condition firing months apart carries the same one; matching on it alone once let an August recovery clear a January incident. A row exists from the moment it arrives, before anything decides whether there is capacity.
+**Alert.** One notification from the monitoring stack, identified by its fingerprint **and** the instant it started. A fingerprint hashes the labels, so the same condition firing months apart carries the same one, and the start time is what separates the two firings. Matching on the fingerprint alone lets a recovery clear an incident from months earlier. A row exists from the moment it arrives, before anything decides whether there is capacity.
 
 **Alert group.** Which alerts are investigated together, decided by the sender and arriving as data: Alertmanager's `groupKey`, computed from the `group_by` the user configured. One webhook delivery is one group is one investigation. NightWarden never regroups.
 
@@ -241,7 +241,7 @@ Everything the alert carried and nothing invented: labels, annotations, when it 
 
 A provider offers two roles and neither is ours, so anything the harness says arrives in the role a person's message uses. NightWarden marks its own turns `<harness>` and **strips that marker from every source it did not write**: what the user types, what a question is answered with, what a tool returns, and what an alert carried. Stripping happens at one door, `executeTool` in `agent/tools/toolset.ts`, rather than in each tool.
 
-The marker means something only because of the strip. Unstripped it is worse than absent: a log line on a monitored host could close the tag and open its own, and hostile text that previously had to argue with the model could instead impersonate the system.
+The marker means something only because of the strip. Unstripped it is worse than absent: a log line on a monitored host could close the tag and open its own, so hostile text impersonates the system rather than having to argue with the model.
 
 Other tags are section labels, not voices, and stay out of this namespace: `<alert>` and `<group>` fence text the sender wrote, `<fleet-summary>` is a landmark the addressing rules name, `<previous-report>` labels a quotation of the model's own earlier words.
 

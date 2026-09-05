@@ -285,7 +285,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     await waitFor(async () => (await countInvestigations()) === before + 2);
   });
 
-  /* A repeat no longer re-triggers a broken run, so the recovery sweep tries
+  /* A repeat leaves a broken run alone, so the recovery sweep is what tries
      again. Seeded rather than driven to failure, which is not what is tested. */
   async function failedInvestigation(fingerprint: string): Promise<string> {
     const sessionId = randomUUID();

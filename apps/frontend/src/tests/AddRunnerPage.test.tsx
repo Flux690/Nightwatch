@@ -209,7 +209,7 @@ describe("AddRunnerPage", () => {
     });
 
     // The route already knows which platform this is, and the row is the only
-    // place that knowledge survives. Dropping it here is the bug this replaced.
+    // place that knowledge survives.
     it("mints the token against the platform the route names", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();

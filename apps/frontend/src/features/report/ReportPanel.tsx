@@ -401,8 +401,8 @@ export function ReportPanel({
     });
   };
 
-  // One row rather than a control hung off each drawing, which left a chip
-  // stranded whenever a call named no target.
+  // One row for the whole claim, so a call naming no target still has somewhere
+  // to render.
   const sourcesUnder = (ids: string[]): React.JSX.Element | null => {
     const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
     if (cited.length === 0) return null;

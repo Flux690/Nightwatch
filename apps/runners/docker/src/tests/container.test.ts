@@ -175,8 +175,8 @@ describe("getContainerLogs", () => {
     expect(result.note).toContain("not necessarily absent");
   });
 
-  /* The keyword guess this replaced dropped "connection reset by peer" and kept
-     "no errors found", deciding for the agent what counted as evidence. */
+  /* Every line, because guessing at keywords decides for the agent what counts
+     as evidence: it drops "connection reset by peer" and keeps "no errors". */
   it("returns every line it read when the caller names no filter", async () => {
     const logs = vi
       .fn()

@@ -39,8 +39,8 @@ export function toolSchema(
 ): ToolSchema {
   const generated = z.toJSONSchema(input, { io: "input" });
   delete generated["$schema"];
-  // Narrowed rather than asserted blind: a z.object always yields an object
-  // schema, and the test asserts that across every tool in the build.
+  // A z.object always yields an object schema, which the test asserts across
+  // every tool in the build.
   return { name, description, input_schema: generated as InputSchema };
 }
 

@@ -109,13 +109,13 @@ export async function executeTool(
 }
 
 // The single resolver used by both the loop and human-input (resuming a stored
-// interrupt); names are stable, so there is no legacy fallback.
+// interrupt). A name is stable, so it resolves by that alone.
 export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-// A function rather than a field read, because a user rule will answer from
-// the arguments as well as the tool.
+// A function, because a user rule will answer from the arguments as well as
+// the tool.
 export function resolvePolicy(
   tool: Tool,
   _input: Record<string, unknown>,
