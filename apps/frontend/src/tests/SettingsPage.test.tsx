@@ -33,7 +33,6 @@ const AUTH_STATUS_RESPONSE = {
 // The chosen model's ladder is stored with the model, so the settings form has
 // it the moment the config lands and never waits on a request to draw a control.
 const EFFORT_LADDER: ReasoningDescriptor = {
-  label: "Effort",
   levels: [
     { value: "max", label: "Max" },
     { value: "high", label: "High" },
@@ -55,6 +54,16 @@ const CONFIG: AgentConfig = {
       maxInputTokens: null,
       compaction: false,
       reasoning: EFFORT_LADDER,
+    },
+    openai: {
+      model: null,
+      baseUrl: undefined,
+      apiKeyMasked: null,
+      reasoningLevel: null,
+      maxOutputTokens: null,
+      maxInputTokens: null,
+      compaction: false,
+      reasoning: null,
     },
     openrouter: {
       model: null,
@@ -88,7 +97,6 @@ const MODELS_RESPONSE: ModelCatalog = {
     {
       id: "claude-sonnet-4-6",
       reasoning: {
-        label: "Effort",
         levels: [
           { value: "max", label: "Max" },
           { value: "high", label: "High" },
@@ -517,7 +525,7 @@ describe("SettingsPage", () => {
       await dismissModelList(user);
       expect(input).toHaveValue("claude-sonnet-4-6-nonsense");
       expect(
-        screen.queryByLabelText(/^effort$/i, { selector: "button" }),
+        screen.queryByLabelText(/^reasoning$/i, { selector: "button" }),
       ).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
     });
@@ -536,7 +544,7 @@ describe("SettingsPage", () => {
 
       expect(input).toHaveValue("");
       expect(
-        screen.queryByLabelText(/^effort$/i, { selector: "button" }),
+        screen.queryByLabelText(/^reasoning$/i, { selector: "button" }),
       ).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
     });
@@ -577,14 +585,14 @@ describe("SettingsPage", () => {
       };
     }
 
-    // The saved model's ladder travels with the config, so the control is
-    // rendered from its descriptor. Nothing here knows which provider is active.
-    it("labels the control with the provider's own word and offers exactly that model's levels", async () => {
+    // The saved model's ladder travels with the config, so the control offers
+    // that model's rungs. Nothing here knows which provider is active.
+    it("offers exactly the levels the chosen model publishes", async () => {
       const user = userEvent.setup();
       setup();
       await openSection(user, /provider/i);
 
-      const list = await openSelect(user, /^effort$/i);
+      const list = await openSelect(user, /^reasoning$/i);
       const options = within(list).getAllByRole("option");
 
       expect(options.map((o) => o.textContent)).toEqual([
@@ -603,7 +611,7 @@ describe("SettingsPage", () => {
       setup(undefined, new Promise<ModelCatalog>(() => {}));
       await openSection(user, /provider/i);
 
-      expect(await screen.findByLabelText(/^effort$/i)).toBeInTheDocument();
+      expect(await screen.findByLabelText(/^reasoning$/i)).toBeInTheDocument();
       await openModelList(user);
       expect(await screen.findByText(/loading models/i)).toBeInTheDocument();
     });
@@ -612,7 +620,6 @@ describe("SettingsPage", () => {
       const user = userEvent.setup();
       setup(
         withLadder({
-          label: "Reasoning",
           levels: [{ value: "medium", label: "Medium" }],
           defaultLevel: "medium",
         }),
@@ -632,7 +639,7 @@ describe("SettingsPage", () => {
       await openSection(user, /provider/i);
 
       await screen.findByLabelText(/^model$/i, { selector: "input" });
-      expect(screen.queryByLabelText(/^effort$/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
     });
 
@@ -644,7 +651,6 @@ describe("SettingsPage", () => {
           {
             id: "openai/gpt-5",
             reasoning: {
-              label: "Reasoning",
               // Deliberately without "high": the level in hand has to be one
               // this ladder cannot offer, or keeping it is the right answer.
               levels: [
@@ -681,7 +687,6 @@ describe("SettingsPage", () => {
           {
             id: "openai/gpt-5",
             reasoning: {
-              label: "Reasoning",
               levels: [
                 { value: "high", label: "High" },
                 { value: "low", label: "Low" },

@@ -12,6 +12,7 @@ import { initSecrets } from "../secrets.js";
 import { harness, type Harness } from "./harness.js";
 import { registerConfigRoutes } from "../config/routes.js";
 import { clearTestLLM, configureTestLLM } from "./temp-db.js";
+import { forgetCapabilities } from "../llm/model-capabilities.js";
 import { updateConfig, updateProvider } from "../config/store.js";
 import type {
   AgentConfig,
@@ -40,38 +41,51 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
   );
 }
 
-// One entry of Anthropic's /v1/models. Context management is omitted unless a
-// case asks, which is the shape a model that cannot compact answers with.
-function anthropicModel(
-  id: string,
-  effort: { xhigh?: boolean; max?: boolean },
-  contextManagement?: { compact: boolean },
-): Record<string, unknown> {
+/* One entry of a provider's own /models. Only the id is read from it, except on
+   Anthropic, which is the one provider stating compaction support per model. */
+function listed(id: string, compacts?: boolean): Record<string, unknown> {
   return {
     id,
-    capabilities: {
-      effort: {
-        supported: true,
-        low: { supported: true },
-        medium: { supported: true },
-        high: { supported: true },
-        max: { supported: effort.max ?? false },
-        xhigh: effort.xhigh === undefined ? null : { supported: effort.xhigh },
+    ...(compacts !== undefined && {
+      capabilities: {
+        context_management: { compact_20260112: { supported: compacts } },
       },
-      thinking: {
-        supported: true,
-        types: { adaptive: { supported: true }, enabled: { supported: true } },
-      },
-      ...(contextManagement !== undefined && {
-        context_management: {
-          supported: true,
-          clear_thinking_20251015: null,
-          clear_tool_uses_20250919: null,
-          compact_20260112: { supported: contextManagement.compact },
-        },
-      }),
-    },
+    }),
   };
+}
+
+// One entry of models.dev, which is where every other capability is read from.
+function published(
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    reasoning: true,
+    reasoning_options: [
+      { type: "effort", values: ["low", "medium", "high", "max"] },
+    ],
+    tool_call: true,
+    limit: { context: 200_000, output: 64_000 },
+    ...over,
+  };
+}
+
+/* Serves the provider's list and the capability snapshot beside it, since a
+   catalogue is read from both. The snapshot is offered under every provider. */
+function stubCatalog(
+  list: Array<Record<string, unknown>>,
+  snapshot: Record<string, Record<string, unknown>> = {},
+): void {
+  forgetCapabilities();
+  const models = { models: snapshot };
+  stubFetch((url) =>
+    url.startsWith("https://models.dev")
+      ? mockResponse(200, {
+          anthropic: models,
+          openai: models,
+          openrouter: models,
+        })
+      : mockResponse(200, { data: list }),
+  );
 }
 
 describe("provider/model config seam", () => {
@@ -119,14 +133,14 @@ describe("provider/model config seam", () => {
     return config.providers.anthropic.apiKeyMasked ?? null;
   }
 
-  // Switches the active block so the route derives through OpenRouter's rules.
-  async function useOpenRouter(): Promise<void> {
-    await updateProvider("openrouter", {
-      model: "anthropic/claude-opus-5",
-      apiKey: "sk-or-key",
-    });
-    await updateConfig({ provider: "openrouter" });
+  // Switches the active block, so a case reads the catalogue as that provider.
+  async function useProvider(name: "openai" | "openrouter"): Promise<void> {
+    await updateProvider(name, { model: "a-model", apiKey: "a-key" });
+    await updateConfig({ provider: name });
   }
+
+  const useOpenAI = (): Promise<void> => useProvider("openai");
+  const useOpenRouter = (): Promise<void> => useProvider("openrouter");
 
   // Listing the catalog is also how a block is verified, so these cover both.
 
@@ -166,12 +180,15 @@ describe("provider/model config seam", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-        requestedUrl = url;
-        sawAuth = String(
-          (init?.headers as Record<string, string> | undefined)?.[
-            "Authorization"
-          ],
-        );
+        // The capability snapshot is fetched beside the list; this reads the list.
+        if (!url.startsWith("https://models.dev")) {
+          requestedUrl = url;
+          sawAuth = String(
+            (init?.headers as Record<string, string> | undefined)?.[
+              "Authorization"
+            ],
+          );
+        }
         return Promise.resolve(
           mockResponse(200, { data: [{ id: "some/model" }] }),
         );
@@ -192,7 +209,7 @@ describe("provider/model config seam", () => {
 
     const body = JSON.parse(res.body) as { ok: true; models: ModelOption[] };
     expect(body.models.map((m) => m.id)).toEqual(["some/model"]);
-    expect(requestedUrl).toBe("https://openrouter.ai/api/v1/models");
+    expect(requestedUrl).toBe("https://openrouter.ai/api/v1/models?limit=1000");
     expect(sawAuth).toBe("Bearer sk-or-typed");
   });
 
@@ -222,12 +239,11 @@ describe("provider/model config seam", () => {
     expect(sawAuth).toBe("saved-key");
   });
 
-  // Whether a catalog can be read without a key is the provider's rule, so each
-  // one answers for itself and the frontend is told which case it is in.
-  it("POST /config/models: Anthropic asks for a key rather than being called with none", async () => {
+  /* The same rejection means two things, and only the key that was sent tells
+     them apart. Paired with the bad-key case above, which sends one. */
+  it("POST /config/models: reads a rejection carrying no key as needing one", async () => {
     await clearTestLLM();
-    const calls = vi.fn();
-    vi.stubGlobal("fetch", calls);
+    stubFetch(() => mockResponse(401, {}));
     try {
       const res = await nw.server.inject({
         method: "POST",
@@ -237,8 +253,6 @@ describe("provider/model config seam", () => {
       });
 
       expect(JSON.parse(res.body)).toEqual({ ok: false, error: "needs_key" });
-      // Asking anyway would come back 401 and be reported as a rejected key.
-      expect(calls).not.toHaveBeenCalled();
     } finally {
       await configureTestLLM();
     }
@@ -287,6 +301,7 @@ describe("provider/model config seam", () => {
     const body = JSON.parse(res.body) as { providers: ProviderOption[] };
     expect(body.providers.map((p) => p.name)).toEqual([
       "anthropic",
+      "openai",
       "openrouter",
     ]);
     // The endpoint each adapter falls back to, so the form can show it as a
@@ -357,16 +372,11 @@ describe("provider/model config seam", () => {
     }
 
     it("captures the model's own ceiling, so starting a run never has to reach the network", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              ...anthropicModel("claude-opus-5", { max: true }),
-              max_tokens: 128_000,
-            },
-          ],
+      stubCatalog([listed("claude-opus-5")], {
+        "claude-opus-5": published({
+          limit: { context: 200_000, output: 128_000 },
         }),
-      );
+      });
 
       const config = await patchModel("claude-opus-5");
 
@@ -374,7 +384,6 @@ describe("provider/model config seam", () => {
       // The whole ladder is captured with the model, so the settings form draws
       // its control from the config instead of asking the catalog again.
       expect(config.providers.anthropic.reasoning).toEqual({
-        label: "Effort",
         levels: [
           { value: "max", label: "Max" },
           { value: "high", label: "High" },
@@ -386,20 +395,9 @@ describe("provider/model config seam", () => {
     });
 
     it("captures the context window and compaction support, so nothing reaches the network to start a run", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              ...anthropicModel(
-                "claude-opus-5",
-                { max: true },
-                { compact: true },
-              ),
-              max_input_tokens: 200_000,
-            },
-          ],
-        }),
-      );
+      stubCatalog([listed("claude-opus-5", true)], {
+        "claude-opus-5": published(),
+      });
 
       const first = await patchModel("claude-opus-5");
       expect(first.providers.anthropic.maxInputTokens).toBe(200_000);
@@ -407,11 +405,7 @@ describe("provider/model config seam", () => {
 
       // A model that cannot compact must clear both, or the next run compacts
       // against a window belonging to the model before it.
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-small", {})],
-        }),
-      );
+      stubCatalog([listed("claude-small", false)], {});
       const second = await patchModel("claude-small");
 
       expect(second.providers.anthropic.compaction).toBe(false);
@@ -420,43 +414,36 @@ describe("provider/model config seam", () => {
 
     it("re-resolves a level the new model does not support, rather than storing something unsendable", async () => {
       // max is legal on the first model and absent from the second.
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-opus-5", { max: true })],
-        }),
-      );
+      stubCatalog([listed("claude-opus-5")], { "claude-opus-5": published() });
       const first = await patchModel("claude-opus-5", "max");
       expect(first.providers.anthropic.reasoningLevel).toBe("max");
 
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-small", {})],
+      stubCatalog([listed("claude-small")], {
+        "claude-small": published({
+          reasoning_options: [
+            { type: "effort", values: ["low", "medium", "high"] },
+          ],
         }),
-      );
+      });
       const second = await patchModel("claude-small");
 
       expect(second.providers.anthropic.reasoningLevel).toBe("high");
     });
 
     it("leaves the level unset when the new model advertises no reasoning at all", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-opus-5", { max: true })],
-        }),
-      );
+      stubCatalog([listed("claude-opus-5")], { "claude-opus-5": published() });
       await patchModel("claude-opus-5", "max");
 
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [{ id: "claude-plain", capabilities: null }],
-        }),
-      );
+      stubCatalog([listed("claude-plain")], {
+        "claude-plain": published({ reasoning: false, reasoning_options: [] }),
+      });
       const config = await patchModel("claude-plain");
 
       expect(config.providers.anthropic.reasoningLevel).toBeNull();
     });
 
     it("stores the model anyway when the catalog cannot be reached, rather than refusing the save", async () => {
+      await updateProvider("anthropic", { maxOutputTokens: null });
       vi.stubGlobal(
         "fetch",
         vi.fn().mockRejectedValue(new TypeError("fetch failed")),
@@ -469,221 +456,157 @@ describe("provider/model config seam", () => {
     });
   });
 
-  // --- reasoning descriptors, derived from each provider's own catalog ---
+  /* Every capability but Anthropic's own compaction flag comes from one
+     snapshot, so these cover what an id in it, and one absent from it, produce. */
 
-  describe("reasoning descriptors", () => {
-    // Anthropic is the baseline useTempDb installs; a test that switches to
-    // OpenRouter must not leak that choice into the next one.
+  describe("model capabilities", () => {
+    // Anthropic is the baseline useTempDb installs; a case that switches away
+    // must not leak that choice into the next one.
     afterEach(async () => {
       await configureTestLLM();
     });
 
-    it("Anthropic: derives levels from capabilities.effort and defaults to high, which is the documented API default", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-opus-5", { xhigh: true, max: true })],
-        }),
-      );
+    it("reads the ladder and both limits from the snapshot", async () => {
+      stubCatalog([listed("claude-opus-5")], { "claude-opus-5": published() });
 
       const models = await getModels();
 
       expect(models[0]?.reasoning).toEqual({
-        label: "Effort",
         levels: [
           { value: "max", label: "Max" },
-          { value: "xhigh", label: "Extra high" },
           { value: "high", label: "High" },
           { value: "medium", label: "Medium" },
           { value: "low", label: "Low" },
         ],
         defaultLevel: "high",
       });
-    });
-
-    it("Anthropic: omits a level the model does not support, so a ladder with holes stays honest", async () => {
-      // Opus 4.6 supports max but not xhigh: the ladder is not monotonic.
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            anthropicModel("claude-opus-4-6", { xhigh: false, max: true }),
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
-        "max",
-        "high",
-        "medium",
-        "low",
-      ]);
-    });
-
-    it("Anthropic: reports no reasoning control when capabilities is null", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [{ id: "claude-legacy", capabilities: null }],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.reasoning).toBeNull();
-    });
-
-    it("Anthropic: carries the model's own max_tokens ceiling", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            { ...anthropicModel("claude-opus-5", {}), max_tokens: 128_000 },
-            { ...anthropicModel("claude-old", {}), max_tokens: null },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.maxOutputTokens).toBe(128_000);
-      expect(models[1]?.maxOutputTokens).toBeNull();
-    });
-
-    it("Anthropic: carries the context window and whether the model can compact", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              ...anthropicModel("claude-opus-5", {}, { compact: true }),
-              max_input_tokens: 200_000,
-            },
-            {
-              ...anthropicModel("claude-opus-4-6", {}, { compact: false }),
-              max_input_tokens: 200_000,
-            },
-            { ...anthropicModel("claude-legacy", {}), max_input_tokens: null },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
       expect(models[0]?.maxInputTokens).toBe(200_000);
-      expect(models[0]?.compaction).toBe(true);
-      // Advertised but unsupported is a no, and so is saying nothing at all:
-      // compaction is only ever offered where the catalog states it.
-      expect(models[1]?.compaction).toBe(false);
-      expect(models[2]?.compaction).toBe(false);
-      expect(models[2]?.maxInputTokens).toBeNull();
+      expect(models[0]?.maxOutputTokens).toBe(64_000);
     });
 
-    it("OpenRouter: never claims compaction, which the gateway truncates instead of summarising", async () => {
-      await useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [{ id: "some/model", reasoning: { mandatory: false } }],
-        }),
-      );
+    // A model shipped today is selectable before the snapshot describes it.
+    it("offers an id the snapshot does not know, claiming nothing about it", async () => {
+      stubCatalog([listed("claude-brand-new")], {});
 
       const models = await getModels();
 
-      expect(models[0]?.compaction).toBe(false);
-      expect(models[0]?.maxInputTokens).toBeNull();
-    });
-
-    it("OpenRouter: uses the model's stated levels and its own default, never a guessed one", async () => {
-      await useOpenRouter();
-      // kimi-k3 publishes no medium at all, and states max as its default.
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              id: "moonshotai/kimi-k3",
-              reasoning: {
-                mandatory: false,
-                supported_efforts: ["max", "high", "low"],
-                default_effort: "max",
-              },
-            },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.reasoning?.label).toBe("Reasoning");
-      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
-        "max",
-        "high",
-        "low",
-      ]);
-      expect(models[0]?.reasoning?.defaultLevel).toBe("max");
-    });
-
-    it("OpenRouter: offers the full gateway ladder and medium when the model publishes no levels", async () => {
-      await useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [{ id: "some/model", reasoning: { mandatory: false } }],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
-        "max",
-        "xhigh",
-        "high",
-        "medium",
-        "low",
-        "minimal",
-      ]);
-      expect(models[0]?.reasoning?.defaultLevel).toBe("medium");
-    });
-
-    // A free model published a ceiling equal to its whole context, so sending
-    // it as max_tokens asked for one token more than the window.
-    it("OpenRouter: reads a ceiling equal to the window as no ceiling at all", async () => {
-      await useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              id: "vendor/whole-window:free",
-              context_length: 512_000,
-              top_provider: { max_completion_tokens: 512_000 },
-            },
-            {
-              id: "vendor/real-ceiling",
-              context_length: 200_000,
-              top_provider: { max_completion_tokens: 8_192 },
-            },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.maxOutputTokens).toBeNull();
-      expect(models[1]?.maxOutputTokens).toBe(8_192);
-    });
-
-    it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {
-      await useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            {
-              id: "plain/model",
-              top_provider: { max_completion_tokens: 8192 },
-            },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
+      expect(models.map((m) => m.id)).toEqual(["claude-brand-new"]);
       expect(models[0]?.reasoning).toBeNull();
-      expect(models[0]?.maxOutputTokens).toBe(8192);
+      expect(models[0]?.maxInputTokens).toBeNull();
+      expect(models[0]?.maxOutputTokens).toBeNull();
+    });
+
+    it("drops a model that cannot call a tool, which cannot run the loop", async () => {
+      stubCatalog([listed("claude-opus-5"), listed("claude-writer")], {
+        "claude-opus-5": published(),
+        "claude-writer": published({ tool_call: false }),
+      });
+
+      expect((await getModels()).map((m) => m.id)).toEqual(["claude-opus-5"]);
+    });
+
+    // A toggle is an off switch, and thinking is never switched off.
+    it("reports no control for a model whose only option is a toggle", async () => {
+      stubCatalog([listed("some-model")], {
+        "some-model": published({ reasoning_options: [{ type: "toggle" }] }),
+      });
+
+      expect((await getModels())[0]?.reasoning).toBeNull();
+    });
+
+    it("never offers an off switch among the levels", async () => {
+      stubCatalog([listed("gpt-5.6")], {
+        "gpt-5.6": published({
+          reasoning_options: [
+            { type: "effort", values: ["none", "low", "medium", "high"] },
+          ],
+        }),
+      });
+
+      expect(
+        (await getModels())[0]?.reasoning?.levels.map((l) => l.value),
+      ).toEqual(["high", "medium", "low"]);
+    });
+
+    // Anthropic documents high as equal to omitting the parameter.
+    it("defaults to high, and to the strongest rung on a ladder without it", async () => {
+      stubCatalog([listed("weak-model")], {
+        "weak-model": published({
+          reasoning_options: [{ type: "effort", values: ["low", "minimal"] }],
+        }),
+      });
+
+      expect((await getModels())[0]?.reasoning?.defaultLevel).toBe("low");
+    });
+
+    it("Anthropic: takes compaction from the flag its own list carries", async () => {
+      stubCatalog([listed("can-compact", true), listed("cannot", false)], {
+        "can-compact": published(),
+        cannot: published(),
+      });
+
+      const models = await getModels();
+
+      expect(models[0]?.compaction).toBe(true);
+      // Stated and unsupported is a no, and so is saying nothing at all.
+      expect(models[1]?.compaction).toBe(false);
+    });
+
+    it("OpenAI: offers compaction on a reasoning model and on no other", async () => {
+      await useOpenAI();
+      stubCatalog([listed("gpt-5.6"), listed("gpt-4o")], {
+        "gpt-5.6": published(),
+        "gpt-4o": published({ reasoning: false, reasoning_options: [] }),
+      });
+
+      const models = await getModels();
+
+      expect(models[0]?.compaction).toBe(true);
+      expect(models[1]?.compaction).toBe(false);
+    });
+
+    // The gateway drops messages from the middle rather than summarising, which
+    // in an agentic transcript is where every tool result lives.
+    it("OpenRouter: never claims compaction", async () => {
+      await useOpenRouter();
+      stubCatalog([listed("anthropic/claude-opus-5")], {
+        "anthropic/claude-opus-5": published(),
+      });
+
+      expect((await getModels())[0]?.compaction).toBe(false);
+    });
+
+    /* The snapshot is two hundred vendors in one document, and any of them can
+       publish an entry this does not read. It costs that model and no other. */
+    it("keeps every other model when one entry cannot be read", async () => {
+      stubCatalog([listed("claude-opus-5"), listed("odd-model")], {
+        "claude-opus-5": published(),
+        "odd-model": published({
+          reasoning_options: [{ type: "effort", values: [null] }],
+        }),
+      });
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning?.defaultLevel).toBe("high");
+      expect(models[0]?.maxInputTokens).toBe(200_000);
+      expect(models[1]?.reasoning).toBeNull();
+      expect(models[1]?.maxInputTokens).toBeNull();
+    });
+
+    /* Capabilities change slowly, so a catalogue with no ladder is worse than a
+       stale one: the last good copy stands in when a later read fails. */
+    it("serves the last good snapshot when a later read fails", async () => {
+      stubCatalog([listed("claude-opus-5")], { "claude-opus-5": published() });
+      expect((await getModels())[0]?.reasoning).not.toBeNull();
+
+      stubFetch((url) =>
+        url.startsWith("https://models.dev")
+          ? mockResponse(500, {})
+          : mockResponse(200, { data: [listed("claude-opus-5")] }),
+      );
+
+      expect((await getModels())[0]?.reasoning).not.toBeNull();
     });
   });
 

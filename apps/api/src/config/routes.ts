@@ -19,6 +19,17 @@ import type {
   ModelOption,
 } from "@nightwarden/shared";
 
+// Every name this build serves, so a provider added to PROVIDER_OPTIONS is
+// accepted here without a second list to remember.
+// Asserted to a non-empty tuple because that is the only shape z.enum takes,
+// and PROVIDER_OPTIONS is a literal this build always ships at least one of.
+const PROVIDER_NAME = z.enum(
+  PROVIDER_OPTIONS.map((p) => p.name) as [
+    LLMProviderName,
+    ...LLMProviderName[],
+  ],
+);
+
 // Nested under `providers` so a change to one cannot touch the other's model,
 // endpoint or credential. reasoningLevel is free: the descriptor is authority.
 const ProviderPatchSchema = z.object({
@@ -28,10 +39,11 @@ const ProviderPatchSchema = z.object({
 });
 
 const ConfigPatchSchema = z.object({
-  provider: z.enum(["anthropic", "openrouter"]).nullable().optional(),
+  provider: PROVIDER_NAME.nullable().optional(),
   providers: z
     .object({
       anthropic: ProviderPatchSchema.optional(),
+      openai: ProviderPatchSchema.optional(),
       openrouter: ProviderPatchSchema.optional(),
     })
     .optional(),
@@ -61,7 +73,7 @@ const ConfigPatchSchema = z.object({
 // Each field falls back to the stored value, so a half-typed form still asks
 // something coherent. POST because a credential must never reach a URL.
 const CatalogBodySchema = z.object({
-  provider: z.enum(["anthropic", "openrouter"]).optional(),
+  provider: PROVIDER_NAME.optional(),
   baseUrl: z.string().url().optional(),
   apiKey: z.string().min(1).optional(),
 });
@@ -69,7 +81,7 @@ const CatalogBodySchema = z.object({
 // The provider is explicit: a key belongs to one provider's block, and inferring
 // it from whichever is active would file the key under the wrong one mid-switch.
 const KeyBodySchema = z.object({
-  provider: z.enum(["anthropic", "openrouter"]),
+  provider: PROVIDER_NAME,
   apiKey: z.string().min(1),
 });
 
@@ -133,7 +145,7 @@ export async function registerConfigRoutes(
       // Provider blocks are written per provider so one cannot disturb the other;
       // everything else is global and goes through the single config row.
       const { providers, ...global } = parsed.data;
-      for (const name of ["anthropic", "openrouter"] as const) {
+      for (const name of PROVIDER_OPTIONS.map((p) => p.name)) {
         const block = providers?.[name];
         if (block !== undefined)
           await updateProvider(name, await withModelFacts(name, block));

@@ -232,7 +232,7 @@ export function ProviderSection({
         {reasoning && (
           <SettingsRow
             controlId="settings-reasoning"
-            title={reasoning.label}
+            title="Reasoning"
             description="How hard the model works on each request."
           >
             <Select

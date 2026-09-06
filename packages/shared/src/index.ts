@@ -144,9 +144,7 @@ export type {
   ElicitationAnswerPart,
   CompactionPart,
   MessagePart,
-  WireDialect,
-  NativeEnvelope,
-  CanonicalMessage,
+  PartProviderOptions,
 } from "./messages.js";
 export { messagePartsToText } from "./messages.js";
 export type {

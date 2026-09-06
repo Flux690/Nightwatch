@@ -296,14 +296,17 @@ describe("a skipped field reaches the handler as an omission", () => {
     strings: z.array(z.string()).optional(),
   } as const;
 
-  it.each(Object.entries(OPTIONAL_SHAPES))(
-    "reads a null %s as absent",
-    (_name, shape) => {
-      const parsed = parseInput(z.object({ field: shape }), { field: null });
-      expect(parsed.ok).toBe(true);
-      expect(parsed.ok && "field" in parsed.data).toBe(false);
-    },
-  );
+  it("reads a null in every optional shape as absent", () => {
+    const schema = z.object(OPTIONAL_SHAPES);
+    const nulls = Object.fromEntries(
+      Object.keys(OPTIONAL_SHAPES).map((name) => [name, null]),
+    );
+
+    const parsed = parseInput(schema, nulls);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && Object.keys(parsed.data)).toEqual([]);
+  });
 
   it("reads one nested inside an array of objects", () => {
     const schema = z.object({

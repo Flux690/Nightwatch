@@ -1,8 +1,4 @@
-import type {
-  MessagePart,
-  NativeEnvelope,
-  TranscriptRow,
-} from "@nightwarden/shared";
+import type { MessagePart, TranscriptRow } from "@nightwarden/shared";
 import { getDb, type Db } from "../db.js";
 import { refreshSessionStatus } from "./status-store.js";
 import type { PendingHumanInput } from "./gate-store.js";
@@ -10,26 +6,17 @@ import type { PendingHumanInput } from "./gate-store.js";
 // Transcript rows, appended a turn at a time.
 
 function serializeCanonical(m: TranscriptRow): string | null {
-  if (m.parts.length === 0 && m.native === undefined) return null;
-  return JSON.stringify({ parts: m.parts, native: m.native });
+  if (m.parts.length === 0) return null;
+  return JSON.stringify({ parts: m.parts });
 }
 
 // Untrusted on read despite being our own INSERT: a partial write or a schema
 // change should surface as an empty turn, never crash a transcript or a resume.
-function parseCanonical(raw: string | null): {
-  parts: MessagePart[];
-  native?: NativeEnvelope;
-} {
+function parseCanonical(raw: string | null): { parts: MessagePart[] } {
   if (raw === null) return { parts: [] };
   try {
-    const parsed = JSON.parse(raw) as {
-      parts?: MessagePart[];
-      native?: NativeEnvelope;
-    };
-    return {
-      parts: Array.isArray(parsed.parts) ? parsed.parts : [],
-      ...(parsed.native && { native: parsed.native }),
-    };
+    const parsed = JSON.parse(raw) as { parts?: MessagePart[] };
+    return { parts: Array.isArray(parsed.parts) ? parsed.parts : [] };
   } catch {
     return { parts: [] };
   }

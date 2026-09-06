@@ -91,7 +91,7 @@ For the full detail - every term, the session lifecycle, prompt assembly, the ev
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off.
 - **A broken run tries again, but only when that can help.** Retried up to three times on a dropped connection or a rate limit; never retried on a rejected key or a missing model, because that would fail identically every time.
 - **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
-- **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
+- **Bring your own key.** Use Anthropic or OpenAI directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one.
 - **No external infrastructure.** All durable state is one SQLite file in the state directory.
 - **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Nothing to rip out.
@@ -108,7 +108,7 @@ docker compose up -d
 
 `NIGHTWARDEN_PUBLIC_URL` is the only variable you must set. It is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else has a default and is listed in [Configuration](ARCHITECTURE.md#configuration).
 
-Open that address, create the owner account, then go to **Settings → Provider**: choose Anthropic or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert.
+Open that address, create the owner account, then go to **Settings → Provider**: choose Anthropic, OpenAI or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert.
 
 ## Connect your stack
 
@@ -127,7 +127,7 @@ Adding a runner is three steps and needs no manual config editing - name it, run
 
 ## Development
 
-Node.js 24 or newer, pnpm 11 or newer, and an Anthropic or OpenRouter API key.
+Node.js 24 or newer, pnpm 11 or newer, and an Anthropic, OpenAI or OpenRouter API key.
 
 ```bash
 git clone https://github.com/PrabhatMattoo/NightWarden.git

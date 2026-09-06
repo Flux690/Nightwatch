@@ -2,7 +2,7 @@
 // artifact referencing it. Sessions live in the API's SQLite, id generated at trigger time, appended per turn.
 
 import type { AlertGroupContext, NormalizedAlert } from "./alerts.js";
-import type { MessagePart, NativeEnvelope } from "./messages.js";
+import type { MessagePart } from "./messages.js";
 import type { TranscriptItem } from "./transcript.js";
 
 // Four kinds against a provider's two roles: "error" is rendered but never
@@ -111,8 +111,5 @@ export interface TranscriptRow {
   // The turn's portable content. Empty on "error" rows, which are our own notes
   // rather than a model turn.
   parts: MessagePart[];
-  // The vendor's own message, replayed verbatim when the dialect still matches -
-  // parts alone can't restore a signed thinking block.
-  native?: NativeEnvelope;
   timestamp: string;
 }

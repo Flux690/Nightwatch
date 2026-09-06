@@ -1,7 +1,7 @@
 // Global agent config: how the one brain reasons (no per-runner dimension). Every
 // value here is API-seeded and safe to send to the frontend; keys are masked.
 
-export type LLMProviderName = "anthropic" | "openrouter";
+export type LLMProviderName = "anthropic" | "openai" | "openrouter";
 // "allowlist" routes all sandbox egress through an enforcing proxy that only
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
@@ -14,8 +14,8 @@ export interface ProviderOption {
   defaultBaseUrl: string;
 }
 
-// `needs_key` is the provider's rule, not ours: OpenRouter publishes its
-// catalog to anyone, Anthropic answers 401 without a key.
+// The response decides: a rejected request with no key asked for one, and the
+// same rejection with a key means that key is wrong.
 export type CatalogError = "needs_key" | "bad_key" | "unreachable";
 
 // Listing the catalog is also how setup is verified: models coming back prove
@@ -32,8 +32,6 @@ export interface ReasoningLevel {
 // Normalised from whichever catalog it came from, so the frontend renders it
 // and never branches on the provider name.
 export interface ReasoningDescriptor {
-  // "Effort" for Anthropic, "Reasoning" for OpenRouter.
-  label: string;
   // Ordered strongest to weakest. Ladders have holes (Opus 4.6 has max but not
   // xhigh), so this is the authority rather than any assumed ordering.
   levels: ReasoningLevel[];

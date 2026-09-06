@@ -1099,6 +1099,54 @@ describe("the investigation record", () => {
     });
   });
 
+  /* The counter is carried for the length of a run rather than recounted on
+     every write, so a resume has to pick it up from the transcript. */
+  it("numbers a resumed run's reads on from where the last run stopped", async () => {
+    const read = (toolCallId: string) => ({
+      toolUses: [
+        {
+          toolCallId,
+          name: "GetDockerLogs",
+          input: { target: "host/app/web" },
+        },
+      ],
+      text: "",
+    });
+    const done = { toolUses: [], text: "Done." };
+    mockCreateProvider
+      .mockImplementationOnce(() =>
+        createContractFakeProvider([read("tu-a"), done]),
+      )
+      .mockImplementationOnce(() =>
+        createContractFakeProvider([read("tu-b"), done]),
+      );
+
+    const sessionId = randomUUID();
+    await seedChatSession(sessionId, "why is web slow?");
+    await runSession({ sessionId, userMessage: "why is web slow?" });
+    // A resume always carries a turn of its own, which is what a second
+    // message is: a seed alone would end on the assistant and answer nothing.
+    await runSession({
+      sessionId,
+      seed: await buildSeed(sessionId),
+      userMessage: "check again",
+    });
+
+    const issued = (await getTranscriptRows(sessionId))
+      .flatMap((row) => row.parts)
+      .flatMap((part) =>
+        part.type === "tool_call" && part.evidenceId !== undefined
+          ? [[part.toolCallId, part.evidenceId] as const]
+          : [],
+      );
+
+    // A second e1 would leave two different calls answering to one citation.
+    expect(issued).toEqual([
+      ["tu-a", "e1"],
+      ["tu-b", "e2"],
+    ]);
+  });
+
   describe("the finish gate", () => {
     // Only the harness's own turns: on a resume the opening turn is an
     // appendUserMessage too, and these assertions are about what it said.
@@ -1211,11 +1259,11 @@ describe("the investigation record", () => {
       await seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
         alert("gate"),
       ]);
-      const toolOutcome = await runSession({
+      const outcome = await runSession({
         sessionId,
         alerts: [alert("gate")],
       });
-      expect(toolOutcome).toBe("completed");
+      expect(outcome).toBe("completed");
 
       const requests = recordGapsMessages();
       expect(requests).toHaveLength(5);
@@ -1317,11 +1365,11 @@ describe("the investigation record", () => {
         alert("cut-off"),
       ]);
 
-      const toolOutcome = await runSession({
+      const outcome = await runSession({
         sessionId,
         alerts: [alert("cut-off")],
       });
-      expect(toolOutcome).toBe("completed");
+      expect(outcome).toBe("completed");
 
       const drawn = JSON.stringify(await buildTranscript(sessionId));
       expect(drawn).toContain("cut off at this model's output limit");
@@ -1725,11 +1773,11 @@ describe("the investigation record", () => {
       await seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
         alert("gate-pass"),
       ]);
-      const toolOutcome = await runSession({
+      const outcome = await runSession({
         sessionId,
         alerts: [alert("gate-pass")],
       });
-      expect(toolOutcome).toBe("completed");
+      expect(outcome).toBe("completed");
 
       expect(recordGapsMessages()).toHaveLength(0);
       expect(reportRequests()).toHaveLength(1);
@@ -1753,11 +1801,11 @@ describe("the investigation record", () => {
       );
       const sessionId = randomUUID();
       await seedChatSession(sessionId, "how many containers are running?");
-      const toolOutcome = await runSession({
+      const outcome = await runSession({
         sessionId,
         userMessage: "how many containers are running?",
       });
-      expect(toolOutcome).toBe("completed");
+      expect(outcome).toBe("completed");
       expect(harnessMessages()).toHaveLength(0);
       expect(await getRecord(sessionId)).toBeUndefined();
     });

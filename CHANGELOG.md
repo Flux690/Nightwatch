@@ -12,6 +12,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Added
 
+- **OpenAI is a provider you can pick.** Settings, Provider now offers Anthropic, OpenAI and OpenRouter. OpenAI models run through the Responses API, so reasoning summaries stream into the transcript the way Anthropic's already do, and a long investigation is compacted rather than refused. Set it up with a key and a model exactly as the other two, or seed it with `OPENAI_API_KEY` and `OPENAI_MODEL`. — `0.5.7`
+
 - **You can change your password in the app, and see which devices are signed in.** Settings → Account now shows the account you are signed in as, a change-password form, and a list of signed-in browsers with a Revoke button on each. Changing your password signs out every other device. Previously there was no way to change a password at all: the only documented recovery was wiping the volume and setting the install up again. — `0.5.0` (`0581fa8`)
 
 - **Sentry, as an evidence source.** Connect it under Integrations with a base URL, your organization slug and an auth token carrying `event:read` and `project:read`; both scopes are probed before the connection is saved, so a token missing one is refused with the scope named rather than failing mid-incident. Investigations gain five read-only tools: search the issues around the alert, read one issue's latest event with its stack trace, break an issue down by a tag such as `server_name`, list releases with how long before or after the alert each was deployed, and list the commits in a release with the pull request and Sentry's suspect-commit marker. Self-hosted Sentry and sentry.io both work. Nothing is written back to Sentry. — `0.4.0` (`2ac6804`)
@@ -21,6 +23,10 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - **The API image now carries the licence text of every package bundled into the frontend**, served at `/THIRD-PARTY-LICENSES.txt` and written at build time from what Vite actually bundles. Vite inlines those packages into the browser assets, so unlike an installed dependency their own licence files never reached the image. The README's License section now names where every set of terms lives. — `0.3.173` (`f9923f8`)
 
 ### Changed
+
+- **Every model now shows the reasoning levels and the two limits it actually publishes.** What a model supports is read from models.dev alongside the list your provider returns, so the settings form describes an OpenAI or OpenRouter model as precisely as an Anthropic one - OpenAI's own endpoint publishes no capabilities at all, so before this its models offered no reasoning control and no context window. A model that cannot call tools is no longer listed, because it cannot run an investigation. A model too new for models.dev is still listed and still selectable; it just describes itself with blanks until the snapshot catches up. The reasoning row is labelled "Reasoning" for every provider. — `0.5.7`
+
+- **The Anthropic Base URL default now ends in `/v1`,** matching OpenAI and OpenRouter, so all three name the endpoint they actually call. Only the placeholder changed; a Base URL you saved yourself is untouched. — `0.5.7`
 
 - **A report timeline entry has to carry a real timestamp.** The `at` field took any non-empty string, so a moment could be written as "around 03:10" and the report rendered it as given, next to entries that were exact. It now has to be an ISO 8601 timestamp carrying a timezone, so every row on a timeline can be placed against the others. — `0.5.6` (`d367643`)
 
@@ -68,6 +74,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - An alert label can no longer close the harness tag and speak as NightWarden. Anything the harness sends the model is stripped of the marker first, so text arriving from a monitored host reaches the model as data rather than as an instruction wearing the system's voice. — `0.3.157` (`bea9083`)
 
 ### Fixed
+
+- **"Add an API key" and "that key was rejected" are no longer decided by which provider you picked.** The endpoint's own answer settles it: a rejection carrying no key asks for one, and the same rejection carrying a key says that key is wrong. An endpoint that lists models without a key still does. — `0.5.7`
 
 - **A tool call is no longer refused for an argument the model chose to leave out.** OpenRouter's schema dialect has no optional argument: every field is required, and an optional one is offered as "a value or null", so a model skipping a field sends null. NightWarden then rejected the call as malformed and asked the model to correct it, spending a turn each time on a call that was already right. A null now reads as the omission it means, wherever it appears in the arguments. — `0.5.6` (`d367643`)
 

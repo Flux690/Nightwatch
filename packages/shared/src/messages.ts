@@ -1,16 +1,24 @@
-// Adapters translate only at the seed/snapshot boundary: in memory each turn
-// keeps its native shape, which Anthropic's cache breakpoint needs stable.
+// A turn is kept as parts alone. Whatever a provider needs handed back verbatim
+// rides on the part it belongs to, under that provider's own name.
+
+type JsonValue = null | string | number | boolean | JsonObject | JsonValue[];
+type JsonObject = { [key: string]: JsonValue | undefined };
+
+// Keyed by provider, so a part replayed into a different one carries nothing
+// that provider recognises and is dropped rather than sent wrong.
+export type PartProviderOptions = Record<string, JsonObject>;
 
 export interface TextPart {
   type: "text";
   text: string;
 }
 
-// The model's reasoning. Portable as prose; the signed/encrypted original that
-// some vendors require back verbatim rides in the message's `native` envelope.
+// The model's reasoning. Portable as prose, and the signed or encrypted original
+// some vendors require back verbatim rides in providerOptions.
 export interface ReasoningPart {
   type: "reasoning";
   text: string;
+  providerOptions?: PartProviderOptions;
 }
 
 export interface ToolCallPart {
@@ -48,10 +56,11 @@ export interface ElicitationAnswerPart {
   text: string;
 }
 
-/* Drawn, never replayed: the block rides in the message's `native` envelope, so
-   rebuilding from parts drops it, which is what a foreign provider needs. */
+/* The summary a provider wrote in place of everything above it, replayed as
+   what it stands for. Drawn as a marker, so the text is kept but never shown. */
 export interface CompactionPart {
   type: "compaction";
+  text: string;
 }
 
 export type MessagePart =
@@ -62,24 +71,6 @@ export type MessagePart =
   | ToolApprovalPart
   | ElicitationAnswerPart
   | CompactionPart;
-
-// The wire shape a native message is written in, not the configured provider:
-// one provider can speak several dialects whose messages are not interchangeable.
-export type WireDialect =
-  "anthropic-messages" | "openrouter-chat" | "openai-responses";
-
-export interface NativeEnvelope {
-  dialect: WireDialect;
-  message: unknown;
-}
-
-export interface CanonicalMessage {
-  role: "user" | "assistant";
-  parts: MessagePart[];
-  // Replayed verbatim on a same-dialect resume, since signed reasoning blocks
-  // are rejected if altered. A dialect change drops it and keeps the messages.
-  native?: NativeEnvelope;
-}
 
 // Human-readable rendering of a turn, for titles and list rows. Tool calls are
 // named rather than dumped: the transcript projection is what renders them.

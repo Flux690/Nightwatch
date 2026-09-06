@@ -46,6 +46,5 @@ export async function buildSeed(sessionId: string): Promise<ProviderMessage[]> {
     role: m.kind === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
     parts: m.parts,
-    ...(m.native && { native: m.native }),
   }));
 }

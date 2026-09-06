@@ -13,6 +13,7 @@ import {
   MAX_RETRIES,
   REQUEST_TIMEOUT_MS,
 } from "../llm/config.js";
+import { PROVIDER_OPTIONS } from "../llm/catalog.js";
 import { decrypt, encrypt, maskKey } from "../secrets.js";
 import { logger } from "../logger.js";
 import type {
@@ -26,7 +27,10 @@ import type {
 
 const CONFIG_ID = "global";
 
-const PROVIDER_NAMES: readonly LLMProviderName[] = ["anthropic", "openrouter"];
+// One list of providers in the build, held where they are described.
+const PROVIDER_NAMES: readonly LLMProviderName[] = PROVIDER_OPTIONS.map(
+  (p) => p.name,
+);
 
 type ConfigRow = {
   activeProvider: string | null;
@@ -119,7 +123,6 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
 // Stored as JSON because the ladder is the catalog's shape, not ours: its length
 // and vocabulary differ per model, so columns could only ever hold one provider's.
 const ReasoningDescriptorSchema = z.object({
-  label: z.string(),
   levels: z.array(z.object({ value: z.string(), label: z.string() })),
   defaultLevel: z.string(),
 });
@@ -152,6 +155,7 @@ function toSettings(row: ProviderRow | undefined): ProviderSettings {
 async function loadProviders(): Promise<ProviderSettingsMap> {
   return {
     anthropic: toSettings(await readProviderRow("anthropic")),
+    openai: toSettings(await readProviderRow("openai")),
     openrouter: toSettings(await readProviderRow("openrouter")),
   };
 }
@@ -311,10 +315,13 @@ export async function seedConfigFromEnv(): Promise<void> {
 
   const requested = process.env["NIGHTWARDEN_LLM_PROVIDER"];
   if (requested === undefined || requested === "") return;
-  if (requested !== "anthropic" && requested !== "openrouter") {
+  // Matched against the list rather than asserted, so the name is narrowed by
+  // the same value the rest of this file iterates.
+  const provider = PROVIDER_NAMES.find((name) => name === requested);
+  if (provider === undefined) {
     logger.warn(
-      { requested },
-      "NIGHTWARDEN_LLM_PROVIDER is not 'anthropic' or 'openrouter'; leaving the active provider unset",
+      { requested, expected: PROVIDER_NAMES },
+      "NIGHTWARDEN_LLM_PROVIDER names no provider this build has; leaving the active provider unset",
     );
     return;
   }
@@ -322,19 +329,16 @@ export async function seedConfigFromEnv(): Promise<void> {
 
   // Activating a block that cannot run would produce an install that looks
   // configured and fails at the first alert, so require the model and key first.
-  const block = await readProviderRow(requested);
+  const block = await readProviderRow(provider);
   if (!block?.model || !block.apiKeyEncrypted) {
     logger.warn(
-      { provider: requested },
+      { provider },
       "NIGHTWARDEN_LLM_PROVIDER is set but that provider has no model and key; finish setup in the frontend",
     );
     return;
   }
-  await updateConfig({ provider: requested });
-  logger.info(
-    { provider: requested },
-    "active LLM provider seeded from environment",
-  );
+  await updateConfig({ provider });
+  logger.info({ provider }, "active LLM provider seeded from environment");
 }
 
 async function seedProviderFromEnv(provider: LLMProviderName): Promise<void> {
@@ -343,7 +347,7 @@ async function seedProviderFromEnv(provider: LLMProviderName): Promise<void> {
   const existing = await readProviderRow(provider);
   if (existing?.model || existing?.apiKeyEncrypted) return;
 
-  const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
+  const prefix = provider.toUpperCase();
   const model = process.env[`${prefix}_MODEL`];
   const apiKey = process.env[`${prefix}_API_KEY`];
   const baseUrl = process.env[`${prefix}_BASE_URL`];

@@ -64,7 +64,6 @@ import { messagePartsToText, METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 import type {
   AlertGroupContext,
   MessagePart,
-  NativeEnvelope,
   NormalizedAlert,
   ToolName,
   TranscriptRow,
@@ -382,18 +381,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let nextEvidence =
     highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1;
 
-  const stage = (
-    kind: TranscriptRow["kind"],
-    parts: MessagePart[],
-    native?: NativeEnvelope,
-  ): void => {
+  const stage = (kind: TranscriptRow["kind"], parts: MessagePart[]): void => {
     pending.push({
       sessionId,
       seq: nextSeq++,
       kind,
       content: messagePartsToText(parts),
       parts,
-      ...(native && { native }),
       timestamp: new Date().toISOString(),
     });
   };
@@ -441,7 +435,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     log.info("time budget ended: user chose to end, running closing turn");
     try {
       const closing = await chatWithRetries(provider, [], nextSeq);
-      stage("assistant", closing.parts, closing.native);
+      stage("assistant", closing.parts);
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
@@ -583,7 +577,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           // a model once wrote the report as markdown and burned an attempt.
           SUBMIT_REPORT_TOOL.schema.name,
         );
-        stage("assistant", written.parts, written.native);
+        stage("assistant", written.parts);
       } catch (err) {
         if (signal?.aborted) {
           log.info("run stopped by user while writing the report");
@@ -677,7 +671,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         nextSeq,
         runSignal,
       );
-      stage("assistant", response.parts, response.native);
+      stage("assistant", response.parts);
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");

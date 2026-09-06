@@ -10,10 +10,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.111.0",
+    "@ai-sdk/anthropic": "4.0.49",
+    "@ai-sdk/openai": "4.0.60",
+    "@ai-sdk/provider": "4.0.10",
     "@fastify/sse": "0.5.0",
     "@fastify/static": "10.1.2",
     "@fastify/websocket": "11.3.0",
+    "@openrouter/ai-sdk-provider": "3.0.0",
     "argon2": "0.44.0",
     "aws4fetch": "1.0.20",
     "better-auth": "1.7.2",
@@ -24,7 +27,6 @@
     "fastify": "5.10.0",
     "jose": "6.2.3",
     "kysely": "0.29.5",
-    "openai": "6.46.0",
     "pino": "10.3.1",
     "pino-pretty": "13.1.3",
     "zod": "4.4.3"
@@ -35,6 +37,7 @@
     "@types/better-sqlite3": "7.6.13",
     "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "4.1.10",
+    "ai": "7.0.93",
     "tsx": "4.23.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10",

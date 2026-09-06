@@ -1,13 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
+import { APICallError } from "@ai-sdk/provider";
 import { MAX_RETRIES, retryDelaysMs } from "./config.js";
 
 function providerStatus(err: unknown): number | undefined | null {
   // null: not a provider error at all; undefined: provider connection error.
-  if (err instanceof OpenAI.APIError || err instanceof Anthropic.APIError) {
-    return err.status;
-  }
-  return null;
+  return APICallError.isInstance(err) ? err.statusCode : null;
 }
 
 // Outages, rate limits, and dropped connections are worth waiting out;
@@ -49,17 +45,24 @@ function errorType(body: unknown): string | null {
   return metadataField(body, "error_type");
 }
 
-function metadataField(body: unknown, field: string): string | null {
-  if (typeof body !== "object" || body === null) return null;
-  const metadata = (body as Record<string, unknown>)["metadata"];
+// Every provider wraps its fault the same way, in an object under `error`.
+function errorBody(data: unknown): Record<string, unknown> | null {
+  if (typeof data !== "object" || data === null) return null;
+  const body = (data as Record<string, unknown>)["error"];
+  return typeof body === "object" && body !== null
+    ? (body as Record<string, unknown>)
+    : null;
+}
+
+function metadataField(data: unknown, field: string): string | null {
+  const metadata = errorBody(data)?.["metadata"];
   if (typeof metadata !== "object" || metadata === null) return null;
   const value = (metadata as Record<string, unknown>)[field];
   return typeof value === "string" ? value : null;
 }
 
-function bodyMessage(body: unknown): string {
-  if (typeof body !== "object" || body === null) return "";
-  const message = (body as Record<string, unknown>)["message"];
+function bodyMessage(data: unknown): string {
+  const message = errorBody(data)?.["message"];
   return typeof message === "string" ? message : "";
 }
 
@@ -70,32 +73,29 @@ const CONTEXT_OVERFLOW_WORDING = [
   "context length",
 ];
 
-function isContextOverflow(err: { message: string; error: unknown }): boolean {
-  if (errorType(err.error) === "context_length_exceeded") return true;
-  const said = `${err.message} ${bodyMessage(err.error)}`.toLowerCase();
+function isContextOverflow(err: APICallError): boolean {
+  if (errorType(err.data) === "context_length_exceeded") return true;
+  const said = `${err.message} ${bodyMessage(err.data)}`.toLowerCase();
   return CONTEXT_OVERFLOW_WORDING.some((wording) => said.includes(wording));
 }
 
 // Plain-language failure text persisted into the transcript. One or two
 // sentences a non-expert can act on, with the raw status in parentheses.
 export function describeLLMError(err: unknown): string {
-  if (
-    !(err instanceof OpenAI.APIError) &&
-    !(err instanceof Anthropic.APIError)
-  ) {
+  if (!APICallError.isInstance(err)) {
     const message = err instanceof Error ? err.message : String(err);
     return `The run failed unexpectedly: ${message}`;
   }
-  const status = err.status;
+  const status = err.statusCode;
   const attempts = MAX_RETRIES + 1;
   if (status === undefined) {
     return "Could not reach the model provider - the connection failed. Check the Base URL in Settings and your network, then send a message to try again.";
   }
-  const from = upstreamProvider(err.error);
+  const from = upstreamProvider(err.data);
   const detail = ` (HTTP ${status}${from === null ? "" : ` from ${from}`})`;
   // The host actually serving the model is down, which is neither your key nor
   // your model being wrong: another model routes around it.
-  if (errorType(err.error) === "provider_unavailable") {
+  if (errorType(err.data) === "provider_unavailable") {
     return `The provider behind this model returned nothing usable, which means it is having an outage rather than anything being wrong with your setup. Try another model in Settings, or wait for it to recover${detail}.`;
   }
   if (status === 401 || status === 403) {

@@ -262,7 +262,7 @@ export async function respondToPendingHumanInput(
   if ((await claim(sessionId, pending.claimedAt ?? null)) === "stale") {
     logger.warn(
       { sessionId, tool: call.name, toolCallId: pending.toolCallId },
-      "stale claim: a previous attempt died holding it, toolOutcome unknown",
+      "stale claim: a previous attempt died holding it, and whether the call ran is unknown",
     );
     return await unpause(
       sessionId,

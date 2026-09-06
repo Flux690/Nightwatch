@@ -8,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import OpenAI from "openai";
+import { APICallError } from "@ai-sdk/provider";
 import type { FrontendEvent } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
@@ -30,12 +30,13 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 
 function providerError(status: number, body?: Record<string, unknown>): Error {
-  return OpenAI.APIError.generate(
-    status,
-    { error: body ?? { message: "boom" } },
-    "boom",
-    new Headers(),
-  );
+  return new APICallError({
+    message: "boom",
+    url: "https://provider.example/v1/messages",
+    requestBodyValues: {},
+    statusCode: status,
+    data: { error: body ?? { message: "boom" } },
+  });
 }
 
 function healthyProvider(text: string): ContractFakeProvider {

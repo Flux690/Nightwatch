@@ -40,18 +40,18 @@ The frontend (`@nightwarden/frontend`) is not a deployable. Vite bundles it and 
 
 `apps/api/src` groups by the domain a file serves, never by what kind of file it is. There is no `db/` folder and no `types/` folder.
 
-| Directory       | Serves                                              |
-| --------------- | --------------------------------------------------- |
-| `agent/`        | The loop, prompts, tools, evidence ids, the record  |
-| `alerts/`       | Ingest, parsing, grouping, target resolution        |
-| `auth/`         | Owner sessions, runner token issuing                |
-| `config/`       | Settings and LLM readiness                          |
-| `fleet/`        | Runner connections, manifests, command transport    |
-| `integrations/` | Metrics, Loki, Sentry, GitHub connections           |
-| `llm/`          | Provider clients and their configuration            |
-| `sandbox/`      | Per-session code containers and git                 |
-| `session/`      | Sessions, transcript, alerts, record, status, gates |
-| `verification/` | Recovery re-checking                                |
+| Directory       | Serves                                                  |
+| --------------- | ------------------------------------------------------- |
+| `agent/`        | The loop, prompts, tools, evidence ids, the record      |
+| `alerts/`       | Ingest, parsing, grouping, target resolution            |
+| `auth/`         | Owner sessions, runner token issuing                    |
+| `config/`       | Settings and LLM readiness                              |
+| `fleet/`        | Runner connections, manifests, command transport        |
+| `integrations/` | Metrics, Loki, Sentry, GitHub connections               |
+| `llm/`          | The provider adapter, the model catalogue, their config |
+| `sandbox/`      | Per-session code containers and git                     |
+| `session/`      | Sessions, transcript, alerts, record, status, gates     |
+| `verification/` | Recovery re-checking                                    |
 
 The `src/` root holds two kinds of file and nothing else: infrastructure the process stands on (`db.ts`, `logger.ts`, `secrets.ts`, `paths.ts`, `public-url.ts`, `frontend.ts`), which may not import a module, and the composition root (`index.ts`, `dispatcher.ts`, `run-pool.ts`), whose job is to wire modules together. `architecture.test.ts` asserts both directions and that nothing cycles.
 
@@ -251,7 +251,7 @@ Other tags are section labels, not voices, and stay out of this namespace: `<ale
 
 **Three rules govern a bound, and none of them names a provider.** Zod enforces every bound at runtime, always, whichever provider the run picked; that is the only guarantee. The description states every bound, always, because a description is written before anyone knows which provider will run - `tool-schema.test.ts` fails a field whose own description does not state its bound, and an argument past a bound is refused rather than quietly clamped. And each provider's schema carries the maximum that provider accepts.
 
-**Which keywords a provider accepts is that provider's business.** `toolSchema` emits the whole generated schema, and `llm/schema-dialects.ts` reduces it per provider from that provider's published list: `anthropicToolSchema` keeps `minItems` at 0 or 1 and `default`, `openAIToolSchema` keeps neither and additionally widens every optional field into a nullable union, because OpenAI's strict mode requires all of them. Both drop the numeric and string bounds neither grammar can express. The reducers copy rather than edit, since one generated schema is read by whichever provider the run picked. `tool-schema.test.ts` asserts per dialect that no keyword outside that provider's list survives at any depth, so a tool adding one fails the build rather than reaching a request.
+**Which keywords a provider accepts is that provider's business.** `toolSchema` emits the whole generated schema, and `llm/tool-schema-dialects.ts` reduces it per provider from that provider's published list. Both keep the structural keywords and `default`, which OpenAI needs because its strict mode requires every field and a defaulted one arrives nullable. On top of those `anthropicToolSchema` keeps `minItems` at 0 or 1 and `format` at the ten values Anthropic names; `openAIToolSchema` keeps neither, and widens every optional field into a nullable union. That widening has no way to say a field was skipped, so `parseInput` reads a null as the omission it means. Both drop the numeric and string bounds neither grammar can express. The reducers copy rather than edit, since one generated schema is read by whichever provider the run picked. `tool-schema.test.ts` asserts per dialect that no keyword outside that provider's list survives at any depth, so a tool adding one fails the build rather than reaching a request.
 
 ### The gate
 
@@ -295,7 +295,7 @@ Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool whe
 
 **Time.** After its budget (Settings → Agent, 30 minutes by default) a run finishes the step it is on and asks whether to continue. Declining runs the **stand-down turn**: the transcript is replayed and one free-form closing turn runs with no tools. It writes no report. Every repository tool call extends the sandbox's own idle timer separately.
 
-**Context.** Where the provider can summarise - Anthropic models whose catalog says so - NightWarden asks for that rather than letting the request be refused, and the transcript marks where it happened. Where it cannot, the run stops and names the two things that work: start a new session, or pick a model with a larger window. OpenRouter is deliberately on that path, because it truncates from the middle of a conversation, and in an agentic transcript the middle is where the evidence lives.
+**Context.** Where the provider can summarise, NightWarden asks for that rather than letting the request be refused, and the transcript marks where it happened. Anthropic states support per model on its own catalog; OpenAI offers it on its reasoning models and publishes no flag, so that is what NightWarden reads. Where it cannot, the run stops and names the two things that work: start a new session, or pick a model with a larger window. OpenRouter is deliberately on that path, because it drops the middle of a conversation, and in an agentic transcript the middle is where the evidence lives.
 
 ---
 
@@ -472,10 +472,10 @@ Anything that must be replayed to a third party is encrypted rather than hashed,
 | `HOST`                                        | no       | Bind address (default `127.0.0.1`)                                                                                                                                                                                               |
 | `NIGHTWARDEN_LOG_LEVEL`                       | no       | Pino level (default `info`)                                                                                                                                                                                                      |
 | `NIGHTWARDEN_FRONTEND_DIST`                   | no       | Directory holding the built frontend. The build embeds it beside the API bundle, so this is an override for an unusual layout, not something an install sets                                                                     |
-| `NIGHTWARDEN_LLM_PROVIDER`                    | no       | `anthropic` or `openrouter`. No default: leave unset and pick in Settings                                                                                                                                                        |
-| `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`    | no       | Seeds the database on first boot only, alongside the matching provider and model                                                                                                                                                 |
-| `ANTHROPIC_MODEL` / `OPENROUTER_MODEL`        | no       | Model id. No default: an unpicked model blocks investigations rather than guessing one                                                                                                                                           |
-| `ANTHROPIC_BASE_URL` / `OPENROUTER_BASE_URL`  | no       | Override for a gateway or proxy                                                                                                                                                                                                  |
+| `NIGHTWARDEN_LLM_PROVIDER`                    | no       | `anthropic`, `openai` or `openrouter`. No default: leave unset and pick in Settings                                                                                                                                              |
+| `<PROVIDER>_API_KEY`                          | no       | `ANTHROPIC_`, `OPENAI_` or `OPENROUTER_`. Seeds the database on first boot only, alongside the matching provider and model                                                                                                       |
+| `<PROVIDER>_MODEL`                            | no       | Model id. No default: an unpicked model blocks investigations rather than guessing one                                                                                                                                           |
+| `<PROVIDER>_BASE_URL`                         | no       | Override for a gateway or proxy                                                                                                                                                                                                  |
 | `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`             | no       | Image the Docker install command hands out                                                                                                                                                                                       |
 | `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE`         | no       | Image the Kubernetes manifest hands out                                                                                                                                                                                          |
 | `PROMETHEUS_URL`, `PROMETHEUS_AUTH_HEADER`    | no       | Seeds a metrics source on first boot only. Probed before it saves                                                                                                                                                                |
@@ -499,7 +499,7 @@ Anything that must be replayed to a third party is encrypted rather than hashed,
 
 ## Development
 
-Node.js 24 or newer, pnpm 11 or newer, and an Anthropic or OpenRouter API key.
+Node.js 24 or newer, pnpm 11 or newer, and an Anthropic, OpenAI or OpenRouter API key.
 
 ```bash
 git clone https://github.com/PrabhatMattoo/NightWarden.git

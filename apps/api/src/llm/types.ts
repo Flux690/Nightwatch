@@ -1,11 +1,7 @@
 // Provider-neutral contract. The investigation domain talks to LLMs only
 // through these shapes, never to a vendor SDK directly.
 
-import type {
-  MessagePart,
-  NativeEnvelope,
-  ToolName,
-} from "@nightwarden/shared";
+import type { MessagePart, ToolName } from "@nightwarden/shared";
 
 export interface ToolSchema {
   // Checked against the shared list, so a tool the frontend draws by name cannot
@@ -39,7 +35,6 @@ export interface ChatResponse {
   // What the record stores for this turn, so the run never reads its own
   // history back out of the provider.
   parts: MessagePart[];
-  native?: NativeEnvelope;
 }
 
 // A live token fragment emitted while a turn streams. `thinking` is the model's
@@ -51,13 +46,12 @@ export interface StreamDelta {
 
 export type OnDelta = (delta: StreamDelta) => void;
 
-// One conversation turn: `parts` is the portable content, `native` the vendor's
-// own message for a byte-exact same-dialect resume, `content` the text rendering.
+// One conversation turn: `parts` is what the provider is sent and `content` its
+// text rendering. The same shape a transcript row carries, minus the row.
 export interface ProviderMessage {
   role: "user" | "assistant";
   content: string;
   parts: MessagePart[];
-  native?: NativeEnvelope;
 }
 
 // Reasoning is never switched off, so the model's weakest rung is as low as a
@@ -66,7 +60,8 @@ export interface ProviderCallOptions {
   minimalReasoning?: true;
 }
 
-// Implement this interface to add a new provider, then wire it into createProvider.
+// What the investigation domain talks to. One adapter implements it, over
+// whichever model the factory built.
 export interface LLMProvider {
   start(firstMessage: string): void;
   // Restore a prior transcript so the loop can continue a session. start() is

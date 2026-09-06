@@ -8,8 +8,8 @@ import type {
 } from "@nightwarden/shared";
 import { seedCompleteReport } from "./report-helper.js";
 
-// Stateful scripted provider: snapshot() accumulates messages so persist() in the loop
-// writes real session_transcript rows.
+// Scripted across runs, so a suspend and the resume after it drive one
+// conversation and the loop writes real session_transcript rows.
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";

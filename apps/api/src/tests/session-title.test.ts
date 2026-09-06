@@ -1,6 +1,6 @@
 import { harness, type Harness } from "./harness.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import OpenAI from "openai";
+import { APICallError } from "@ai-sdk/provider";
 import type { FrontendEvent, NormalizedAlert } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
@@ -29,7 +29,6 @@ function configuredConfig(): ResolvedLLMConfig {
     requestTimeoutMs: 10_000,
     reasoningLevel: null,
     reasoning: {
-      label: "Effort",
       levels: [
         { value: "high", label: "High" },
         { value: "medium", label: "Medium" },
@@ -110,7 +109,11 @@ describe("session title generation", () => {
         attempts++;
         if (attempts === 1) {
           return Promise.reject(
-            new OpenAI.APIConnectionError({ message: "down" }),
+            new APICallError({
+              message: "down",
+              url: "https://provider.example/v1/messages",
+              requestBodyValues: {},
+            }),
           );
         }
         const [schemas, onDelta, signal] = args;

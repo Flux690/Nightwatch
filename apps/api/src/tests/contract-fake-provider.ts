@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { MessagePart, WireDialect } from "@nightwarden/shared";
+import type { MessagePart } from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -109,10 +109,6 @@ function validateTranscript(messages: NativeMessage[]): void {
   }
 }
 
-// The fake's native shape mirrors Anthropic's blocks, so it claims that dialect
-// and exercises both halves of the replay contract.
-const DIALECT: WireDialect = "anthropic-messages";
-
 function nativeToParts(m: NativeMessage): MessagePart[] {
   if (typeof m.content === "string") {
     return m.content ? [{ type: "text", text: m.content }] : [];
@@ -181,13 +177,8 @@ function makeProvider(
     }),
 
     seed: vi.fn((history: ProviderMessage[]) => {
-      // Same split a real adapter makes: replay own-dialect messages verbatim,
-      // rebuild the rest from parts.
-      const native = history.map((m) =>
-        m.native?.dialect === DIALECT
-          ? (m.native.message as NativeMessage)
-          : partsToNative(m),
-      );
+      // Rebuilt from parts, which is all a real adapter is given.
+      const native = history.map(partsToNative);
       validateTranscript(native);
       messages.length = 0;
       messages.push(...native);
@@ -259,7 +250,6 @@ function makeProvider(
           toolUses: turn.toolUses,
           text: turn.text,
           parts: nativeToParts(message),
-          native: { dialect: DIALECT, message },
         });
       },
     ),
