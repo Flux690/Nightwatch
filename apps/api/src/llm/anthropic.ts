@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
-import { anthropicToolSchema } from "./schema-dialects.js";
+import { anthropicToolSchema } from "./tool-schema-dialects.js";
 import { resolveDefault } from "./reasoning.js";
 import { messagePartsToText } from "@nightwarden/shared";
 import type {

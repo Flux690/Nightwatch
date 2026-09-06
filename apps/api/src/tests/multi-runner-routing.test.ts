@@ -317,7 +317,7 @@ describe("multi-runner routing", () => {
 
   // A container that is not running is the finding, not a broken tool. It was
   // classed as system, which tells the agent its evidence proves nothing.
-  it("says a service the runner cannot find is an answer, not a fault", async () => {
+  it("names no cause for a target the runner cannot resolve", async () => {
     setScript([
       {
         text: "Reading logs.",
@@ -341,10 +341,12 @@ describe("multi-runner routing", () => {
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-missing");
     expect(answer).toMatchObject({ isError: true });
-    // And it says what that means, rather than naming the tool and stopping.
-    expect(answer?.type === "tool_result" && answer.output).toContain(
-      "That is an answer, not a fault",
-    );
+    // A wrong name and a stopped service reach the runner identically, so the
+    // message offers both and asserts neither.
+    const said = answer?.type === "tool_result" ? answer.output : "";
+    expect(said).toContain("named wrongly");
+    expect(said).toContain("not running");
+    expect(said).toContain("cannot tell you which");
   });
 
   it("a host command naming a runner reaches only that runner", async () => {

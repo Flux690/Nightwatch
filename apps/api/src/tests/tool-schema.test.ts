@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
+import { optionalText, parseInput } from "../agent/tools/schema.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 import { SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
 import {
   anthropicToolSchema,
   openAIToolSchema,
-} from "../llm/schema-dialects.js";
+} from "../llm/tool-schema-dialects.js";
 import type { ToolSchema } from "../llm/types.js";
 
 /* Every schema the build can offer, however it was produced. A hand-written one
@@ -36,6 +38,7 @@ const DIALECTS = [
       "$defs",
       "default",
       "minItems",
+      "format",
     ]),
   },
   {
@@ -250,6 +253,21 @@ describe("every tool schema is one a provider will accept", () => {
     expect(order.indexOf("evidenceIds")).toBeLessThan(order.indexOf("verdict"));
   });
 
+  it("keeps a format Anthropic accepts and drops one outside its list", () => {
+    const reduced = anthropicToolSchema({
+      type: "object",
+      properties: {
+        at: { type: "string", format: "date-time" },
+        colour: { type: "string", format: "color" },
+      },
+    });
+    expect(reduced.properties["at"]).toEqual({
+      type: "string",
+      format: "date-time",
+    });
+    expect(reduced.properties["colour"]).toEqual({ type: "string" });
+  });
+
   it("declares every required name as a property of the same object", () => {
     for (const schema of SCHEMAS) {
       for (const [path, node] of nodesOf(schema.input_schema, schema.name)) {
@@ -264,5 +282,46 @@ describe("every tool schema is one a provider will accept", () => {
         }
       }
     }
+  });
+});
+
+/* A widened dialect has no "optional": a field the model skips arrives as an
+   explicit null, so every optional shape a tool declares must read that. */
+describe("a skipped field reaches the handler as an omission", () => {
+  const OPTIONAL_SHAPES = {
+    text: optionalText,
+    enum: z.enum(["change", "signal"]).optional(),
+    integer: z.number().int().optional(),
+    boolean: z.boolean().optional(),
+    strings: z.array(z.string()).optional(),
+  } as const;
+
+  it.each(Object.entries(OPTIONAL_SHAPES))(
+    "reads a null %s as absent",
+    (_name, shape) => {
+      const parsed = parseInput(z.object({ field: shape }), { field: null });
+      expect(parsed.ok).toBe(true);
+      expect(parsed.ok && "field" in parsed.data).toBe(false);
+    },
+  );
+
+  it("reads one nested inside an array of objects", () => {
+    const schema = z.object({
+      timeline: z.array(
+        z.object({ at: z.string(), lane: OPTIONAL_SHAPES.enum }),
+      ),
+    });
+    const parsed = parseInput(schema, {
+      timeline: [{ at: "2026-01-14T03:12:45Z", lane: null }],
+    });
+    expect(parsed.ok && parsed.data["timeline"]).toEqual([
+      { at: "2026-01-14T03:12:45Z" },
+    ]);
+  });
+
+  it("still refuses a null the schema requires a value for", () => {
+    const parsed = parseInput(z.object({ field: z.string() }), { field: null });
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok === false && parsed.failure.isError).toBe(true);
   });
 });

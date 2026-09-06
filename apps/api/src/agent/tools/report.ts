@@ -71,9 +71,9 @@ const SUBMIT_REPORT_INPUT = z.object({
   timeline: z
     .array(
       z.object({
-        at: prose.meta({
+        at: z.iso.datetime({ offset: true }).meta({
           description:
-            "When it happened, as an ISO 8601 timestamp taken from a tool result, an alert, or a commit. Never a guess.",
+            "When it happened, as an ISO 8601 timestamp carrying a timezone, taken from a tool result, an alert, or a commit: 2026-01-14T03:12:45Z, or 2026-01-14T08:42:45+05:30. Never a guess.",
         }),
         what: prose.meta({
           description: "One sentence, in the past tense.",

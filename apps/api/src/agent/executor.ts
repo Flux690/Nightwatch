@@ -11,12 +11,12 @@ import type {
   ToolExecuteResult,
 } from "./tools/types.js";
 
-// Chooses the wording below and whether the call reads as a failure. Held here
-// rather than on the result: how a call travelled is not what it found.
+// Chooses the wording below. How a call travelled is not what it found, so it
+// stays here rather than on the result.
 type RunnerFailure = "retryable" | "expected_miss" | "system";
 
-/* Unreachable may answer next time; a routing mistake will not. A service the
-   runner cannot find is neither, but a finding: the container is not running. */
+/* Unreachable may answer next time; a routing mistake will not. A target the
+   runner cannot resolve is neither, and says nothing about why. */
 function classifyRunnerError(err: unknown): RunnerFailure {
   if (
     err instanceof RunnerUnreachableError ||
@@ -34,20 +34,20 @@ function isMissingTarget(err: unknown): boolean {
   return /^No running \w+ found for /.test(message);
 }
 
-// What the agent should do about it: a tool name and a raw message say what
-// broke and leave the next move unstated, across all 25 runner tools.
+// High signal only: the tool, the concrete thing that failed, and what that
+// leaves the agent able to say.
 function runnerFailureMessage(
   name: string,
   msg: string,
   failure: RunnerFailure,
 ): string {
   if (failure === "expected_miss") {
-    return `${name} found nothing to read: ${msg}. That is an answer, not a fault - the service is not running there. Confirm it with a list tool before concluding, and say so if it is the finding.`;
+    return `${name} read nothing: ${msg}. That is either a target named wrongly or one that is not running, and this call cannot tell you which. List what is there before concluding either.`;
   }
   if (failure === "retryable") {
-    return `${name} could not reach the server it needs: ${msg}. Nothing was read, so this says nothing about the service. Try again, or work from what another tool can tell you.`;
+    return `${name} could not reach the server it needs: ${msg}. Nothing was read, so try it again or work from what another tool can tell you.`;
   }
-  return `${name} failed: ${msg}. Nothing was read, so draw no conclusion from it. Check the arguments against the tool's description, and if they were right, this is a fault rather than a finding.`;
+  return `${name} failed: ${msg}. Check the arguments against the tool's description; if they were right this is a fault, and either way it is not a finding.`;
 }
 
 // Single dispatch + error-formatting primitive shared by the loop's read path and the
@@ -76,8 +76,8 @@ export async function executeRunnerTool(
     const msg = err instanceof Error ? err.message : String(err);
     const failure = classifyRunnerError(err);
     logger.warn({ tool: name, err, failure }, "runner tool failed");
-    // Every branch read nothing, a missing target included: that the absence
-    // is itself informative is what the message says, not what the flag says.
+    // Every branch read nothing, a missing target included, so each is an error
+    // whatever its message goes on to say about the absence.
     return { content: runnerFailureMessage(name, msg, failure), isError: true };
   }
 }

@@ -22,6 +22,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **A report timeline entry has to carry a real timestamp.** The `at` field took any non-empty string, so a moment could be written as "around 03:10" and the report rendered it as given, next to entries that were exact. It now has to be an ISO 8601 timestamp carrying a timezone, so every row on a timeline can be placed against the others. — `0.5.6`
+
 - **A tool call in the transcript is now one row naming the tool it called.** Every row used to carry a one-line summary of what the call returned, together with a status word such as "Permission denied" or "Unavailable". Two of those words shared a colour, the one for a query that found nothing was blank, and none of them said more than the result itself does. The row is now the tool's name, the service it addressed, and a chevron; what the call returned is one click inside it. — `0.5.5`
 
 - **Every limit a tool places on its arguments is now stated in that argument's own description.** A bound like "must be above zero" was declared in code but deleted before the model ever saw the schema, so a call could be refused for a rule the model was never told. Whole-number fields now say they are whole numbers, and every floor and ceiling is written where the model reads it. A test fails the build if a new field carries a bound its description does not state. — `0.5.3`
@@ -66,6 +68,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - An alert label can no longer close the harness tag and speak as NightWarden. Anything the harness sends the model is stripped of the marker first, so text arriving from a monitored host reaches the model as data rather than as an instruction wearing the system's voice. — `0.3.157` (`bea9083`)
 
 ### Fixed
+
+- **A tool call is no longer refused for an argument the model chose to leave out.** OpenRouter's schema dialect has no optional argument: every field is required, and an optional one is offered as "a value or null", so a model skipping a field sends null. NightWarden then rejected the call as malformed and asked the model to correct it, spending a turn each time on a call that was already right. A null now reads as the omission it means, wherever it appears in the arguments. — `0.5.6`
 
 - **A released write that the provider refused no longer reports as having run.** The report's actions list read a write as "Ran" unless the tool crashed or timed out, so a `403` from GitHub on an approved pull request, or a rejected token, showed alongside the writes that succeeded. Any released write that failed now reads as "Failed". — `0.5.5`
 

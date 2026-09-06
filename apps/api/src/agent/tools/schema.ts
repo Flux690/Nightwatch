@@ -95,10 +95,22 @@ type Parsed =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; failure: ParseFailure };
 
+/* A field the model skipped can arrive as an explicit null, at any depth, and
+   absence is what it means. Nothing declares null as a value it accepts. */
+function withoutNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutNulls);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) =>
+      entry === null ? [] : [[key, withoutNulls(entry)]],
+    ),
+  );
+}
+
 /* The harness rejecting an argument is the harness breaking, not a finding, so
    it carries the system class rather than reading as an answer. */
 export function parseInput(schema: z.ZodObject, input: unknown): Parsed {
-  const parsed = schema.safeParse(input);
+  const parsed = schema.safeParse(withoutNulls(input));
   if (parsed.success) return { ok: true, data: parsed.data };
   return {
     ok: false,

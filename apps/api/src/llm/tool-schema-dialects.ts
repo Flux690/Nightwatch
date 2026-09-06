@@ -21,12 +21,24 @@ const SHARED = [
   "default",
 ] as const;
 
-// Anthropic documents minItems at 0 and 1; OpenAI's strict mode refuses it.
-const ANTHROPIC = new Set<string>([...SHARED, "minItems"]);
+// Anthropic documents minItems at 0 and 1, and format at the values below;
+// OpenAI's strict mode refuses both keywords.
+const ANTHROPIC = new Set<string>([...SHARED, "minItems", "format"]);
 const OPENAI = new Set<string>(SHARED);
 
-/* `format` is on neither list: Anthropic accepts only a named set of values, so
-   letting the keyword through would let an unaccepted value through with it. */
+// Anthropic's published list. A value outside it is refused with the request.
+const ANTHROPIC_FORMATS = new Set([
+  "date-time",
+  "time",
+  "date",
+  "duration",
+  "email",
+  "hostname",
+  "uri",
+  "ipv4",
+  "ipv6",
+  "uuid",
+]);
 
 type Node = Record<string, unknown>;
 
@@ -44,6 +56,7 @@ function reduce(node: unknown, allowed: Set<string>): unknown {
     if (!allowed.has(key)) continue;
     // Anthropic expresses this one length constraint, and only at these values.
     if (key === "minItems" && value !== 0 && value !== 1) continue;
+    if (key === "format" && !ANTHROPIC_FORMATS.has(String(value))) continue;
     out[key] =
       key === "properties"
         ? reduceProperties(value, allowed)

@@ -10,7 +10,7 @@ import type {
   ToolName,
 } from "@nightwarden/shared";
 import { resolveDefault } from "./reasoning.js";
-import { openAIToolSchema } from "./schema-dialects.js";
+import { openAIToolSchema } from "./tool-schema-dialects.js";
 import type {
   ChatResponse,
   LLMProvider,
