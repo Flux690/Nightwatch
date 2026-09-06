@@ -5,7 +5,7 @@ import { isCitable } from "./evidence-source.js";
 // counted, so two readers cannot derive a different number for one call.
 const PREFIX = "e";
 
-function numberOf(evidenceId: string | undefined): number {
+export function evidenceNumber(evidenceId: string | undefined): number {
   if (evidenceId === undefined || !evidenceId.startsWith(PREFIX)) return 0;
   const n = Number(evidenceId.slice(PREFIX.length));
   return Number.isInteger(n) && n > 0 ? n : 0;
@@ -17,7 +17,7 @@ export function highestEvidenceNumber(rows: readonly TranscriptRow[]): number {
   for (const row of rows) {
     for (const part of row.parts) {
       if (part.type !== "tool_call") continue;
-      highest = Math.max(highest, numberOf(part.evidenceId));
+      highest = Math.max(highest, evidenceNumber(part.evidenceId));
     }
   }
   return highest;

@@ -91,6 +91,17 @@ export async function integrationOfKind(
   return (await integrationsOfKind(kind))[0] ?? null;
 }
 
+// Which kinds are connected, without decrypting any of them: the loop asks this
+// every turn to notice an integration arriving or going away mid-run.
+export async function connectedKinds(): Promise<Set<string>> {
+  const rows = await getDb()
+    .selectFrom("integrations")
+    .select("kind")
+    .distinct()
+    .execute();
+  return new Set(rows.map((r) => r.kind));
+}
+
 export async function integrationById(
   id: string,
 ): Promise<IntegrationRow | null> {

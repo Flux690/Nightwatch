@@ -36,12 +36,7 @@ import {
   notConfiguredMessage,
 } from "../config/readiness.js";
 import { loadConfig } from "../config/store.js";
-import {
-  getGitHubIntegration,
-  getLokiIntegration,
-  getSentryIntegration,
-} from "../integrations/store.js";
-import { getMetricsSource } from "../integrations/metrics/sources.js";
+import { connectedKinds, getGitHubIntegration } from "../integrations/store.js";
 import { getSession } from "../session/store.js";
 import {
   appendErrorMessage,
@@ -65,7 +60,7 @@ import {
 } from "../session/title.js";
 import { getFleetView } from "../fleet/connections.js";
 import { logger } from "../logger.js";
-import { messagePartsToText } from "@nightwarden/shared";
+import { messagePartsToText, METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 import type {
   AlertGroupContext,
   MessagePart,
@@ -81,19 +76,21 @@ import type {
   ProviderMessage,
   ToolResult,
   ToolSchema,
+  ToolUse,
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../session/gate-store.js";
 
 // What the fleet and the connected integrations currently allow. Read together,
 // because the prompt describing them is built from the same call.
 async function currentToolset(investigation: boolean): Promise<OfferedToolset> {
+  const kinds = await connectedKinds();
   return effectiveToolset(
     connectedPlatforms(),
     {
-      github: (await getGitHubIntegration()) !== null,
-      metrics: (await getMetricsSource()) !== null,
-      loki: (await getLokiIntegration()) !== null,
-      sentry: (await getSentryIntegration()) !== null,
+      github: kinds.has("github"),
+      metrics: METRICS_SOURCE_KINDS.some((k) => kinds.has(k)),
+      loki: kinds.has("loki"),
+      sentry: kinds.has("sentry"),
     },
     investigation,
   );
@@ -161,13 +158,53 @@ export type RunOutcome = "completed" | "suspended" | "stopped";
 // than looping; the time budget bounds it as well.
 const MAX_FINISH_PUSHBACKS = 5;
 
+// Null once the cap is spent, which writes the report up incomplete.
+type FinishGate = (gaps: RecordGap[]) => {
+  say: string;
+  pushbacks: number;
+  repeated: RecordGap["kind"][];
+} | null;
+
+function finishGatePolicy(): FinishGate {
+  let pushbacks = 0;
+  const seen = new Map<RecordGap["kind"], number>();
+  return (gaps) => {
+    if (pushbacks >= MAX_FINISH_PUSHBACKS) return null;
+    pushbacks++;
+    const repeated = gaps.flatMap((gap) => {
+      const times = (seen.get(gap.kind) ?? 0) + 1;
+      seen.set(gap.kind, times);
+      return times > 1 ? [gap.kind] : [];
+    });
+    return { say: recordGapsMessage(gaps), pushbacks, repeated };
+  };
+}
+
 // Consecutive turns that asked for nothing but unavailable tools. Three is
 // enough to tell a wrong guess from a model with nothing left to try.
 const MAX_BARREN_TURNS = 3;
 
-// Matching the finish gate. The write-up is the deliverable, so an attempt
-// costs far less than ending a run without one.
-const MAX_REPORT_ATTEMPTS = 5;
+// The toolset rides in because it changes mid-run and the ending names it.
+type BarrenTurns = (
+  asked: number,
+  refused: number,
+  offered: OfferedToolset,
+) => string | null;
+
+/* A turn of nothing but unavailable tools gets nothing done, and the model
+   cannot see it is looping, so only the time budget would stop it. */
+function barrenTurnPolicy(): BarrenTurns {
+  let barren = 0;
+  return (asked, refused, offered) => {
+    barren = refused === asked ? barren + 1 : 0;
+    if (barren < MAX_BARREN_TURNS) return null;
+    return `The last ${barren} turns asked only for tools this investigation does not have, so the run was ended rather than spend its budget repeating them. What was available: ${offeredSchemas(
+      offered,
+    )
+      .map((t) => t.name)
+      .join(", ")}.`;
+  };
+}
 
 // Past orientation and long before the budget matters. A check, not a repair:
 // nothing has failed, the run has simply read a lot and settled none of it.
@@ -176,6 +213,58 @@ const CALLS_BEFORE_RECORD_CHECK = 8;
 // Every check is a durable row the seed replays, so a run that never records
 // is bounded rather than asked for the rest of it.
 const MAX_RECORD_CHECKS = 3;
+
+interface RecordDebt {
+  // What the finish gate asks the record to account for.
+  unaccounted: () => number;
+  // Takes the record's own claim count, so a claim recorded this turn clears
+  // the debt before this turn's reads are counted against it.
+  check: (claims: number, answered: number) => string | null;
+}
+
+/* Recording is what clears the debt, so a run that settles something early and
+   then reads on is asked again. */
+function recordDebtPolicy(investigation: boolean): RecordDebt {
+  let sinceClaim = 0;
+  let claimsSeen = 0;
+  // The debt when the check last spoke, so it asks again after another eight
+  // rather than every turn.
+  let checkedAt = 0;
+  let checks = 0;
+  return {
+    unaccounted: () => sinceClaim,
+    check: (claims, answered) => {
+      if (claims > claimsSeen) {
+        claimsSeen = claims;
+        sinceClaim = 0;
+        checkedAt = 0;
+      }
+      sinceClaim += answered;
+      if (!investigation || checks >= MAX_RECORD_CHECKS) return null;
+      if (sinceClaim - checkedAt < CALLS_BEFORE_RECORD_CHECK) return null;
+      checks++;
+      checkedAt = sinceClaim;
+      return recordCheck(sinceClaim);
+    },
+  };
+}
+
+/* Calls that answered and could back a claim; a refused one taught nothing.
+   Counted from the turn because a harness turn orphans a tool_use from its result. */
+function citableAnswers(
+  uses: readonly ToolUse[],
+  results: readonly ToolResult[],
+): number {
+  const citable = new Set(
+    uses.filter((t) => isCitable(t.name)).map((t) => t.toolCallId),
+  );
+  return results.filter((r) => r.isError !== true && citable.has(r.toolCallId))
+    .length;
+}
+
+// Matching the finish gate. The write-up is the deliverable, so an attempt
+// costs far less than ending a run without one.
+const MAX_REPORT_ATTEMPTS = 5;
 
 /* Read from the tool's own answer: a follow-up run already holds a report, so
    the record's contents prove nothing about the turn that just ran. */
@@ -434,20 +523,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   }
 
   let turn = 0;
-  let finishPushbacks = 0;
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
-  let barrenTurns = 0;
-  /* Recording is what clears the debt, so a run that settles something early and
-     then reads on is asked again. */
-  let callsSinceClaim = 0;
-  let claimsSeen = 0;
-  // The debt when the check last spoke, so it asks again after another eight
-  // rather than every turn. Only recording clears the debt itself.
-  let checkedAt = 0;
-  let recordChecks = 0;
-  // How many finish-gate pushbacks each gap has survived, so a repeat is loud.
-  const gapsSeen = new Map<RecordGap["kind"], number>();
+  const finishGate = finishGatePolicy();
+  const barrenTurns = barrenTurnPolicy();
+  const recordDebt = recordDebtPolicy(opensInvestigation);
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
   const deadline = Date.now() + config.checkInAfterMs;
@@ -656,32 +736,31 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         log.info({ turn }, "chat finished with free-form response");
         return "completed";
       }
-      // Push back up to MAX_FINISH_PUSHBACKS times, then write up regardless:
-      // the status an unfinished record derives to is already the honest one.
-      const gaps = await recordGaps(sessionId, callsSinceClaim);
+      const gaps = await recordGaps(sessionId, recordDebt.unaccounted());
       // Read, not asked: the reconciler and the resolved webhook both stamp the
       // record, so the gate never makes a network call as a run happens to end.
       const recovery = await recoveryState(sessionId);
       if (gaps.length > 0) {
-        if (finishPushbacks < MAX_FINISH_PUSHBACKS) {
-          finishPushbacks++;
-          for (const gap of gaps) {
-            const seen = (gapsSeen.get(gap.kind) ?? 0) + 1;
-            gapsSeen.set(gap.kind, seen);
-            // A gap that outlives its own pushback is a broken tool or a
-            // description the model cannot act on, not a distracted model.
-            if (seen > 1) {
-              log.warn(
-                { turn, gap: gap.kind, pushbacks: seen },
-                "finish gate: gap survived a pushback",
-              );
-            }
+        const pushback = finishGate(gaps);
+        if (pushback !== null) {
+          // A gap that outlives its own pushback is a broken tool or a
+          // description the model cannot act on, not a distracted model.
+          if (pushback.repeated.length > 0) {
+            log.warn(
+              { turn, gaps: pushback.repeated },
+              "finish gate: a gap survived a pushback",
+            );
           }
           log.info(
-            { turn, finishPushbacks, gaps: gaps.map((g) => g.kind), recovery },
+            {
+              turn,
+              pushbacks: pushback.pushbacks,
+              gaps: gaps.map((g) => g.kind),
+              recovery,
+            },
             "finish gate: record incomplete, pushing back",
           );
-          sendHarnessMessage(provider, recordGapsMessage(gaps));
+          sendHarnessMessage(provider, pushback.say);
           await flush();
           continue;
         }
@@ -692,7 +771,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
-      const approvedWrites = await approvedWriteCount(sessionId);
+      const approvedWrites = approvedWriteCount(await gatedCalls(sessionId));
       /* Rewriting is lossy, so a write-up that still covers the record is kept.
          Recovery is not a reason: a cleared alert already reads as Resolved. */
       const record = await getRecord(sessionId);
@@ -728,26 +807,20 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       refusedNames.set(name, (refusedNames.get(name) ?? 0) + 1);
     }
 
-    // A turn of nothing but unavailable tools gets nothing done, and the model
-    // cannot see it is looping, so only the time budget would stop it.
-    barrenTurns =
-      refused.length === response.toolUses.length ? barrenTurns + 1 : 0;
-    if (barrenTurns >= MAX_BARREN_TURNS) {
+    const barren = barrenTurns(
+      response.toolUses.length,
+      refused.length,
+      offered,
+    );
+    if (barren !== null) {
       log.warn(
-        { turn, barrenTurns, refused: [...refusedNames.keys()] },
+        { turn, refused: [...refusedNames.keys()] },
         "run asked only for unavailable tools; ending it",
       );
       provider.appendToolResults(toolResults);
       stage("user", resultParts(toolResults));
       await flush();
-      await appendErrorMessage(
-        sessionId,
-        `The last ${barrenTurns} turns asked only for tools this investigation does not have, so the run was ended rather than spend its budget repeating them. What was available: ${offeredSchemas(
-          offered,
-        )
-          .map((t) => t.name)
-          .join(", ")}.`,
-      );
+      await appendErrorMessage(sessionId, barren);
       return "completed";
     }
 
@@ -821,34 +894,17 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
     }
 
-    // A claim recorded this turn settles what came before it, so the debt clears
-    // before this turn's own reads are counted against it.
     const claims = ((await getRecord(sessionId))?.hypotheses ?? []).length;
-    if (claims > claimsSeen) {
-      claimsSeen = claims;
-      callsSinceClaim = 0;
-      checkedAt = 0;
-    }
-    /* Calls that answered and could back a claim; a refused one taught nothing.
-       Counted here because a harness turn orphans a tool_use from its result. */
-    const evidenceCalls = new Set(
-      response.toolUses
-        .filter((t) => isCitable(t.name))
-        .map((t) => t.toolCallId),
+    const ask = recordDebt.check(
+      claims,
+      citableAnswers(response.toolUses, toolResults),
     );
-    callsSinceClaim += toolResults.filter(
-      (result) =>
-        result.isError !== true && evidenceCalls.has(result.toolCallId),
-    ).length;
-    if (
-      opensInvestigation &&
-      recordChecks < MAX_RECORD_CHECKS &&
-      callsSinceClaim - checkedAt >= CALLS_BEFORE_RECORD_CHECK
-    ) {
-      log.info({ turn, callsSinceClaim }, "reads unaccounted for; asking");
-      sendHarnessMessage(provider, recordCheck(callsSinceClaim));
-      recordChecks++;
-      checkedAt = callsSinceClaim;
+    if (ask !== null) {
+      log.info(
+        { turn, unaccounted: recordDebt.unaccounted() },
+        "reads unaccounted for; asking",
+      );
+      sendHarnessMessage(provider, ask);
     }
     await flush();
   }

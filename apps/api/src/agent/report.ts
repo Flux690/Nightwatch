@@ -9,6 +9,7 @@ import type {
   ReportConviction,
   ResolvedEvidence,
   TimelineEntry,
+  TranscriptRow,
   Verdict,
 } from "@nightwarden/shared";
 import {
@@ -20,7 +21,7 @@ import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
 import { evidenceKind, evidenceSource } from "./evidence-source.js";
-import { highestEvidenceNumber } from "./evidence-id.js";
+import { evidenceNumber } from "./evidence-id.js";
 
 // What a recording tool tells the model. A refusal is a correction, not a fault:
 // the act was rejected and the message says what to do instead.
@@ -47,10 +48,10 @@ interface ToolCall {
 
 // One walk of the durable transcript, which is the evidence trail. Handles are
 // read off it rather than counted, so this walk cannot disagree with another.
-async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
+function toolCallsFrom(messages: readonly TranscriptRow[]): ToolCall[] {
   const entries: ToolCall[] = [];
   const byToolCallId = new Map<string, ToolCall>();
-  for (const message of await getTranscriptRows(sessionId)) {
+  for (const message of messages) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
         const entry: ToolCall = {
@@ -82,13 +83,16 @@ async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
   return entries;
 }
 
+async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
+  return toolCallsFrom(await getTranscriptRows(sessionId));
+}
+
 /* Both halves matter: the provider's own id is never accepted, and a call still
    running shows nothing anyone can have read. */
-async function knownCitations(
-  sessionId: string,
+function knownCitations(
+  entries: readonly ToolCall[],
   ids: string[],
-): Promise<{ kept: string[]; pending: string[]; invented: string[] }> {
-  const entries = await toolCallsIn(sessionId);
+): { kept: string[]; pending: string[]; invented: string[] } {
   const byEvidenceId = new Map(
     entries.flatMap((e) =>
       e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
@@ -108,8 +112,11 @@ async function knownCitations(
   return { kept, pending, invented };
 }
 
-async function issuedRange(sessionId: string): Promise<string> {
-  const highest = highestEvidenceNumber(await getTranscriptRows(sessionId));
+function issuedRange(entries: readonly ToolCall[]): string {
+  const highest = entries.reduce(
+    (top, e) => Math.max(top, evidenceNumber(e.evidenceId)),
+    0,
+  );
   if (highest === 0) return "No call you have made can be cited yet.";
   return highest === 1
     ? "This investigation has e1."
@@ -118,11 +125,11 @@ async function issuedRange(sessionId: string): Promise<string> {
 
 /* Both kinds in one message: waiting for a result and picking a different id are
    different corrections, and one claim can get both wrong at once. */
-async function citationRefusal(
-  sessionId: string,
+function citationRefusal(
+  entries: readonly ToolCall[],
   pending: string[],
   invented: string[],
-): Promise<string> {
+): string {
   const said = ["Not recorded."];
   if (pending.length > 0) {
     const one = pending.length === 1;
@@ -132,7 +139,7 @@ async function citationRefusal(
   }
   if (invented.length > 0) {
     said.push(
-      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${await issuedRange(sessionId)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
+      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${issuedRange(entries)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
     );
   }
   said.push("Record this again citing only calls you have already read.");
@@ -197,8 +204,8 @@ function convictionOf(
 
 // A name cannot answer this: a refused call carries the name of a gated tool
 // and reached no gate. An answered question is not a write.
-export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
-  return (await toolCallsIn(sessionId)).flatMap((entry) => {
+function gatedCallsFrom(entries: readonly ToolCall[]): GatedCall[] {
+  return entries.flatMap((entry) => {
     const { approved, isError } = entry;
     if (entry.result === null || approved === undefined) return [];
     return [
@@ -215,11 +222,14 @@ export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
   });
 }
 
+export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
+  return gatedCallsFrom(await toolCallsIn(sessionId));
+}
+
 // Only the released ones: a declined write changed nothing, so it cannot put the
 // write-up behind. Monotonic, since a call already answered never un-answers.
-export async function approvedWriteCount(sessionId: string): Promise<number> {
-  return (await gatedCalls(sessionId)).filter((c) => c.decision === "approved")
-    .length;
+export function approvedWriteCount(calls: readonly GatedCall[]): number {
+  return calls.filter((c) => c.decision === "approved").length;
 }
 
 /* Compared against the record rather than a clock: the stamp is written by the
@@ -314,8 +324,9 @@ export async function recordHypothesis(
   sessionId: string,
   input: RecordHypothesisInput,
 ): Promise<RecordOutcome> {
-  const { kept, pending, invented } = await knownCitations(
-    sessionId,
+  const entries = await toolCallsIn(sessionId);
+  const { kept, pending, invented } = knownCitations(
+    entries,
     input.evidenceIds,
   );
   /* All of them or none: recording what survives changes the claim the model made
@@ -323,7 +334,7 @@ export async function recordHypothesis(
   if (pending.length > 0 || invented.length > 0 || kept.length === 0) {
     return {
       recorded: false,
-      message: await citationRefusal(sessionId, pending, invented),
+      message: await citationRefusal(entries, pending, invented),
     };
   }
   const evidenceIds = kept;
@@ -373,26 +384,23 @@ export async function submitReport(
 ): Promise<RecordOutcome> {
   // Answered, not merely known: a timeline entry pointing at a call that never
   // returned shows the reader nothing when they open it.
-  const resolve = async (id: string): Promise<string | undefined> =>
-    (await knownCitations(sessionId, [id])).kept[0];
+  const entries = await toolCallsIn(sessionId);
+  const resolve = (id: string): string | undefined =>
+    knownCitations(entries, [id]).kept[0];
   // The entry is kept when its citation is dropped: the lane describes the
   // moment rather than the call, so an unresolvable id must not cost it.
-  const timeline = await Promise.all(
-    input.timeline.map(async (entry) => {
-      const cited =
-        entry.evidenceId === undefined
-          ? undefined
-          : await resolve(entry.evidenceId);
-      return cited !== undefined
-        ? { ...entry, evidenceId: cited }
-        : {
-            at: entry.at,
-            what: entry.what,
-            ...(entry.lane !== undefined && { lane: entry.lane }),
-          };
-    }),
-  );
-  const approvedWrites = await approvedWriteCount(sessionId);
+  const timeline = input.timeline.map((entry) => {
+    const cited =
+      entry.evidenceId === undefined ? undefined : resolve(entry.evidenceId);
+    return cited !== undefined
+      ? { ...entry, evidenceId: cited }
+      : {
+          at: entry.at,
+          what: entry.what,
+          ...(entry.lane !== undefined && { lane: entry.lane }),
+        };
+  });
+  const approvedWrites = approvedWriteCount(gatedCallsFrom(entries));
   // Stamped inside the transaction, from the record being written against:
   // counted anywhere else it could name claims this report never saw.
   await amendRecord(sessionId, (record) => ({
