@@ -1,11 +1,9 @@
 import type {
   ApprovalStatus,
   ContinueCardItem,
-  HumanDecision,
   TranscriptRow,
   ToolCallState,
   ToolGate,
-  ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
 import {
@@ -29,7 +27,7 @@ export function targetKeyFromInput(
 // Called by both the transcript fetch and the live stream, so the two cannot
 // differ. It chooses nothing: the call's state says where in its life it is.
 export function toolCallCard(call: {
-  toolUseId: string;
+  toolCallId: string;
   toolName: string;
   input: Record<string, unknown>;
   state: ToolCallState;
@@ -37,11 +35,11 @@ export function toolCallCard(call: {
   // caller counts it, because only a walk of the transcript can.
   priorRuns?: number;
 }): TranscriptItem {
-  const { toolUseId, toolName, input, state } = call;
+  const { toolCallId, toolName, input, state } = call;
   const priorRuns = call.priorRuns ?? 0;
   return {
     kind: "tool_call",
-    toolUseId,
+    toolCallId,
     toolName,
     input,
     ...(priorRuns > 0 && { priorRuns }),
@@ -52,10 +50,10 @@ export function toolCallCard(call: {
 // The time-budget prompt, which no model asked for and which answers to nobody's
 // tool call. Its own function because its states are its own.
 export function continueCard(
-  toolUseId: string,
+  toolCallId: string,
   state: ContinueCardItem["state"],
 ): ContinueCardItem {
-  return { kind: "continue_card", toolUseId, state };
+  return { kind: "continue_card", toolCallId, state };
 }
 
 // Repeating a fix is rarely fixing it, and 3am is when that is easiest to
@@ -97,10 +95,8 @@ function toolCallState(
   result: string | undefined,
   gate: ToolGate | null,
   decided: ApprovalStatus | null,
-  toolOutcome: ToolOutcome | undefined,
 ): ToolCallState {
   if (gate !== null) return { phase: "awaiting_human", gate };
-  const classified = toolOutcome === undefined ? {} : { toolOutcome };
   // The decision was recorded when they were asked, so nothing has to work out
   // from a tool's name whether the words in a result are theirs.
   if (decided !== null)
@@ -108,10 +104,9 @@ function toolCallState(
       phase: "resolved",
       decision: decided,
       ...(result !== undefined && { result }),
-      ...classified,
     };
   if (result === undefined) return { phase: "running" };
-  return { phase: "complete", result, ...classified };
+  return { phase: "complete", result };
 }
 
 // Everything the frontend needs about a call is decided here, so the browser
@@ -127,26 +122,23 @@ export async function buildTranscript(
   // Not reconstructed from the tool's name: that cannot tell a call a person
   // released from one the harness refused without drawing a card.
   const decisionFor = (
-    toolUseId: string,
+    toolCallId: string,
     settled: boolean,
   ): ApprovalStatus | null =>
-    settled ? (decisions.get(toolUseId) ?? null) : null;
+    settled ? (decisions.get(toolCallId) ?? null) : null;
 
-  // One pass for all three: a result, how it went, and what a person said all
-  // arrive on the same part.
+  // One pass: what a call returned, whether it failed, and what a person said
+  // about it, each read from the part that records it.
   const results = new Map<string, string>();
-  const toolOutcomes = new Map<string, ToolOutcome>();
-  const decisions = new Map<string, HumanDecision>();
+  const decisions = new Map<string, ApprovalStatus>();
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool_result") {
         results.set(part.toolCallId, part.output);
-        if (part.toolOutcome !== undefined) {
-          toolOutcomes.set(part.toolCallId, part.toolOutcome);
-        }
-        if (part.humanDecision !== undefined) {
-          decisions.set(part.toolCallId, part.humanDecision);
-        }
+      } else if (part.type === "tool_approval") {
+        decisions.set(part.toolCallId, part.approved ? "approved" : "rejected");
+      } else if (part.type === "elicitation_answer") {
+        decisions.set(part.toolCallId, "answered");
       }
     }
   }
@@ -234,7 +226,8 @@ export async function buildTranscript(
           });
         }
       } else if (part.type === "tool_call") {
-        const awaiting = pending?.toolUseId === part.id ? pending : null;
+        const awaiting =
+          pending?.toolCallId === part.toolCallId ? pending : null;
         // "continue" cannot reach here: its id is synthetic and answers to no
         // turn, so it never matches a tool call part.
         const gate =
@@ -242,20 +235,15 @@ export async function buildTranscript(
             ? awaiting.kind
             : null;
         const decided = decisionFor(
-          part.id,
-          results.has(part.id) && awaiting === null,
+          part.toolCallId,
+          results.has(part.toolCallId) && awaiting === null,
         );
         items.push(
           toolCallCard({
-            toolUseId: part.id,
+            toolCallId: part.toolCallId,
             toolName: part.name,
             input: part.input,
-            state: toolCallState(
-              results.get(part.id),
-              gate,
-              decided,
-              toolOutcomes.get(part.id),
-            ),
+            state: toolCallState(results.get(part.toolCallId), gate, decided),
             priorRuns: priorRunsOf(part.name, part.input, approved),
           }),
         );
@@ -285,7 +273,7 @@ export async function buildTranscript(
   // No model asked for it, so the walk above has no tool call to project. The
   // interrupt row is the only record, or a reloaded session offers no way out.
   if (pending?.kind === "continue") {
-    items.push(continueCard(pending.toolUseId, { phase: "awaiting_human" }));
+    items.push(continueCard(pending.toolCallId, { phase: "awaiting_human" }));
   }
 
   // Last, because writing up is the last thing a run does.

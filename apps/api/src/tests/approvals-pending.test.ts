@@ -42,7 +42,7 @@ const RESTART_TURN = (): ScriptedTurn => ({
   text: "Restarting.",
   toolUses: [
     {
-      id: `tu-${randomUUID()}`,
+      toolCallId: `tu-${randomUUID()}`,
       name: "RestartDockerService",
       input: {
         target: "prod-1/web-01/web-01",

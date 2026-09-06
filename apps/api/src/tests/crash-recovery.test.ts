@@ -67,13 +67,13 @@ function turn(
 function callTurn(
   sessionId: string,
   seq: number,
-  id: string,
+  toolCallId: string,
   name: string,
   input: Record<string, unknown>,
 ): TranscriptRow {
   return turn(sessionId, seq, {
     content: `[tool: ${name}]`,
-    parts: [{ type: "tool_call", id, name, input }],
+    parts: [{ type: "tool_call", toolCallId, name, input }],
   });
 }
 
@@ -118,7 +118,7 @@ describe("recovering runs a restart interrupted", () => {
       [callTurn(sessionId, 0, "tu-gated", "RestartDockerService", {})],
       {
         sessionId,
-        toolUseId: "tu-gated",
+        toolCallId: "tu-gated",
         kind: "approval",
         completedResults: [],
         claimedAt: null,
@@ -152,7 +152,7 @@ describe("recovering runs a restart interrupted", () => {
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-read");
     expect(answering).toBeDefined();
-    expect(answering).toHaveProperty("toolOutcome");
+    expect(answering).toHaveProperty("isError");
     // Answered, so the seed keeps the exchange rather than unwinding past it.
     expect((await buildSeed(sessionId)).length).toBeGreaterThan(0);
     await waitFor(async () => !(await isRunning(sessionId)));
@@ -204,13 +204,13 @@ describe("recovering runs a restart interrupted", () => {
         parts: [
           {
             type: "tool_call",
-            id: "tu-read",
+            toolCallId: "tu-read",
             name: "ListDockerServices",
             input: {},
           },
           {
             type: "tool_call",
-            id: "tu-gate",
+            toolCallId: "tu-gate",
             name: "RestartDockerService",
             input: { target: "prod-1/web/api" },
           },

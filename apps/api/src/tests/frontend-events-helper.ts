@@ -72,14 +72,14 @@ export async function connectFrontendEvents<
 // stream carries whole cards, so a completed call is a phase, not an event type.
 export function toolCallReached(
   events: FrontendEventFrame[],
-  toolUseId: string,
+  toolCallId: string,
   phase: "running" | "complete" | "awaiting_human" | "resolved",
 ): boolean {
   return events.some((e) => {
     if (e.type !== "TRANSCRIPT_ITEM") return false;
     // Frames arrive as parsed JSON; the item shape is the published contract.
     const item = e.payload["item"] as
-      { toolUseId?: string; state?: { phase?: string } } | undefined;
-    return item?.toolUseId === toolUseId && item.state?.phase === phase;
+      { toolCallId?: string; state?: { phase?: string } } | undefined;
+    return item?.toolCallId === toolCallId && item.state?.phase === phase;
   });
 }

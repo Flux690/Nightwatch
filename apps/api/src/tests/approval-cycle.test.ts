@@ -77,7 +77,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-sus-1",
+            toolCallId: "tu-sus-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -143,7 +143,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-apr-1",
+            toolCallId: "tu-apr-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -195,7 +195,7 @@ describe("durable approval interrupts", () => {
       events.some(
         (e) =>
           e.type === "HUMAN_INPUT_RESOLVED" &&
-          e.payload["toolUseId"] === "tu-apr-1",
+          e.payload["toolCallId"] === "tu-apr-1",
       ),
     );
 
@@ -213,13 +213,13 @@ describe("durable approval interrupts", () => {
        again by the resumed run, so a crash between them loses nor doubles it. */
     const answers = (await getTranscriptRows(sessionId)).flatMap((row) =>
       row.parts.flatMap((part) =>
-        part.type === "tool_result" && part.toolCallId === "tu-apr-1"
+        part.type === "tool_approval" && part.toolCallId === "tu-apr-1"
           ? [part]
           : [],
       ),
     );
     expect(answers).toHaveLength(1);
-    expect(answers[0]?.humanDecision).toBe("approved");
+    expect(answers[0]?.approved).toBe(true);
 
     // A report must exist for the route to answer, but the actions beside it
     // are independent of what it says.
@@ -236,7 +236,7 @@ describe("durable approval interrupts", () => {
     // gated, and no outcome on it says the user released it.
     expect(decisions).toHaveLength(1);
     expect(decisions[0]).toMatchObject({
-      toolUseId: "tu-apr-1",
+      toolCallId: "tu-apr-1",
       toolName: "RestartDockerService",
       target: "approval-host/web-01/web-01",
       decision: "approved",
@@ -251,7 +251,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-rej-1",
+            toolCallId: "tu-rej-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -313,13 +313,13 @@ describe("durable approval interrupts", () => {
     close();
   });
 
-  it("an approval with no decision is refused: it has exactly two toolOutcomes", async () => {
+  it("an approval with no decision is refused: it has exactly two answers", async () => {
     setScript([
       {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-ctx-1",
+            toolCallId: "tu-ctx-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -386,7 +386,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-409-1",
+            toolCallId: "tu-409-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -455,7 +455,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-h4-1",
+            toolCallId: "tu-h4-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -530,7 +530,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-busy-1",
+            toolCallId: "tu-busy-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -595,7 +595,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-val-1",
+            toolCallId: "tu-val-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -660,7 +660,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-rr-1",
+            toolCallId: "tu-rr-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -728,12 +728,12 @@ describe("durable approval interrupts", () => {
         text: "Checking then restarting.",
         toolUses: [
           {
-            id: "tu-mix-read",
+            toolCallId: "tu-mix-read",
             name: "ListDockerServices",
             input: {},
           },
           {
-            id: "tu-mix-gate",
+            toolCallId: "tu-mix-gate",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -809,7 +809,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting critical.",
         toolUses: [
           {
-            id: `tu-crit-${randomUUID()}`,
+            toolCallId: `tu-crit-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",
@@ -872,7 +872,7 @@ describe("durable approval interrupts", () => {
         text: "Restarting.",
         toolUses: [
           {
-            id: "tu-notmo-1",
+            toolCallId: "tu-notmo-1",
             name: "RestartDockerService",
             input: {
               target: "approval-host/web-01/web-01",

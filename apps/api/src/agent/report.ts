@@ -4,13 +4,11 @@
 import type {
   Conviction,
   GatedCall,
-  HumanDecision,
   Hypothesis,
   InvestigationRecord,
   ReportConviction,
   ResolvedEvidence,
   TimelineEntry,
-  ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
 import {
@@ -32,18 +30,18 @@ export interface RecordOutcome {
 }
 
 interface ToolCall {
-  toolUseId: string;
+  toolCallId: string;
   // Absent on a tool no claim may rest on, which is never issued one.
   evidenceId?: string;
   toolName: string;
   input: Record<string, unknown>;
   result: string | null;
-  // Absent when the call simply answered. Carried on the result part it belongs
-  // to, so one walk answers both what a call returned and how it went.
-  toolOutcome?: ToolOutcome;
+  // Carried on the result part it belongs to, so one walk answers both what a
+  // call returned and whether it failed.
+  isError?: boolean;
   // Absent unless a person was asked about this call, which is the only thing
   // that makes it a released write rather than a call the harness ran or refused.
-  humanDecision?: HumanDecision;
+  approved?: boolean;
   timestamp: string;
 }
 
@@ -51,12 +49,12 @@ interface ToolCall {
 // read off it rather than counted, so this walk cannot disagree with another.
 async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
   const entries: ToolCall[] = [];
-  const byToolUseId = new Map<string, ToolCall>();
+  const byToolCallId = new Map<string, ToolCall>();
   for (const message of await getTranscriptRows(sessionId)) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
         const entry: ToolCall = {
-          toolUseId: part.id,
+          toolCallId: part.toolCallId,
           ...(part.evidenceId !== undefined && {
             evidenceId: part.evidenceId,
           }),
@@ -66,16 +64,17 @@ async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
           timestamp: message.timestamp,
         };
         entries.push(entry);
-        byToolUseId.set(part.id, entry);
+        byToolCallId.set(part.toolCallId, entry);
       } else if (part.type === "tool_result") {
-        const entry = byToolUseId.get(part.toolCallId);
+        const entry = byToolCallId.get(part.toolCallId);
         if (entry) {
           entry.result = part.output;
-          if (part.toolOutcome !== undefined)
-            entry.toolOutcome = part.toolOutcome;
-          if (part.humanDecision !== undefined) {
-            entry.humanDecision = part.humanDecision;
-          }
+          if (part.isError === true) entry.isError = true;
+        }
+      } else if (part.type === "tool_approval") {
+        const entry = byToolCallId.get(part.toolCallId);
+        if (entry) {
+          entry.approved = part.approved;
         }
       }
     }
@@ -162,21 +161,18 @@ export async function resolveEvidence(
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
   for (const entry of await toolCallsIn(sessionId)) {
-    const { toolUseId, evidenceId, toolName, input, result, toolOutcome } =
-      entry;
+    const { toolCallId, evidenceId, toolName, input, result } = entry;
     if (evidenceId === undefined || !cited.has(evidenceId)) continue;
     if (result === null) continue;
     resolved.push({
       evidenceId,
-      toolUseId,
+      toolCallId,
       toolName,
       kind: evidenceKind(toolName),
       input,
       result,
-      ...(toolOutcome !== undefined && { toolOutcome }),
-      ...(entry.humanDecision !== undefined && {
-        humanDecision: entry.humanDecision,
-      }),
+      ...(entry.isError === true && { isError: true }),
+      ...(entry.approved !== undefined && { approved: entry.approved }),
     });
   }
   return resolved;
@@ -203,17 +199,16 @@ function convictionOf(
 // and reached no gate. An answered question is not a write.
 export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
   return (await toolCallsIn(sessionId)).flatMap((entry) => {
-    const { humanDecision, toolOutcome } = entry;
-    if (entry.result === null) return [];
-    if (humanDecision !== "approved" && humanDecision !== "rejected") return [];
+    const { approved, isError } = entry;
+    if (entry.result === null || approved === undefined) return [];
     return [
       {
-        toolUseId: entry.toolUseId,
+        toolCallId: entry.toolCallId,
         toolName: entry.toolName,
         target: targetKeyFromInput(entry.input),
         at: entry.timestamp,
-        decision: humanDecision,
-        ...(toolOutcome !== undefined && { toolOutcome }),
+        decision: approved ? "approved" : "rejected",
+        ...(isError === true && { isError: true }),
         result: entry.result,
       },
     ];
@@ -247,7 +242,7 @@ export function reportIsBehind(
 function lastExecutedAt(calls: Map<string, ToolCall>): string | null {
   let latest: string | null = null;
   for (const entry of calls.values()) {
-    if (entry.result === null || entry.humanDecision !== "approved") continue;
+    if (entry.result === null || entry.approved !== true) continue;
     if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
   }
   return latest;

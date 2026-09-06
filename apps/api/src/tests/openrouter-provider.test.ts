@@ -294,7 +294,7 @@ describe("OpenRouterProvider", () => {
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("ListDockerServices");
-    expect(response.toolUses[0].id).toBe("call-123");
+    expect(response.toolUses[0].toolCallId).toBe("call-123");
   });
 
   it("does not crash the run when tool-call arguments are malformed JSON", async () => {

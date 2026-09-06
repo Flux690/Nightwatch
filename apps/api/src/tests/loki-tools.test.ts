@@ -130,7 +130,7 @@ describe("Loki tools through the tool dispatch", () => {
     return {
       toolCallCeilingMs: 30_000,
       sessionId,
-      toolUseId: `tu-${sessionSeq}`,
+      toolCallId: `tu-${sessionSeq}`,
     };
   }
 
@@ -162,7 +162,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"}' },
       await toolContext(ALERT),
     );
-    expect(result.toolOutcome).toBe("permission");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
@@ -187,7 +187,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"} |= "error"' },
       await toolContext(ALERT),
     );
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
 
     const req = mock.requests[0]!;
     expect(req.path).toBe("/loki/api/v1/query_range");
@@ -303,7 +303,7 @@ describe("Loki tools through the tool dispatch", () => {
       await toolContext(ALERT),
     );
 
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("ISO 8601");
     // Corrected before any request: a bad window is not Loki's to answer.
     expect(mock.requests).toHaveLength(0);
@@ -373,7 +373,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: "{" },
       await toolContext(ALERT),
     );
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("parse error");
   });
 
@@ -404,7 +404,7 @@ describe("Loki tools through the tool dispatch", () => {
       await toolContext(null),
     );
 
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("shape this cannot read");
     expect(result.content).toContain("treat this as unknown");
   });

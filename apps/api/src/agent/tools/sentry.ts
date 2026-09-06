@@ -98,7 +98,7 @@ function notConfigured(): ToolExecuteResult {
   return {
     content:
       "Sentry integration is not configured. The user can connect it from the Integrations page. Continue without error-tracking evidence.",
-    toolOutcome: "permission",
+    isError: true,
   };
 }
 
@@ -106,17 +106,12 @@ function corrective(err: unknown): ToolExecuteResult {
   if (err instanceof SentryApiError) {
     return {
       content: `Sentry request failed. ${err.message}`,
-      toolOutcome:
-        err.code === "unauthorized" || err.code === "forbidden"
-          ? "permission"
-          : err.code === "network"
-            ? "retryable"
-            : "system",
+      isError: true,
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    toolOutcome: "system",
+    isError: true,
   };
 }
 
@@ -489,9 +484,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { issuesOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0
-          ? { content: result, toolOutcome: "expected_miss" }
-          : { content: result };
+        return kept.length === 0 ? { content: result } : { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -621,9 +614,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(omitted > 0 && { valuesOmitted: omitted }),
           note: notes.join(" "),
         };
-        return kept.length === 0
-          ? { content: result, toolOutcome: "expected_miss" }
-          : { content: result };
+        return kept.length === 0 ? { content: result } : { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -689,9 +680,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { releasesOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0
-          ? { content: result, toolOutcome: "expected_miss" }
-          : { content: result };
+        return kept.length === 0 ? { content: result } : { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -748,9 +737,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { commitsOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0
-          ? { content: result, toolOutcome: "expected_miss" }
-          : { content: result };
+        return kept.length === 0 ? { content: result } : { content: result };
       } catch (err) {
         return corrective(err);
       }

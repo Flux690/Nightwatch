@@ -278,7 +278,7 @@ export class AnthropicProvider implements LLMProvider {
         (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use",
       )
       .map((b) => ({
-        id: b.id,
+        toolCallId: b.id,
         name: b.name,
         // Anthropic types tool input as unknown; the loop narrows per tool.
         input: b.input as Record<string, unknown>,
@@ -289,10 +289,16 @@ export class AnthropicProvider implements LLMProvider {
     );
     const text = textBlock?.text ?? "";
 
+    const message: BetaMessageParam = {
+      role: "assistant",
+      content: response.content,
+    };
     return {
       stopReason: mapStopReason(response.stop_reason),
       toolUses,
       text,
+      parts: toParts(message),
+      native: { dialect: DIALECT, message },
     };
   }
 
@@ -363,9 +369,9 @@ export class AnthropicProvider implements LLMProvider {
       role: "user",
       content: results.map((r) => ({
         type: "tool_result" as const,
-        tool_use_id: r.tool_use_id,
+        tool_use_id: r.toolCallId,
         content: r.content,
-        ...(r.is_error && { is_error: true }),
+        ...(r.isError && { is_error: true }),
       })),
     });
   }
@@ -429,7 +435,7 @@ function toParts(m: BetaMessageParam): MessagePart[] {
     else if (b.type === "tool_use")
       parts.push({
         type: "tool_call",
-        id: b.id,
+        toolCallId: b.id,
         name: b.name,
         input: b.input as Record<string, unknown>,
       });
@@ -455,7 +461,7 @@ function toNativeMessage(m: ProviderMessage): BetaMessageParam {
     } else if (part.type === "tool_call") {
       blocks.push({
         type: "tool_use",
-        id: part.id,
+        id: part.toolCallId,
         name: part.name,
         input: part.input,
       });

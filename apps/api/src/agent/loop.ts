@@ -65,9 +65,11 @@ import {
 } from "../session/title.js";
 import { getFleetView } from "../fleet/connections.js";
 import { logger } from "../logger.js";
+import { messagePartsToText } from "@nightwarden/shared";
 import type {
   AlertGroupContext,
   MessagePart,
+  NativeEnvelope,
   NormalizedAlert,
   ToolName,
   TranscriptRow,
@@ -81,80 +83,6 @@ import type {
   ToolSchema,
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../session/gate-store.js";
-
-/* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider
-   snapshot loses both. The run knew them, so this puts them back. */
-type ResultAnnotation = Pick<ToolResult, "toolOutcome" | "humanDecision">;
-
-function stampOutcomes(
-  parts: MessagePart[],
-  annotations: ReadonlyMap<string, ResultAnnotation>,
-): MessagePart[] {
-  if (annotations.size === 0) return parts;
-  return parts.map((part) => {
-    if (part.type !== "tool_result") return part;
-    const noted = annotations.get(part.toolCallId);
-    if (noted === undefined) return part;
-    return {
-      ...part,
-      ...(noted.toolOutcome !== undefined && {
-        toolOutcome: noted.toolOutcome,
-      }),
-      ...(noted.humanDecision !== undefined && {
-        humanDecision: noted.humanDecision,
-      }),
-    };
-  });
-}
-
-// The seq a turn will be saved under, computed the way persistNewTurns computes
-// it below. Streaming happens first, so the frontend is told it in advance.
-function turnSeq(provider: LLMProvider, seqOffset: number): number {
-  return seqOffset + provider.snapshot().length;
-}
-
-async function persistNewTurns(
-  provider: LLMProvider,
-  sessionId: string,
-  fromCount: number,
-  seqOffset: number,
-  harnessTurns: ReadonlySet<number>,
-  toolOutcomes: ReadonlyMap<string, ResultAnnotation>,
-  interrupt?: PendingHumanInput,
-): Promise<number> {
-  const snap = provider.snapshot();
-  const built: TranscriptRow[] = [];
-  for (let i = fromCount; i < snap.length; i++) {
-    const m = snap[i];
-    if (!m) continue;
-    built.push({
-      sessionId,
-      seq: seqOffset + i,
-      kind: harnessTurns.has(i) ? "harness" : m.role,
-      content: m.content,
-      parts: stampOutcomes(m.parts, toolOutcomes),
-      ...(m.native && { native: m.native }),
-      timestamp: new Date().toISOString(),
-    });
-  }
-  // The one place a call is written down, so the one place it is numbered. A
-  // snapshot carries no handle, so the count continues from what is stored.
-  const newMessages = withEvidenceIds(
-    built,
-    highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1,
-  );
-  if (interrupt) {
-    await appendRowsAndPark(newMessages, interrupt);
-  } else {
-    await appendTranscriptRows(newMessages);
-  }
-  // A harness row draws nothing, so publishing it would only cost the frontend a
-  // transcript refetch that changes no pixel.
-  for (const message of newMessages) {
-    if (message.kind !== "harness") publishMessage(sessionId, message);
-  }
-  return snap.length;
-}
 
 // What the fleet and the connected integrations currently allow. Read together,
 // because the prompt describing them is built from the same call.
@@ -258,7 +186,7 @@ function reportRefusal(results: readonly ToolResult[]): string | null {
   if (submitted === undefined) {
     return "The report turn ended without calling SubmitInvestigationReport.";
   }
-  return submitted.toolOutcome === undefined ? null : "The report was refused.";
+  return submitted.isError === true ? "The report was refused." : null;
 }
 
 export interface RunSessionInput {
@@ -356,37 +284,58 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
     );
 
-  // Recorded as each message is sent: once the diff is persisted, a harness turn
-  // is indistinguishable from one the user typed.
-  const harnessTurns = new Set<number>();
+  // Rows this run has produced and not yet written, built from what the turn
+  // did: a field no wire format carries never has to be put back.
+  const pending: TranscriptRow[] = [];
+  let nextSeq = await getNextSeq(sessionId);
+  // Carried for the run rather than recounted, so a long investigation does not
+  // re-read its whole transcript to number one call.
+  let nextEvidence =
+    highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1;
 
-  // Held for the run, not the turn: a resumed turn's results are stamped from
-  // what the suspend parked rather than from tools this run ran.
-  const seenOutcomes = new Map<string, ResultAnnotation>();
-  const noteOutcomes = (results: readonly ToolResult[]): void => {
-    for (const result of results) {
-      if (
-        result.toolOutcome === undefined &&
-        result.humanDecision === undefined
-      ) {
-        continue;
-      }
-      seenOutcomes.set(result.tool_use_id, {
-        ...(result.toolOutcome !== undefined && {
-          toolOutcome: result.toolOutcome,
-        }),
-        ...(result.humanDecision !== undefined && {
-          humanDecision: result.humanDecision,
-        }),
-      });
+  const stage = (
+    kind: TranscriptRow["kind"],
+    parts: MessagePart[],
+    native?: NativeEnvelope,
+  ): void => {
+    pending.push({
+      sessionId,
+      seq: nextSeq++,
+      kind,
+      content: messagePartsToText(parts),
+      parts,
+      ...(native && { native }),
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const flush = async (interrupt?: PendingHumanInput): Promise<void> => {
+    if (pending.length === 0 && interrupt === undefined) return;
+    const stamped = withEvidenceIds(pending.splice(0), nextEvidence);
+    nextEvidence = stamped.next;
+    if (interrupt) await appendRowsAndPark(stamped.rows, interrupt);
+    else await appendTranscriptRows(stamped.rows);
+    // A harness row draws nothing, so publishing it costs a refetch that
+    // changes no pixel.
+    for (const row of stamped.rows) {
+      if (row.kind !== "harness") publishMessage(sessionId, row);
     }
   };
+
+  const resultParts = (results: readonly ToolResult[]): MessagePart[] =>
+    results.map((r) => ({
+      type: "tool_result",
+      toolCallId: r.toolCallId,
+      output: r.content,
+      ...(r.isError === true && { isError: true as const }),
+    }));
 
   // The one emitter of the marker, so also the door untrusted text arrives at:
   // an injected alert's labels are the sender's and must not close our tag.
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
-    provider.appendUserMessage(harnessTurn(stripHarnessMarker(text)));
-    harnessTurns.add(provider.snapshot().length - 1);
+    const marked = harnessTurn(stripHarnessMarker(text));
+    provider.appendUserMessage(marked);
+    stage("harness", [{ type: "text", text: marked }]);
   };
 
   // User declined a continue-request: replay the transcript and run one free-form
@@ -399,26 +348,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     );
     const provider = createProvider(systemPrompt, llm, apiKey);
 
-    let persistedCount = 0;
-    const seqOffset = (await getNextSeq(sessionId)) - (input.seed?.length ?? 0);
-    if (input.seed && input.seed.length > 0) {
-      provider.seed(input.seed);
-      persistedCount = input.seed.length;
-    }
+    if (input.seed && input.seed.length > 0) provider.seed(input.seed);
     log.info("time budget ended: user chose to end, running closing turn");
     try {
-      await chatWithRetries(provider, [], turnSeq(provider, seqOffset));
+      const closing = await chatWithRetries(provider, [], nextSeq);
+      stage("assistant", closing.parts, closing.native);
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
-    await persistNewTurns(
-      provider,
-      sessionId,
-      persistedCount,
-      seqOffset,
-      harnessTurns,
-      seenOutcomes,
-    );
+    await flush();
     if (signal?.aborted) {
       log.info("run stopped by user during the closing turn");
       return "stopped";
@@ -466,72 +404,34 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       : buildChatContext(fleetView, promptOptions, opensInvestigation);
   const provider = createProvider(systemPrompt, llm, apiKey);
 
-  let persistedCount = 0;
-  const seqOffset = (await getNextSeq(sessionId)) - (input.seed?.length ?? 0);
-
   if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
-    persistedCount = input.seed.length;
-    // Persist the new user turn immediately so the frontend shows it the moment
-    // it's sent, instead of waiting for the assistant's reply to flush both at once.
+    // Written immediately so the frontend shows the turn the moment it is sent,
+    // rather than waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
-      provider.appendUserMessage(stripHarnessMarker(input.userMessage));
-      persistedCount = await persistNewTurns(
-        provider,
-        sessionId,
-        persistedCount,
-        seqOffset,
-        harnessTurns,
-        seenOutcomes,
-      );
+      const text = stripHarnessMarker(input.userMessage);
+      provider.appendUserMessage(text);
+      stage("user", [{ type: "text", text }]);
+      await flush();
     } else if (input.harnessMessage) {
       sendHarnessMessage(provider, input.harnessMessage);
-      persistedCount = await persistNewTurns(
-        provider,
-        sessionId,
-        persistedCount,
-        seqOffset,
-        harnessTurns,
-        seenOutcomes,
-      );
+      await flush();
     }
   } else {
     // An alert has no human to type the first turn, so NightWarden writes it and
     // marks it as its own. A person's own first message is theirs.
-    provider.start(
-      input.userMessage !== undefined
-        ? stripHarnessMarker(input.userMessage)
-        : openingTurn !== null
-          ? harnessTurn(openingTurn)
-          : "",
-    );
-    if (input.userMessage === undefined && openingTurn !== null) {
-      harnessTurns.add(0);
-    }
-    persistedCount = await persistNewTurns(
-      provider,
-      sessionId,
-      persistedCount,
-      seqOffset,
-      harnessTurns,
-      seenOutcomes,
-    );
+    const own = input.userMessage === undefined && openingTurn !== null;
+    const first = own
+      ? harnessTurn(openingTurn)
+      : stripHarnessMarker(input.userMessage ?? "");
+    provider.start(first);
+    stage(own ? "harness" : "user", [{ type: "text", text: first }]);
+    await flush();
     // Brand-new session only: refine the title in the background. Chat uses the
     // message; an alert, a compact summary.
     const titleSource = input.userMessage ?? buildAlertTitleSource(allAlerts);
     void generateSessionTitle(sessionId, titleSource, llm, apiKey);
   }
-
-  const persist = async (): Promise<void> => {
-    persistedCount = await persistNewTurns(
-      provider,
-      sessionId,
-      persistedCount,
-      seqOffset,
-      harnessTurns,
-      seenOutcomes,
-    );
-  };
 
   let turn = 0;
   let finishPushbacks = 0;
@@ -590,23 +490,24 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             )
           : reportRetry(problem),
       );
-      await persist();
+      await flush();
 
       let written: ChatResponse;
       try {
         written = await chatWithRetries(
           provider,
           [SUBMIT_REPORT_TOOL.schema],
-          turnSeq(provider, seqOffset),
+          nextSeq,
           runSignal,
           // One tool and one job, so the turn cannot come back as prose. It has:
           // a model once wrote the report as markdown and burned an attempt.
           SUBMIT_REPORT_TOOL.schema.name,
         );
+        stage("assistant", written.parts, written.native);
       } catch (err) {
         if (signal?.aborted) {
           log.info("run stopped by user while writing the report");
-          await persist();
+          await flush();
           // The card is mid-spinner on their screen, and the turn it was
           // spinning for is gone. It ends offering the one thing left to do.
           publishReportCard(sessionId, "failed");
@@ -615,14 +516,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         // The budget ran out with the record already complete. Ending without
         // the write-up is honest; pushing past the user's ceiling is not.
         if (outOfTime.aborted) {
-          await persist();
+          await flush();
           return await notWritten(
             "The time budget ran out before the report could be written.",
           );
         }
         throw err;
       }
-      await persist();
+      await flush();
       if (signal?.aborted) {
         log.info("run stopped by user while writing the report");
         publishReportCard(sessionId, "failed");
@@ -653,9 +554,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         log,
         alreadyRefused: refusedNames,
       });
-      noteOutcomes(toolResults);
-      if (toolResults.length > 0) provider.appendToolResults(toolResults);
-      await persist();
+      if (toolResults.length > 0) {
+        provider.appendToolResults(toolResults);
+        stage("user", resultParts(toolResults));
+      }
+      await flush();
 
       problem = reportRefusal(toolResults);
       if (problem === null) {
@@ -681,7 +584,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       log.info({ turn, change }, "offered toolset changed mid-run");
       offered = nowOffered;
       sendHarnessMessage(provider, change);
-      await persist();
+      await flush();
     }
     const toolSchemas = offeredSchemas(offered);
 
@@ -691,27 +594,28 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       response = await chatWithRetries(
         provider,
         toolSchemas,
-        turnSeq(provider, seqOffset),
+        nextSeq,
         runSignal,
       );
+      stage("assistant", response.parts, response.native);
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");
-        await persist();
+        await flush();
         return "stopped";
       }
       // The budget cut the turn short. That is the check-in below, not a
       // failure, so it leaves the loop rather than killing the run.
       if (outOfTime.aborted) {
         log.info({ turn }, "time budget reached mid-turn");
-        await persist();
+        await flush();
         break;
       }
       throw err;
     }
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user");
-      await persist();
+      await flush();
       return "stopped";
     }
     log.info(
@@ -723,7 +627,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
       "LLM responded",
     );
-    await persist();
+    await flush();
 
     if (response.stopReason === "refusal") {
       log.warn({ turn }, "model refused to continue");
@@ -778,7 +682,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             "finish gate: record incomplete, pushing back",
           );
           sendHarnessMessage(provider, recordGapsMessage(gaps));
-          await persist();
+          await flush();
           continue;
         }
         log.warn(
@@ -802,7 +706,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       );
     }
 
-    const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {
+    const execCtx: Omit<ToolDispatchContext, "toolCallId"> = {
       // Already clamped by what remains of the investigation, so no tool call
       // can outlive the budget it is being spent from.
       toolCallCeilingMs: Math.max(
@@ -834,7 +738,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         "run asked only for unavailable tools; ending it",
       );
       provider.appendToolResults(toolResults);
-      await persist();
+      stage("user", resultParts(toolResults));
+      await flush();
       await appendErrorMessage(
         sessionId,
         `The last ${barrenTurns} turns asked only for tools this investigation does not have, so the run was ended rather than spend its budget repeating them. What was available: ${offeredSchemas(
@@ -846,13 +751,11 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       return "completed";
     }
 
-    noteOutcomes(toolResults);
-
     // A turn's tools outlive the stop that arrives during them, so the gate is
     // reached already aborted; suspending here parks an interrupt on a dead run.
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user before the gate");
-      await persist();
+      await flush();
       return "stopped";
     }
 
@@ -862,20 +765,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       const isAskGate = gated.kind === "clarification";
       const interrupt: PendingHumanInput = {
         sessionId,
-        toolUseId: gated.tool.id,
+        toolCallId: gated.tool.toolCallId,
         kind: isAskGate ? "clarification" : "approval",
         completedResults: toolResults,
         claimedAt: null,
       };
-      persistedCount = await persistNewTurns(
-        provider,
-        sessionId,
-        persistedCount,
-        seqOffset,
-        harnessTurns,
-        seenOutcomes,
-        interrupt,
-      );
+      await flush(interrupt);
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
       const clarInput = isAskGate
         ? (gated.tool.input as {
@@ -887,7 +782,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       publishTranscriptItem({
         sessionId,
         item: toolCallCard({
-          toolUseId: gated.tool.id,
+          toolCallId: gated.tool.toolCallId,
           toolName: gated.tool.name,
           input: gated.tool.input,
           state: {
@@ -898,7 +793,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       });
       publishInterrupt({
         sessionId,
-        toolUseId: gated.tool.id,
+        toolCallId: gated.tool.toolCallId,
         toolName: gated.tool.name,
         input: gated.tool.input,
         kind: isAskGate ? "clarification" : "approval",
@@ -918,6 +813,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // Drained at the tool boundary, the earliest point the model can act on one,
     // as their own turn after the results.
     provider.appendToolResults(toolResults);
+    stage("user", resultParts(toolResults));
     // Already durable: the dispatcher wrote each one when it arrived. The inbox
     // exists to tell the model, which is a separate concern from keeping it.
     const injected = input.drainInbox?.(sessionId) ?? [];
@@ -936,12 +832,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     /* Calls that answered and could back a claim; a refused one taught nothing.
        Counted here because a harness turn orphans a tool_use from its result. */
     const evidenceCalls = new Set(
-      response.toolUses.filter((t) => isCitable(t.name)).map((t) => t.id),
+      response.toolUses
+        .filter((t) => isCitable(t.name))
+        .map((t) => t.toolCallId),
     );
     callsSinceClaim += toolResults.filter(
       (result) =>
-        result.toolOutcome === undefined &&
-        evidenceCalls.has(result.tool_use_id),
+        result.isError !== true && evidenceCalls.has(result.toolCallId),
     ).length;
     if (
       opensInvestigation &&
@@ -953,35 +850,27 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       recordChecks++;
       checkedAt = callsSinceClaim;
     }
-    await persist();
+    await flush();
   }
 
-  // No underlying tool call, so the synthetic toolUseId only keys the
+  // No underlying tool call, so the synthetic toolCallId only keys the
   // interrupt row - the resolver branches on kind, not the transcript.
   const continueId = randomUUID();
   const continueInterrupt: PendingHumanInput = {
     sessionId,
-    toolUseId: continueId,
+    toolCallId: continueId,
     kind: "continue",
     completedResults: [],
     claimedAt: null,
   };
-  persistedCount = await persistNewTurns(
-    provider,
-    sessionId,
-    persistedCount,
-    seqOffset,
-    harnessTurns,
-    seenOutcomes,
-    continueInterrupt,
-  );
+  await flush(continueInterrupt);
   publishTranscriptItem({
     sessionId,
     item: continueCard(continueId, { phase: "awaiting_human" }),
   });
   publishInterrupt({
     sessionId,
-    toolUseId: continueId,
+    toolCallId: continueId,
     toolName: "",
     input: {},
     kind: "continue",

@@ -7,10 +7,10 @@ import { revealToolCall } from "@/features/session/transcript/revealToolCall";
 // A bordered pill so it reads as a control at rest without spending hue, and
 // an arrow because it leaves this page for the transcript.
 export function CitationChip({
-  toolUseId,
+  toolCallId,
   toolName,
 }: {
-  toolUseId: string;
+  toolCallId: string;
   toolName: string;
 }): React.JSX.Element {
   return (
@@ -23,7 +23,7 @@ export function CitationChip({
             variant="outline"
             size="sm"
             className="shrink-0 rounded-full font-mono text-ink-subtle hover:border-primary-ink hover:bg-transparent hover:text-primary-ink"
-            onClick={() => revealToolCall(toolUseId)}
+            onClick={() => revealToolCall(toolCallId)}
           />
         }
       >

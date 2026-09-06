@@ -65,7 +65,7 @@ const RESPONSE: SessionReportResponse = {
   evidence: [
     {
       evidenceId: "e-stats",
-      toolUseId: "tu-stats",
+      toolCallId: "tu-stats",
       toolName: "GetDockerStats",
       kind: "metric",
       input: { target: "prod-1/encodr/payments-worker" },

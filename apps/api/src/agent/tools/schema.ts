@@ -104,7 +104,7 @@ export function parseInput(schema: z.ZodObject, input: unknown): Parsed {
     ok: false,
     failure: {
       content: `That call could not be made - ${fieldErrors(parsed.error)}. Correct the arguments against the tool's description and call it again.`,
-      toolOutcome: "system",
+      isError: true,
     },
   };
 }

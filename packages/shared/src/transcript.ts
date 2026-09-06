@@ -2,7 +2,6 @@
 // is suspended on. The browser draws these and never derives a call's state.
 
 import type { ApprovalStatus } from "./approvals.js";
-import type { ToolOutcome } from "./messages.js";
 
 // Named as the gate names it, so there is one vocabulary. It lives on the one
 // phase where it means anything, so a settled call cannot contradict it.
@@ -14,13 +13,8 @@ export type ToolCallState =
   | { phase: "running" }
   | { phase: "awaiting_human"; gate: ToolGate }
   // A human decided; `result` arrives once the tool that was waiting has run.
-  | {
-      phase: "resolved";
-      decision: ApprovalStatus;
-      result?: unknown;
-      toolOutcome?: ToolOutcome;
-    }
-  | { phase: "complete"; result: unknown; toolOutcome?: ToolOutcome };
+  | { phase: "resolved"; decision: ApprovalStatus; result?: unknown }
+  | { phase: "complete"; result: unknown };
 
 export interface UserTurnItem {
   kind: "user_turn";
@@ -60,7 +54,7 @@ export interface ThinkingItem {
 // in. Arguments travel whole in `input`, because a copy is a second source.
 export interface ToolCallItem {
   kind: "tool_call";
-  toolUseId: string;
+  toolCallId: string;
   toolName: string;
   input: Record<string, unknown>;
   // How many times this same write already ran, counted from the transcript.
@@ -73,7 +67,7 @@ export interface ToolCallItem {
 // interrupt row. So it carries two states rather than a tool's four.
 export interface ContinueCardItem {
   kind: "continue_card";
-  toolUseId: string;
+  toolCallId: string;
   state:
     | { phase: "awaiting_human" }
     | { phase: "resolved"; decision: ApprovalStatus };
@@ -117,5 +111,5 @@ export type TranscriptItem =
 
 // Stable identity for a card, so a live update finds the item it belongs to.
 export function transcriptItemKey(item: TranscriptItem): string {
-  return "toolUseId" in item ? item.toolUseId : item.id;
+  return "toolCallId" in item ? item.toolCallId : item.id;
 }

@@ -144,9 +144,9 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Evidence family.** Which system a call questioned: `docker`, `host`, `kubernetes`, `repo`, `github`, `metrics`, `loki`, `sentry`. Two calls from one family cannot corroborate each other.
 
-**Tool outcome.** How the tool behaved, absent when it simply answered: `expected_miss`, `retryable`, `permission`, `system`, `partial`. A file that is genuinely not there is a finding; a tool that broke proves nothing.
+**Tool failure.** Whether a call did the job it was asked to do, carried as `isError` on the result part. A query that matched nothing did its job and says so in its own output; a read with no file to read, a runner it could not reach or a token it was refused did not. What a call found is the output's business, so nothing beside it restates that.
 
-**Human decision.** What a person said at a gate: `approved`, `rejected`, `answered`. Recorded on the result part when they are asked, and absent from every call that never reached a gate.
+**Tool approval.** Whether a person released a write, carried as its own `tool_approval` part beside the result. Written only where someone was asked, so a call the harness refused - which names a gated tool and reached no gate - can never read as approval. An answer to a question is a separate `elicitation_answer` part, because being asked something and permitting a write are different acts.
 
 **Evidence kind.** What a citation is worth drawing as: `metric`, `logs`, `change`, `state`, `diff`, `text`. Declared on the tool, so the frontend looks up a renderer instead of sniffing the result.
 

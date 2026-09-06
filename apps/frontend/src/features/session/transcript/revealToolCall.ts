@@ -5,15 +5,15 @@ const EVENT = "nw:reveal-tool-call";
 
 export const REVEAL_MS = 1600;
 
-export function revealToolCall(toolUseId: string): void {
-  window.dispatchEvent(new CustomEvent(EVENT, { detail: toolUseId }));
+export function revealToolCall(toolCallId: string): void {
+  window.dispatchEvent(new CustomEvent(EVENT, { detail: toolCallId }));
   document
-    .getElementById(`tool-${toolUseId}`)
+    .getElementById(`tool-${toolCallId}`)
     ?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 export function onRevealToolCall(
-  handler: (toolUseId: string) => void,
+  handler: (toolCallId: string) => void,
 ): () => void {
   const listener = (e: Event): void => {
     handler((e as CustomEvent<string>).detail);

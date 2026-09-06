@@ -151,7 +151,7 @@ const SESSION_ID = "aaaabbbb-0000-4000-8000-000000000001";
 const CTX: ToolDispatchContext = {
   toolCallCeilingMs: 600_000,
   sessionId: SESSION_ID,
-  toolUseId: "static",
+  toolCallId: "static",
 };
 
 function tool(name: string): Tool {
@@ -210,7 +210,7 @@ describe("repo tools through registry dispatch", () => {
     await deleteGitHubIntegration();
     try {
       const result = await run("Read", { path: "src/app.ts" });
-      expect(result.toolOutcome).toBe("permission");
+      expect(result.isError).toBe(true);
       expect(result.content).toContain("Integrations page");
     } finally {
       await saveGitHubIntegration({
@@ -224,7 +224,7 @@ describe("repo tools through registry dispatch", () => {
 
   it("reads a file as numbered lines and unlocks editing it", async () => {
     const read = await run("Read", { path: "src/app.ts" });
-    expect(read.toolOutcome).toBeUndefined();
+    expect(read.isError).toBeUndefined();
     expect(read.content).toContain("1\tconst a = 1;");
 
     const edit = await run("Edit", {
@@ -232,7 +232,7 @@ describe("repo tools through registry dispatch", () => {
       old_string: "const a = 1;",
       new_string: "const a = 42;",
     });
-    expect(edit.toolOutcome).toBeUndefined();
+    expect(edit.isError).toBeUndefined();
     const change = parsedContent<{ path: string; hunks: DiffHunk[] }>(edit);
     expect(change.path).toBe("src/app.ts");
     const lines = change.hunks.flatMap((h) => h.lines);
@@ -245,11 +245,11 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("reads a file that is not there as a miss, not as a fault", async () => {
-    // The canonical case: docker-compose.yml when the repo has .yaml. The tool
-    // worked, so this must not render in the same red as a crashed tool.
+    // The canonical case: docker-compose.yml when the repo has .yaml. Nothing
+    // was read, so Edit stays locked and the message says which name missed.
     const result = await run("Read", { path: "docker-compose.yml" });
 
-    expect(result.toolOutcome).toBe("expected_miss");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("File not found");
   });
 
@@ -259,7 +259,7 @@ describe("repo tools through registry dispatch", () => {
       old_string: "fixture",
       new_string: "renamed",
     });
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("Read");
   });
 
@@ -281,7 +281,7 @@ describe("repo tools through registry dispatch", () => {
         parts: [
           {
             type: "tool_call",
-            id: "tu-earlier-read",
+            toolCallId: "tu-earlier-read",
             name: "Read",
             input: { path: "package.json" },
           },
@@ -296,7 +296,7 @@ describe("repo tools through registry dispatch", () => {
       { ...CTX, sessionId: resumed },
     );
 
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
   });
 
   it("fails loudly on a non-unique old_string and honours replace_all", async () => {
@@ -305,7 +305,7 @@ describe("repo tools through registry dispatch", () => {
       old_string: '"OLD"',
       new_string: '"NEW"',
     });
-    expect(ambiguous.toolOutcome).toBe("system");
+    expect(ambiguous.isError).toBe(true);
     expect(ambiguous.content).toContain("replace_all");
 
     const all = await run("Edit", {
@@ -314,7 +314,7 @@ describe("repo tools through registry dispatch", () => {
       new_string: '"NEW"',
       replace_all: true,
     });
-    expect(all.toolOutcome).toBeUndefined();
+    expect(all.isError).toBeUndefined();
     const allLines = parsedContent<{ hunks: DiffHunk[] }>(all).hunks.flatMap(
       (h) => h.lines,
     );
@@ -331,7 +331,7 @@ describe("repo tools through registry dispatch", () => {
       path: "docs/new-note.md",
       content: "hello\n",
     });
-    expect(created.toolOutcome).toBeUndefined();
+    expect(created.isError).toBeUndefined();
     const createdLines = parsedContent<{ hunks: DiffHunk[] }>(
       created,
     ).hunks.flatMap((h) => h.lines);
@@ -345,20 +345,20 @@ describe("repo tools through registry dispatch", () => {
       path: "package.json",
       content: "{}\n",
     });
-    expect(overwrite.toolOutcome).toBe("system");
+    expect(overwrite.isError).toBe(true);
     expect(overwrite.content).toContain("Read");
   });
 
   it("rejects paths that escape the repository", async () => {
     const result = await run("Read", { path: "../../etc/passwd" });
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("escapes the repository");
   });
 
   it("the first Bash result opens with the provision-time install note, later ones don't", async () => {
     // This fixture has no lockfile, so the note is the honest skip variant.
     const first = await run("Bash", { command: "echo one" });
-    expect(first.toolOutcome).toBeUndefined();
+    expect(first.isError).toBeUndefined();
     const firstOut = parsedContent<{ output: string }>(first).output;
     expect(firstOut).toContain("No Node lockfile");
     expect(firstOut).toContain("ok output");
@@ -371,7 +371,7 @@ describe("repo tools through registry dispatch", () => {
 
   it("execs in the container with its own timeout when that is under the ceiling", async () => {
     const result = await run("Bash", { command: "pnpm test" });
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
     const toolOutcome = parsedContent<{ exitCode: number; output: string }>(
       result,
     );
@@ -400,10 +400,10 @@ describe("repo tools through registry dispatch", () => {
 
   it("rejects a cwd that escapes and re-roots a valid one at /workspace", async () => {
     const escape = await run("Bash", { command: "ls", cwd: "../.." });
-    expect(escape.toolOutcome).toBe("system");
+    expect(escape.isError).toBe(true);
 
     const scoped = await run("Bash", { command: "ls", cwd: "src" });
-    expect(scoped.toolOutcome).toBeUndefined();
+    expect(scoped.isError).toBeUndefined();
     expect(dockerState.execCwds.at(-1)).toBe("/workspace/src");
   });
 });
@@ -422,7 +422,9 @@ describe("repo work and the time budget", () => {
     await updateConfig({ checkInAfterMs: 300 });
     scriptRunner.setScript([
       {
-        toolUses: [{ id: "t1", name: toolName, input: { path: "src/app.ts" } }],
+        toolUses: [
+          { toolCallId: "t1", name: toolName, input: { path: "src/app.ts" } },
+        ],
         text: "",
       },
       { toolUses: [], text: "Done." },

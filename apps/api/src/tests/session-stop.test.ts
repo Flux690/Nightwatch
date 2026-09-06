@@ -98,9 +98,13 @@ describe("POST /sessions/:id/stop", () => {
         {
           text: "Checking, then I need you.",
           toolUses: [
-            { id: "tu-read", name: "QueryMetrics", input: { query: "up" } },
             {
-              id: "tu-ask",
+              toolCallId: "tu-read",
+              name: "QueryMetrics",
+              input: { query: "up" },
+            },
+            {
+              toolCallId: "tu-ask",
               name: "AskUserQuestion",
               input: {
                 question: "Which cluster?",

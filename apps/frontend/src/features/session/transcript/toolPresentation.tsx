@@ -16,15 +16,10 @@ import { clock, dayClock, zoneName } from "@/shared/lib/time";
 import { isTool, parseTargetKey } from "@nightwarden/shared";
 import type { ToolName } from "@nightwarden/shared";
 import { asRecord, stringAt as inputString } from "@/shared/lib/toolResult";
-import type {
-  HumanDecision,
-  ToolCallItem,
-  ToolCallState,
-  ToolOutcome,
-} from "./types.js";
+import type { ToolCallItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
-import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
+import { formatBytes } from "./toolFindings.js";
 
 // Beyond this the body scrolls behind an explicit opt-in. The runner's own 64KB
 // cap is for safety; this much tighter one is for reading.
@@ -58,12 +53,6 @@ export function commandLineOf(input: Record<string, unknown>): string | null {
   return inputString(input, "command");
 }
 
-function outcomeOf(state: ToolCallState): ToolOutcome | undefined {
-  return state.phase === "complete" || state.phase === "resolved"
-    ? state.toolOutcome
-    : undefined;
-}
-
 function stringList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === "string")
@@ -85,48 +74,6 @@ function logList(value: unknown): string[] {
 }
 
 const MONO = "font-mono text-sm leading-relaxed";
-
-// The word carries the distinction and colour only reinforces it. A miss is
-// unlabelled on purpose, because the tool worked.
-const OUTCOME_LABEL: Record<ToolOutcome, string> = {
-  partial: "Some runners failed",
-  expected_miss: "",
-  retryable: "Unavailable",
-  permission: "Permission denied",
-  system: "Failed",
-};
-
-const OUTCOME_TONE: Record<ToolOutcome, string> = {
-  partial: "text-wait",
-  expected_miss: "text-muted-foreground",
-  retryable: "text-wait",
-  permission: "text-wait",
-  system: "text-fail",
-};
-
-// A decision, not a fault. Read off what the person said, because a declined
-// call has no outcome: the tool it names never executed.
-const DECLINED = { text: "Declined", tone: "text-muted-foreground" } as const;
-
-// Shared with the report so a cited result reads the same in both. The class
-// outranks the finding's tone: a result that never arrived says nothing.
-export function resultSummary(
-  toolName: string,
-  result: unknown,
-  toolOutcome: ToolOutcome | undefined,
-  humanDecision?: HumanDecision,
-): { text: string; tone: string } {
-  if (humanDecision === "rejected") return { ...DECLINED };
-  const finding = findingFor(toolName, result);
-  const tone =
-    toolOutcome !== undefined
-      ? OUTCOME_TONE[toolOutcome]
-      : finding?.tone === "bad"
-        ? "text-fail"
-        : "text-muted-foreground";
-  const label = toolOutcome === undefined ? "" : OUTCOME_LABEL[toolOutcome];
-  return { text: [label, finding?.text].filter(Boolean).join(" · "), tone };
-}
 
 // Capped text with an explicit, counted opt-in. "Show all" reveals exactly what
 // the runner returned, already redacted and already size-capped upstream.
@@ -349,11 +296,11 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
   useEffect(
     () =>
       onRevealToolCall((id) => {
-        if (id !== item.toolUseId) return;
+        if (id !== item.toolCallId) return;
         setRevealed(true);
         window.setTimeout(() => setRevealed(false), REVEAL_MS);
       }),
-    [item.toolUseId],
+    [item.toolCallId],
   );
   const result =
     item.state.phase === "complete"
@@ -364,26 +311,13 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
 
   const running = result === null;
   const target = targetOf(input) ?? inputString(input, "path");
-  const { text: summary, tone } = resultSummary(
-    toolName,
-    result,
-    outcomeOf(item.state),
-    item.state.phase === "resolved" && item.state.decision === "rejected"
-      ? "rejected"
-      : undefined,
-  );
-  // The one row naming its input rather than its result: what was asked is
-  // what a reader scanning back is looking for.
-  const line = isTool(toolName, "AskUserQuestion")
-    ? clipLine(inputString(input, "question") ?? "")
-    : summary;
 
   return (
     // Anchor for the report's evidence links: a citation there names the tool
     // call that produced it, and this is where that call lives.
     <div
       data-testid="tool-call"
-      id={`tool-${item.toolUseId}`}
+      id={`tool-${item.toolCallId}`}
       data-revealed={revealed || undefined}
       className={cn(
         "-mx-2 scroll-mt-6 rounded-md px-2 transition-colors duration-(--duration-slow)",
@@ -407,15 +341,14 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
           {/* Not stretched: the chevron belongs against the text it opens, so the
             row reads as one phrase rather than as a name and a control held
             apart by however much width the window happens to have. */}
-          <span className={cn("min-w-0 truncate text-sm", tone)}>
-            {running ? (
-              <span data-testid="tool-call-pending" className="animate-pulse">
-                running
-              </span>
-            ) : (
-              line
-            )}
-          </span>
+          {running && (
+            <span
+              data-testid="tool-call-pending"
+              className="min-w-0 text-sm text-ink-subtle animate-pulse"
+            >
+              running
+            </span>
+          )}
           {/* Always drawn, dimmed while the call is in flight. Appearing on
             completion moved the row's own text, and now that it sits in the
             reading line rather than at the margin, that jump is unmissable. */}

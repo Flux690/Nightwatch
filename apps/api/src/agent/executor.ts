@@ -5,16 +5,19 @@ import {
 } from "../fleet/transport.js";
 import { NoPlatformRunnerError } from "../fleet/router.js";
 import { logger } from "../logger.js";
-import type { ToolOutcome } from "@nightwarden/shared";
 import type {
   Tool,
   ToolExecuteContext,
   ToolExecuteResult,
 } from "./tools/types.js";
 
+// Chooses the wording below and whether the call reads as a failure. Held here
+// rather than on the result: how a call travelled is not what it found.
+type RunnerFailure = "retryable" | "expected_miss" | "system";
+
 /* Unreachable may answer next time; a routing mistake will not. A service the
    runner cannot find is neither, but a finding: the container is not running. */
-function classifyRunnerError(err: unknown): ToolOutcome {
+function classifyRunnerError(err: unknown): RunnerFailure {
   if (
     err instanceof RunnerUnreachableError ||
     err instanceof NoPlatformRunnerError
@@ -36,12 +39,12 @@ function isMissingTarget(err: unknown): boolean {
 function runnerFailureMessage(
   name: string,
   msg: string,
-  toolOutcome: ToolOutcome,
+  failure: RunnerFailure,
 ): string {
-  if (toolOutcome === "expected_miss") {
+  if (failure === "expected_miss") {
     return `${name} found nothing to read: ${msg}. That is an answer, not a fault - the service is not running there. Confirm it with a list tool before concluding, and say so if it is the finding.`;
   }
-  if (toolOutcome === "retryable") {
+  if (failure === "retryable") {
     return `${name} could not reach the server it needs: ${msg}. Nothing was read, so this says nothing about the service. Try again, or work from what another tool can tell you.`;
   }
   return `${name} failed: ${msg}. Nothing was read, so draw no conclusion from it. Check the arguments against the tool's description, and if they were right, this is a fault rather than a finding.`;
@@ -65,19 +68,16 @@ export async function executeRunnerTool(
       tool.platform,
       ctx.toolTimeoutMs,
     );
-    // A fan-out has three answers, not two: every server answered, some did, or
-    // none did. Each server's own reason rides in the envelope either way.
-    if (failed === 0) return { content: envelope };
-    return succeeded > 0
-      ? { content: envelope, toolOutcome: "partial" }
-      : { content: envelope, toolOutcome: "system" };
+    // A fan-out has three answers, not two, and only none-answered is a
+    // failure: the envelope names which server fell short either way.
+    if (failed === 0 || succeeded > 0) return { content: envelope };
+    return { content: envelope, isError: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const toolOutcome = classifyRunnerError(err);
-    logger.warn({ tool: name, err, toolOutcome }, "runner tool failed");
-    return {
-      content: runnerFailureMessage(name, msg, toolOutcome),
-      toolOutcome,
-    };
+    const failure = classifyRunnerError(err);
+    logger.warn({ tool: name, err, failure }, "runner tool failed");
+    // Every branch read nothing, a missing target included: that the absence
+    // is itself informative is what the message says, not what the flag says.
+    return { content: runnerFailureMessage(name, msg, failure), isError: true };
   }
 }

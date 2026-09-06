@@ -202,14 +202,14 @@ let toolUseCounter = 0;
 async function runOpr(
   input: Record<string, unknown>,
   sessionId = SESSION_ID,
-  toolUseId = `opr-${++toolUseCounter}`,
+  toolCallId = `opr-${++toolUseCounter}`,
 ): Promise<DispatchedToolResult> {
   const entry = findTool("OpenPullRequest");
   if (!entry) throw new Error("OpenPullRequest missing from registry");
   return await executeTool(entry, input, {
     toolCallCeilingMs: 15_000,
     sessionId,
-    toolUseId,
+    toolCallId,
   });
 }
 
@@ -245,7 +245,7 @@ describe("OpenPullRequest", () => {
       "opr-create",
     );
 
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
     const toolOutcome = parsedContent<{
       action: string;
       number: number;
@@ -290,7 +290,7 @@ describe("OpenPullRequest", () => {
     );
     prState.open = [];
 
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
     const toolOutcome = parsedContent<{ action: string; message: string }>(
       result,
     );
@@ -312,7 +312,7 @@ describe("OpenPullRequest", () => {
     );
     prState.rejectDraft = false;
 
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
     const toolOutcome = parsedContent<{ draft: boolean; message: string }>(
       result,
     );
@@ -333,7 +333,7 @@ describe("OpenPullRequest", () => {
 
     const result = await runOpr({ title: "Fix it" }, SESSION_ID, "opr-nodiff");
 
-    expect(result.toolOutcome).toBe("expected_miss");
+    expect(result.isError).toBeUndefined();
     const toolOutcome = parsedContent<{ action: string; message: string }>(
       result,
     );

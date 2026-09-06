@@ -15,57 +15,37 @@ export interface ReasoningPart {
 
 export interface ToolCallPart {
   type: "tool_call";
-  id: string;
+  toolCallId: string;
   name: string;
   input: Record<string, unknown>;
   // Optional because a tool no claim may rest on is never issued one.
   evidenceId?: string;
 }
 
-// Recorded rather than derived from a boolean, so a file under a different
-// name reads as a miss instead of in the same red as a crash.
-export const TOOL_OUTCOMES = [
-  // Some runners in a fan-out answered and some did not; the envelope names which.
-  "partial",
-  // The tool worked and the thing asked for is not there.
-  "expected_miss",
-  // Transient: a timeout, an unreachable runner, an upstream that may recover.
-  "retryable",
-  // Credentials or scope refused it, so widening access is the fix.
-  "permission",
-  // The tool itself broke.
-  "system",
-] as const;
-
-export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
-
-export function isToolOutcome(value: unknown): value is ToolOutcome {
-  return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
-}
-
-// The registry can say a tool needs releasing, but only this says anyone was
-// asked. Not a ToolOutcome, which says how the tool behaved.
-export const HUMAN_DECISIONS = ["approved", "rejected", "answered"] as const;
-
-export type HumanDecision = (typeof HUMAN_DECISIONS)[number];
-
-export function isHumanDecision(value: unknown): value is HumanDecision {
-  return typeof value === "string" && HUMAN_DECISIONS.some((d) => d === value);
-}
-
 export interface ToolResultPart {
   type: "tool_result";
   toolCallId: string;
   output: string;
-  // The wire fact a provider needs. Derived from `toolOutcome` by `isToolFailure`,
-  // so the two cannot disagree about whether something went wrong.
+  // Whether the tool failed. What it found is the output's own business: a
+  // query that matched nothing answers with an empty result and no error.
   isError?: boolean;
-  // Our own classification, which no wire format carries. Stamped from what the
-  // run knew, which is what lets it live with the call instead of beside it.
-  toolOutcome?: ToolOutcome;
-  // Absent for every call that never reached a gate, including one the harness
-  // refused because the tool was not offered, which is not approval.
-  humanDecision?: HumanDecision;
+}
+
+// Written only where a person was asked to release a write, which is the only
+// place approval can be known. A refused call never reached a gate.
+export interface ToolApprovalPart {
+  type: "tool_approval";
+  toolCallId: string;
+  approved: boolean;
+  reason?: string;
+}
+
+// The answer to an elicitation. Separate from an approval because being asked
+// a question and permitting a write are different acts.
+export interface ElicitationAnswerPart {
+  type: "elicitation_answer";
+  toolCallId: string;
+  text: string;
 }
 
 /* Drawn, never replayed: the block rides in the message's `native` envelope, so
@@ -75,7 +55,13 @@ export interface CompactionPart {
 }
 
 export type MessagePart =
-  TextPart | ReasoningPart | ToolCallPart | ToolResultPart | CompactionPart;
+  | TextPart
+  | ReasoningPart
+  | ToolCallPart
+  | ToolResultPart
+  | ToolApprovalPart
+  | ElicitationAnswerPart
+  | CompactionPart;
 
 // The wire shape a native message is written in, not the configured provider:
 // one provider can speak several dialects whose messages are not interchangeable.
@@ -104,6 +90,8 @@ export function messagePartsToText(parts: MessagePart[]): string {
     else if (part.type === "reasoning") out.push(part.text);
     else if (part.type === "tool_call") out.push(`[tool: ${part.name}]`);
     else if (part.type === "tool_result") out.push(part.output);
+    // An answer is what the person said; an approval is a decision the card draws.
+    else if (part.type === "elicitation_answer") out.push(part.text);
   }
   return out.join("\n");
 }

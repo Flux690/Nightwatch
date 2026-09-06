@@ -18,7 +18,7 @@ import {
   ReadRequiredError,
   SandboxUnavailableError,
 } from "../../sandbox/errors.js";
-import { classifyGitHubError, gitHubErrorDetail } from "./github.js";
+import { gitHubErrorDetail } from "./github.js";
 import { logger } from "../../logger.js";
 import { publishSandboxStatus } from "../../session/stream.js";
 import {
@@ -32,7 +32,6 @@ import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
 import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
-import type { ToolOutcome } from "@nightwarden/shared";
 import { apiTool } from "./schema.js";
 import type { Tool, ToolExecuteContext } from "./types.js";
 
@@ -69,10 +68,10 @@ async function readPathsFor(sessionId: string): Promise<string[]> {
   const rows = await getTranscriptRows(sessionId);
   // Any outcome at all means the call did not answer cleanly, `partial`
   // included: a fan-out that half answered showed the model half a file.
-  const toolOutcomes = new Set(
+  const failed = new Set(
     rows.flatMap((row) =>
       row.parts.flatMap((part) =>
-        part.type === "tool_result" && part.toolOutcome !== undefined
+        part.type === "tool_result" && part.isError === true
           ? [part.toolCallId]
           : [],
       ),
@@ -83,7 +82,7 @@ async function readPathsFor(sessionId: string): Promise<string[]> {
     for (const part of row.parts) {
       if (part.type !== "tool_call") continue;
       if (!PATH_UNLOCKING_TOOLS.has(part.name)) continue;
-      if (toolOutcomes.has(part.id)) continue;
+      if (failed.has(part.toolCallId)) continue;
       const path = part.input["path"];
       if (typeof path !== "string") continue;
       try {
@@ -163,24 +162,24 @@ async function workspaceOptionsFor(
 // class saying "expected miss" gives two answers to one question.
 function corrective(err: unknown): {
   content: string;
-  toolOutcome: ToolOutcome;
+  isError: true;
 } {
   if (err instanceof FileNotFoundError) {
-    return { content: err.message, toolOutcome: "expected_miss" };
+    return { content: err.message, isError: true };
   }
   if (err instanceof PathEscapeError) {
     return {
       content: `${err.message} Use a path relative to the repository root.`,
-      toolOutcome: "system",
+      isError: true,
     };
   }
   if (err instanceof ReadRequiredError) {
-    return { content: err.message, toolOutcome: "system" };
+    return { content: err.message, isError: true };
   }
   if (err instanceof GitHubApiError) {
     return {
       content: `${gitHubErrorDetail(err)} Continue the investigation without repo tools.`,
-      toolOutcome: classifyGitHubError(err),
+      isError: true,
     };
   }
   if (
@@ -189,12 +188,12 @@ function corrective(err: unknown): {
   ) {
     return {
       content: `${err.message} Repo tools are unavailable until the user fixes this (Integrations page). Continue the investigation without them.`,
-      toolOutcome: "system",
+      isError: true,
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    toolOutcome: "system",
+    isError: true,
   };
 }
 
@@ -203,13 +202,13 @@ function corrective(err: unknown): {
 async function runRepoTool<T>(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<T>,
-): Promise<{ content: T | string; toolOutcome?: ToolOutcome }> {
+): Promise<{ content: T | string; isError?: true }> {
   const options = await workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
     return {
       content:
         "GitHub integration is not configured. The user can connect a repository from the Integrations page. Continue without repo tools.",
-      toolOutcome: "permission",
+      isError: true,
     };
   }
   try {
@@ -448,7 +447,7 @@ export const REPO_TOOLS: Tool[] = [
       const { content } = result;
       return typeof content !== "string" &&
         content.action === "nothing_to_propose"
-        ? { ...result, toolOutcome: "expected_miss" }
+        ? result
         : result;
     },
   }),

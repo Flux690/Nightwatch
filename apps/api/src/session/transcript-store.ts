@@ -148,7 +148,7 @@ export async function appendRowsAndPark(
         .updateTable("sessions")
         .set({
           status: "action_required",
-          awaiting_tool_use_id: pendingHumanInput.toolUseId,
+          awaiting_tool_use_id: pendingHumanInput.toolCallId,
           awaiting_kind: pendingHumanInput.kind,
           awaiting_results: JSON.stringify(pendingHumanInput.completedResults),
           attempt_started_at: pendingHumanInput.claimedAt ?? null,
@@ -228,11 +228,11 @@ export async function getTranscriptRows(
 // synthetic id, which is what a continue request carries: it gates on no tool.
 export async function findToolCall(
   sessionId: string,
-  toolUseId: string,
+  toolCallId: string,
 ): Promise<{ name: string; input: Record<string, unknown> } | null> {
   for (const row of await getTranscriptRows(sessionId)) {
     for (const part of row.parts) {
-      if (part.type === "tool_call" && part.id === toolUseId) {
+      if (part.type === "tool_call" && part.toolCallId === toolCallId) {
         return { name: part.name, input: part.input };
       }
     }

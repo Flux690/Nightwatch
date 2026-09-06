@@ -104,7 +104,7 @@ describe("metrics tools through the tool dispatch", () => {
     return {
       toolCallCeilingMs: 30_000,
       sessionId,
-      toolUseId: `tu-${sessionSeq}`,
+      toolCallId: `tu-${sessionSeq}`,
     };
   }
 
@@ -143,7 +143,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       await toolContext(ALERT),
     );
-    expect(result.toolOutcome).toBe("permission");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("No metrics source is connected");
     expect(mock.requests).toHaveLength(0);
   });
@@ -160,7 +160,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up", at: "alert" },
       ctx,
     );
-    expect(atAlert.toolOutcome).toBeUndefined();
+    expect(atAlert.isError).toBeUndefined();
     expect(mock.requests[0]!.path).toBe("/api/v1/query");
     expect(mock.requests[0]!.params.get("time")).toBe(FIRED_AT);
     expect(mock.requests[0]!.params.get("query")).toBe("up");
@@ -192,7 +192,7 @@ describe("metrics tools through the tool dispatch", () => {
       await toolContext(ALERT),
     );
 
-    expect(result.toolOutcome).toBeUndefined();
+    expect(result.isError).toBeUndefined();
     expect(mock.requests[0]!.authorization).toMatch(
       /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-east-1\/aps\/aws4_request/,
     );
@@ -207,7 +207,7 @@ describe("metrics tools through the tool dispatch", () => {
     );
     // No series is a miss rather than a reading of zero: a metric that does not
     // exist answers identically, so the window is still echoed.
-    expect(result.toolOutcome).toBe("expected_miss");
+    expect(result.isError).toBeUndefined();
 
     const params = mock.requests[0]!.params;
     // 180min back, 30min forward, 12600s window -> ceil(12600/200) = 63s step.
@@ -265,7 +265,7 @@ describe("metrics tools through the tool dispatch", () => {
     );
 
     expect(String(result.content)).toMatch(/lookbackMinutes/);
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(mock.requests).toHaveLength(0);
   });
 
@@ -324,7 +324,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up{" },
       await toolContext(ALERT),
     );
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("parse error");
   });
 
@@ -382,7 +382,7 @@ describe("metrics tools through the tool dispatch", () => {
         { contains: "nonesuch" },
         await toolContext(ALERT),
       );
-      expect(result.toolOutcome).toBe("expected_miss");
+      expect(result.isError).toBeUndefined();
       expect(result.content).toContain("No metric names matched");
     });
 
@@ -418,7 +418,7 @@ describe("metrics tools through the tool dispatch", () => {
         { metric: "custom_thing" },
         await toolContext(ALERT),
       );
-      expect(result.toolOutcome).toBe("expected_miss");
+      expect(result.isError).toBeUndefined();
       expect(result.content).toContain("may still exist");
     });
 
@@ -496,7 +496,7 @@ describe("metrics tools through the tool dispatch", () => {
           await toolContext(ALERT),
         );
 
-        expect(result.toolOutcome).toBe("permission");
+        expect(result.isError).toBe(true);
         expect(result.content).toContain("not an absence of rules");
         expect(result.content).toContain("vmalert");
         expect(mock.requests).toHaveLength(0);
@@ -516,7 +516,7 @@ describe("metrics tools through the tool dispatch", () => {
           { metric: "x" },
           await toolContext(ALERT),
         );
-        expect(result.toolOutcome).toBe("permission");
+        expect(result.isError).toBe(true);
         expect(result.content).toContain("No metrics source is connected");
       }
     });
@@ -543,7 +543,7 @@ describe("metrics tools through the tool dispatch", () => {
         resultType: string;
         series: Array<{ values: Array<[number, string]> }>;
       };
-      expect(result.toolOutcome).toBeUndefined();
+      expect(result.isError).toBeUndefined();
       expect(content.resultType).toBe("scalar");
       expect(content.series).toHaveLength(1);
       expect(content.series[0]!.values).toEqual([[1757100000, "3"]]);
@@ -620,7 +620,7 @@ describe("metrics tools through the tool dispatch", () => {
       );
 
       const content = JSON.parse(result.content) as { note: string };
-      expect(result.toolOutcome).toBe("expected_miss");
+      expect(result.isError).toBeUndefined();
       expect(content.note).toContain("store-2 unreachable");
       expect(content.note).toContain("not a reading of zero");
     });
@@ -639,7 +639,7 @@ describe("metrics tools through the tool dispatch", () => {
         await toolContext(ALERT),
       );
 
-      expect(result.toolOutcome).toBe("system");
+      expect(result.isError).toBe(true);
       expect(result.content).toContain("shape this cannot read");
       expect(result.content).toContain("treat this as unknown");
     });

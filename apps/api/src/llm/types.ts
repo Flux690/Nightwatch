@@ -2,11 +2,9 @@
 // through these shapes, never to a vendor SDK directly.
 
 import type {
-  HumanDecision,
   MessagePart,
   NativeEnvelope,
   ToolName,
-  ToolOutcome,
 } from "@nightwarden/shared";
 
 export interface ToolSchema {
@@ -23,26 +21,25 @@ export interface ToolSchema {
 }
 
 export interface ToolUse {
-  id: string;
+  toolCallId: string;
   name: string;
   input: Record<string, unknown>;
 }
 
 export interface ToolResult {
-  tool_use_id: string;
+  toolCallId: string;
   content: string;
-  is_error?: boolean;
-  // Carried alongside the wire fields, never sent, so a result parked on the
-  // session row across a suspend comes back knowing how it went.
-  toolOutcome?: ToolOutcome;
-  // Set only where a person was asked, which is the only place it can be known.
-  humanDecision?: HumanDecision;
+  isError?: boolean;
 }
 
 export interface ChatResponse {
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "refusal";
   toolUses: ToolUse[];
   text: string;
+  // What the record stores for this turn, so the run never reads its own
+  // history back out of the provider.
+  parts: MessagePart[];
+  native?: NativeEnvelope;
 }
 
 // A live token fragment emitted while a turn streams. `thinking` is the model's
@@ -75,8 +72,6 @@ export interface LLMProvider {
   // Restore a prior transcript so the loop can continue a session. start() is
   // the empty-history special case; seed() is the general entry.
   seed(history: ProviderMessage[]): void;
-  // Current conversation in neutral form, for incremental persistence.
-  snapshot(): ProviderMessage[];
   // `forceTool` is the provider's own tool_choice, so the turn cannot come
   // back as prose. The report turn depends on that.
   chat(

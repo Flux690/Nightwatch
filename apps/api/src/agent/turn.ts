@@ -1,6 +1,5 @@
 import { executeTool, resolvePolicy } from "./tools/toolset.js";
 import { parseInput } from "./tools/schema.js";
-import { isToolFailure } from "./tools/types.js";
 import type { OfferedToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { publishTranscriptItem } from "../session/stream.js";
@@ -17,7 +16,7 @@ type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {
   // One per non-gated tool_use, so every block is answered even when a later one
-  // suspends. Each carries its toolOutcome, which the loop stamps onto the part.
+  // suspends. Each carries whether its tool failed, which the record stores.
   toolResults: ToolResult[];
   // The single gated call to suspend on, or null if the turn had none. At most
   // one per turn; subsequent gated calls are rejected inline.
@@ -89,9 +88,9 @@ export async function processToolUses(params: {
   toolUses: ToolUse[];
   offered: OfferedToolset;
   sessionId: string;
-  // toolUseId is per call, so the loop hands over a turn-scoped base context
-  // and each execution below completes it with its own tool_use id.
-  execCtx: Omit<ToolDispatchContext, "toolUseId">;
+  // The id is per call, so the loop hands over a turn-scoped base context and
+  // each execution below completes it with its own.
+  execCtx: Omit<ToolDispatchContext, "toolCallId">;
   log: typeof logger;
   // How many times each name has already been refused in this run, so a repeat
   // is answered as a repeat rather than as a fresh mistake.
@@ -115,10 +114,9 @@ export async function processToolUses(params: {
   const gateOrReject = (call: ToolUse, kind: GateKind): void => {
     if (gated !== null) {
       toolResults.push({
-        tool_use_id: call.id,
+        toolCallId: call.toolCallId,
         content: "Another gated action is pending. Retry after it resolves.",
-        is_error: true,
-        toolOutcome: "system",
+        isError: true,
       });
       return;
     }
@@ -142,10 +140,9 @@ export async function processToolUses(params: {
         const parsed = parseInput(elicitation.input, tool.input);
         if (!parsed.ok) {
           toolResults.push({
-            tool_use_id: tool.id,
+            toolCallId: tool.toolCallId,
             content: parsed.failure.content,
-            is_error: true,
-            toolOutcome: "system",
+            isError: true,
           });
           continue;
         }
@@ -159,10 +156,9 @@ export async function processToolUses(params: {
         "LLM requested unavailable tool",
       );
       toolResults.push({
-        tool_use_id: tool.id,
+        toolCallId: tool.toolCallId,
         content: unavailableMessage(tool.name, offeredNames, asked + 1),
-        is_error: true,
-        toolOutcome: "system",
+        isError: true,
       });
       continue;
     }
@@ -176,28 +172,27 @@ export async function processToolUses(params: {
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
-        toolUseId: tool.id,
+        toolCallId: tool.toolCallId,
         toolName: tool.name,
         input: tool.input,
         state: { phase: "running" },
       }),
     });
-    const evidenceId = evidenceIds.get(tool.id);
-    const { content, toolOutcome } = await executeTool(entry, tool.input, {
+    const evidenceId = evidenceIds.get(tool.toolCallId);
+    const { content, isError } = await executeTool(entry, tool.input, {
       ...execCtx,
-      toolUseId: tool.id,
+      toolCallId: tool.toolCallId,
       ...(evidenceId !== undefined && { evidenceId }),
     });
     toolResults.push({
-      tool_use_id: tool.id,
+      toolCallId: tool.toolCallId,
       content,
-      is_error: isToolFailure(toolOutcome),
-      ...(toolOutcome !== undefined && { toolOutcome }),
+      ...(isError === true && { isError: true }),
     });
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
-        toolUseId: tool.id,
+        toolCallId: tool.toolCallId,
         toolName: tool.name,
         input: tool.input,
         // The same string the transcript fetch would show, so a reload cannot
@@ -205,7 +200,7 @@ export async function processToolUses(params: {
         state: {
           phase: "complete",
           result: content,
-          ...(toolOutcome !== undefined && { toolOutcome }),
+          ...(isError === true && { isError: true }),
         },
       }),
     });

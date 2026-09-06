@@ -17,7 +17,7 @@ function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
   }
   for (let i = 0; i < rows.length; i++) {
     for (const part of rows[i]!.parts) {
-      if (part.type === "tool_call" && !answered.has(part.id)) {
+      if (part.type === "tool_call" && !answered.has(part.toolCallId)) {
         return rows.slice(0, i);
       }
     }

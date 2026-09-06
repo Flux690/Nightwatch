@@ -116,7 +116,7 @@ describe("Sentry tools through the tool dispatch", () => {
     return {
       toolCallCeilingMs: 30_000,
       sessionId,
-      toolUseId: `tu-${sessionSeq}`,
+      toolCallId: `tu-${sessionSeq}`,
     };
   }
 
@@ -146,7 +146,7 @@ describe("Sentry tools through the tool dispatch", () => {
 
   it("returns a corrective error without any request when not configured", async () => {
     const result = await executeTool(search, {}, await toolContext(ALERT));
-    expect(result.toolOutcome).toBe("permission");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
@@ -240,7 +240,7 @@ describe("Sentry tools through the tool dispatch", () => {
         const result = await executeTool(search, {}, await toolContext(ALERT));
         const body = parsedContent<SentryIssuesResult>(result);
 
-        expect(result.toolOutcome).toBe("expected_miss");
+        expect(result.isError).toBeUndefined();
         expect(body.projectsSearched).toBe("every project the token can reach");
         expect(body.environmentsSearched).toBe("every environment");
         expect(body.note).toContain("not that the service threw nothing");
@@ -477,7 +477,7 @@ describe("Sentry tools through the tool dispatch", () => {
         );
         const body = parsedContent<{ note: string }>(result);
 
-        expect(result.toolOutcome).toBe("expected_miss");
+        expect(result.isError).toBeUndefined();
         expect(body.note).toContain("no repository integration");
       });
     });
@@ -486,7 +486,7 @@ describe("Sentry tools through the tool dispatch", () => {
       mock.status = 403;
       const result = await executeTool(releases, {}, await toolContext(ALERT));
 
-      expect(result.toolOutcome).toBe("permission");
+      expect(result.isError).toBe(true);
       expect(result.content).toContain("project:read");
     });
   });
@@ -501,7 +501,7 @@ describe("Sentry tools through the tool dispatch", () => {
 
     const result = await executeTool(search, {}, await toolContext(ALERT));
 
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("other than a list of rows");
     expect(result.content).toContain("rather than as an absence");
   });

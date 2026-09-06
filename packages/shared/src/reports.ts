@@ -1,8 +1,6 @@
 // Two parts, two authors, two moments: the hypotheses the agent appends to as
 // it works, and the report written once at the end over a complete set of them.
 
-import type { HumanDecision, ToolOutcome } from "./messages.js";
-
 // Five, because without a home for "symptom of something upstream" the model
 // must overclaim or say nothing. Recorded once tested, so there is no "open".
 export type Verdict =
@@ -91,7 +89,7 @@ export interface TimelineEntry {
     toolName: string;
     target: string | null;
     decision: "approved" | "rejected";
-    toolOutcome?: ToolOutcome;
+    isError?: boolean;
   };
 }
 
@@ -138,17 +136,16 @@ export type EvidenceKind =
 export interface ResolvedEvidence {
   // Two ids, because a claim cites one and the frontend reveals the other.
   evidenceId: string;
-  toolUseId: string;
+  toolCallId: string;
   toolName: string;
   kind: EvidenceKind;
   input: Record<string, unknown>;
   result: string;
-  // A cited miss is often the evidence itself, while a cited crash proves
-  // nothing: the report must not read the two the same way.
-  toolOutcome?: ToolOutcome;
-  // Present only where a person was asked. A cited call they declined never ran,
-  // which is a different thing again from one that ran and found nothing.
-  humanDecision?: HumanDecision;
+  // A cited call that found nothing is often the evidence itself, while one
+  // that failed proves nothing: the report must not read the two the same way.
+  isError?: boolean;
+  // Present only where a person was asked, since a declined call never ran.
+  approved?: boolean;
 }
 
 // Computed from the trail on every read and never stored, so no tool input can
@@ -158,16 +155,15 @@ export type ReportConviction = Record<string, Conviction>;
 // Who decided is not recorded: there is one user, and a multi-tenant build
 // would get the name from the session that approved it.
 export interface GatedCall {
-  toolUseId: string;
+  toolCallId: string;
   toolName: string;
   // The service the write addressed, absent on a tool that names no target.
   target: string | null;
   // When it answered, which is what places it on the timeline.
   at: string;
   decision: "approved" | "rejected";
-  // Present only on a call that did not simply answer, and always the API's own
-  // reading of the tool: what the person said is `decision` above.
-  toolOutcome?: ToolOutcome;
+  // The API's reading of the tool; what the person said is `decision` above.
+  isError?: boolean;
   // Only worth reading on a failure: a success is its own output, which the
   // transcript already shows.
   result: string | null;

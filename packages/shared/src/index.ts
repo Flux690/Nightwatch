@@ -140,21 +140,15 @@ export type {
   ReasoningPart,
   ToolCallPart,
   ToolResultPart,
+  ToolApprovalPart,
+  ElicitationAnswerPart,
   CompactionPart,
   MessagePart,
   WireDialect,
   NativeEnvelope,
   CanonicalMessage,
-  ToolOutcome,
-  HumanDecision,
 } from "./messages.js";
-export {
-  messagePartsToText,
-  TOOL_OUTCOMES,
-  isToolOutcome,
-  HUMAN_DECISIONS,
-  isHumanDecision,
-} from "./messages.js";
+export { messagePartsToText } from "./messages.js";
 export type {
   ToolGate,
   ToolCallState,

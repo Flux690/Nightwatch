@@ -246,7 +246,7 @@ describe("multi-runner routing", () => {
         text: "Checking postgres.",
         toolUses: [
           {
-            id: "tu-1",
+            toolCallId: "tu-1",
             name: "GetDockerLogs",
             input: { target: "db-02/postgres/postgres" },
           },
@@ -268,7 +268,7 @@ describe("multi-runner routing", () => {
         text: "Checking nginx.",
         toolUses: [
           {
-            id: "tu-2",
+            toolCallId: "tu-2",
             name: "GetDockerStats",
             input: { target: "web-01/nginx/nginx" },
           },
@@ -290,7 +290,7 @@ describe("multi-runner routing", () => {
         text: "Checking unknown service.",
         toolUses: [
           {
-            id: "tu-3",
+            toolCallId: "tu-3",
             name: "GetDockerLogs",
             input: { target: "web-01/ghost-svc/ghost-svc" },
           },
@@ -317,13 +317,13 @@ describe("multi-runner routing", () => {
 
   // A container that is not running is the finding, not a broken tool. It was
   // classed as system, which tells the agent its evidence proves nothing.
-  it("reads a service the runner cannot find as a miss, not a fault", async () => {
+  it("says a service the runner cannot find is an answer, not a fault", async () => {
     setScript([
       {
         text: "Reading logs.",
         toolUses: [
           {
-            id: "tu-missing",
+            toolCallId: "tu-missing",
             name: "GetDockerLogs",
             input: { target: "web-01/nginx/nginx" },
           },
@@ -340,7 +340,7 @@ describe("multi-runner routing", () => {
     )
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-missing");
-    expect(answer).toMatchObject({ toolOutcome: "expected_miss" });
+    expect(answer).toMatchObject({ isError: true });
     // And it says what that means, rather than naming the tool and stopping.
     expect(answer?.type === "tool_result" && answer.output).toContain(
       "That is an answer, not a fault",
@@ -353,7 +353,7 @@ describe("multi-runner routing", () => {
         text: "Checking db-02 host memory.",
         toolUses: [
           {
-            id: "tu-4",
+            toolCallId: "tu-4",
             name: "GetHostMemory",
             input: { server: "db-02" },
           },
@@ -373,7 +373,7 @@ describe("multi-runner routing", () => {
     setScript([
       {
         text: "Checking host memory.",
-        toolUses: [{ id: "tu-5", name: "GetHostMemory", input: {} }],
+        toolUses: [{ toolCallId: "tu-5", name: "GetHostMemory", input: {} }],
       },
       FINISH_TURN,
     ]);
@@ -399,7 +399,7 @@ describe("multi-runner routing", () => {
         text: "Restarting postgres.",
         toolUses: [
           {
-            id: "tu-restart",
+            toolCallId: "tu-restart",
             name: "RestartDockerService",
             input: {
               target: "db-02/postgres/postgres",
@@ -473,7 +473,7 @@ describe("multi-runner routing", () => {
         text: "Checking redis.",
         toolUses: [
           {
-            id: "tu-cross",
+            toolCallId: "tu-cross",
             name: "GetDockerLogs",
             input: { target: "cache-01/redis/redis" },
           },
@@ -496,7 +496,7 @@ describe("multi-runner routing", () => {
         text: "Checking Kubernetes api-server.",
         toolUses: [
           {
-            id: "tu-k8s",
+            toolCallId: "tu-k8s",
             name: "GetK8sLogs",
             input: { target: "k8s-cluster-01/production/api-server" },
           },

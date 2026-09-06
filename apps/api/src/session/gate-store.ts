@@ -6,7 +6,7 @@ import type { ToolResult } from "../llm/types.js";
 // at most one. What a person decided lives on the transcript, which is durable.
 export interface PendingHumanInput {
   sessionId: string;
-  toolUseId: string;
+  toolCallId: string;
   kind: "approval" | "clarification" | "continue";
   completedResults: ToolResult[];
   claimedAt?: string | null;
@@ -14,7 +14,7 @@ export interface PendingHumanInput {
 
 interface RawRow {
   sessionId: string;
-  toolUseId: string | null;
+  toolCallId: string | null;
   kind: string | null;
   completedResults: string;
   claimedAt: string | null;
@@ -29,7 +29,7 @@ export function isHumanInputKind(
 // Untrusted on read despite being our own UPDATE (partial write, schema drift):
 // fail loudly on a bad kind or JSON rather than crashing deep in the resume path.
 function parseRow(row: RawRow): PendingHumanInput | undefined {
-  if (row.toolUseId === null || row.kind === null) return undefined;
+  if (row.toolCallId === null || row.kind === null) return undefined;
   if (!isHumanInputKind(row.kind)) {
     throw new Error(
       `sessions(${row.sessionId}) has unknown awaiting_kind "${row.kind}"`,
@@ -47,7 +47,7 @@ function parseRow(row: RawRow): PendingHumanInput | undefined {
   }
   return {
     sessionId: row.sessionId,
-    toolUseId: row.toolUseId,
+    toolCallId: row.toolCallId,
     kind: row.kind,
     completedResults,
     claimedAt: row.claimedAt,
@@ -63,7 +63,7 @@ export async function parkOnHumanInput(
   await db
     .updateTable("sessions")
     .set({
-      awaiting_tool_use_id: pending.toolUseId,
+      awaiting_tool_use_id: pending.toolCallId,
       awaiting_kind: pending.kind,
       awaiting_results: JSON.stringify(pending.completedResults),
       attempt_started_at: null,
@@ -114,7 +114,7 @@ export async function getPendingHumanInputBySessionId(
     .selectFrom("sessions")
     .select([
       "session_id as sessionId",
-      "awaiting_tool_use_id as toolUseId",
+      "awaiting_tool_use_id as toolCallId",
       "awaiting_kind as kind",
       "awaiting_results as completedResults",
       "attempt_started_at as claimedAt",

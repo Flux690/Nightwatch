@@ -215,7 +215,7 @@ function notConfigured(): ToolExecuteResult {
   return {
     content:
       "Loki integration is not configured. The user can connect it from the Integrations page. Continue without log evidence.",
-    toolOutcome: "permission",
+    isError: true,
   };
 }
 
@@ -224,21 +224,21 @@ function corrective(err: unknown): ToolExecuteResult {
     if (err.code === "bad_query") {
       return {
         content: `Loki rejected the query: ${err.message}. Fix the LogQL and retry.`,
-        toolOutcome: "system",
+        isError: true,
       };
     }
     // A shape this cannot read will not read differently on a second attempt.
     if (err.code === "bad_response") {
-      return { content: err.message, toolOutcome: "system" };
+      return { content: err.message, isError: true };
     }
     return {
       content: `Loki request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
-      toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",
+      isError: true,
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    toolOutcome: "system",
+    isError: true,
   };
 }
 
@@ -354,9 +354,7 @@ export const LOKI_TOOLS: Tool[] = [
           windowEnd: end.toISOString(),
           note: notes.join(" "),
         };
-        return returnedLines === 0
-          ? { content: result, toolOutcome: "expected_miss" }
-          : { content: result };
+        return returnedLines === 0 ? { content: result } : { content: result };
       } catch (err) {
         return corrective(err);
       }

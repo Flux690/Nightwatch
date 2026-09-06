@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { ToolOutcome } from "@nightwarden/shared";
 import { getGitHubIntegration } from "../../integrations/store.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
@@ -65,27 +64,6 @@ function isPermissionStatus(err: unknown): boolean {
   return (
     err instanceof GitHubApiError && (err.status === 403 || err.status === 404)
   );
-}
-
-// The code decides the class, not the fact that something threw: reconnecting
-// a token and waiting out a 502 are different next moves.
-export function classifyGitHubError(err: unknown): ToolOutcome {
-  if (!(err instanceof GitHubApiError)) return "system";
-  switch (err.code) {
-    case "invalid_token":
-    case "sso_required":
-      return "permission";
-    case "repo_not_found":
-      return "expected_miss";
-    case "network":
-      // 0 is the fetch never leaving; GitHub answers a scope it does not grant
-      // with 404 as readily as with 403, so both are the user's to widen.
-      if (err.status === 0 || err.status >= 500) return "retryable";
-      return err.status === 403 || err.status === 404 ? "permission" : "system";
-    // A shape this cannot read will not read differently on a second attempt.
-    case "bad_response":
-      return "system";
-  }
 }
 
 // The sentence follows the same code the class does, so what the model is told
@@ -185,7 +163,7 @@ export const GITHUB_TOOLS: Tool[] = [
         return {
           content:
             "GitHub integration is not configured. The user can connect a repository from the Integrations page. Continue without recent-change context.",
-          toolOutcome: "permission",
+          isError: true,
         };
       }
       const { repoOwner, repoName } = integration;
@@ -254,7 +232,7 @@ export const GITHUB_TOOLS: Tool[] = [
               : String(err);
         return {
           content: `${detail} Continue the investigation without recent-change context.`,
-          toolOutcome: classifyGitHubError(err),
+          isError: true,
         };
       }
     },

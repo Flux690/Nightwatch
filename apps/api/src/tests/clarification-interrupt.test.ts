@@ -74,7 +74,7 @@ describe("clarification interrupts", () => {
         text: "Need clarification.",
         toolUses: [
           {
-            id: "tu-clar-1",
+            toolCallId: "tu-clar-1",
             name: "AskUserQuestion",
             input: {
               question: "What is the likely root cause?",
@@ -140,7 +140,7 @@ describe("clarification interrupts", () => {
         text: "Need clarification.",
         toolUses: [
           {
-            id: "tu-ans-1",
+            toolCallId: "tu-ans-1",
             name: "AskUserQuestion",
             input: {
               question: "Which container is affected?",
@@ -193,7 +193,7 @@ describe("clarification interrupts", () => {
       events.some(
         (e) =>
           e.type === "HUMAN_INPUT_RESOLVED" &&
-          e.payload["toolUseId"] === "tu-ans-1",
+          e.payload["toolCallId"] === "tu-ans-1",
       ),
     );
 
@@ -203,7 +203,7 @@ describe("clarification interrupts", () => {
     // One ordinary call carrying what the person said, rather than a question
     // card that outlives its own answer.
     const asked = (await buildTranscript(sessionId)).filter(
-      (item) => item.kind === "tool_call" && item.toolUseId === "tu-ans-1",
+      (item) => item.kind === "tool_call" && item.toolCallId === "tu-ans-1",
     );
     expect(asked).toHaveLength(1);
     expect(asked[0]?.kind === "tool_call" && asked[0].state).toMatchObject({
@@ -221,7 +221,7 @@ describe("clarification interrupts", () => {
         text: "Which factors apply?",
         toolUses: [
           {
-            id: "tu-ms-1",
+            toolCallId: "tu-ms-1",
             name: "AskUserQuestion",
             input: {
               question: "Which factors apply?",
@@ -275,7 +275,7 @@ describe("clarification interrupts", () => {
       events.some(
         (e) =>
           e.type === "HUMAN_INPUT_RESOLVED" &&
-          e.payload["toolUseId"] === "tu-ms-1",
+          e.payload["toolCallId"] === "tu-ms-1",
       ),
     );
     expect(await hasPendingHumanInput(sessionId)).toBe(false);
@@ -295,7 +295,7 @@ describe("clarification interrupts", () => {
         text: "Too many choices.",
         toolUses: [
           {
-            id: "tu-over-1",
+            toolCallId: "tu-over-1",
             name: "AskUserQuestion",
             input: { question: "Which one?", options: tooMany },
           },
@@ -319,11 +319,10 @@ describe("clarification interrupts", () => {
     expect(await hasPendingHumanInput(sessionId)).toBe(false);
 
     const asked = (await buildTranscript(sessionId)).find(
-      (item) => item.kind === "tool_call" && item.toolUseId === "tu-over-1",
+      (item) => item.kind === "tool_call" && item.toolCallId === "tu-over-1",
     );
     expect(asked?.kind === "tool_call" && asked.state).toMatchObject({
       phase: "complete",
-      toolOutcome: "system",
     });
     // The message names the cap and says the free-text box covers the rest, so
     // the model can drop an option rather than guess at why it was refused.
@@ -338,7 +337,7 @@ describe("clarification interrupts", () => {
         text: "Need clarification.",
         toolUses: [
           {
-            id: "tu-clar-val-1",
+            toolCallId: "tu-clar-val-1",
             name: "AskUserQuestion",
             input: { question: "Confirm?", options: TEST_OPTIONS },
           },
@@ -400,7 +399,7 @@ describe("clarification interrupts", () => {
         text: "Clarifying.",
         toolUses: [
           {
-            id: "tu-rr-clar-1",
+            toolCallId: "tu-rr-clar-1",
             name: "AskUserQuestion",
             input: { question: "Is this recurring?", options: TEST_OPTIONS },
           },
@@ -465,7 +464,7 @@ describe("clarification interrupts", () => {
         text: "Ask then restart.",
         toolUses: [
           {
-            id: clarId,
+            toolCallId: clarId,
             name: "AskUserQuestion",
             input: {
               question: "Confirm restart?",
@@ -473,7 +472,7 @@ describe("clarification interrupts", () => {
             },
           },
           {
-            id: restart1Id,
+            toolCallId: restart1Id,
             name: "RestartDockerService",
             input: {
               target: "clar-host/web-01/web-01",
@@ -487,7 +486,7 @@ describe("clarification interrupts", () => {
         text: "Now restarting.",
         toolUses: [
           {
-            id: restart2Id,
+            toolCallId: restart2Id,
             name: "RestartDockerService",
             input: {
               target: "clar-host/web-01/web-01",

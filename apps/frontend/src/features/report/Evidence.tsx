@@ -3,7 +3,7 @@
 
 import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
-import { resultSummary } from "@/features/session/transcript/toolPresentation";
+import { findingFor } from "@/features/session/transcript/toolFindings";
 import {
   parseFileChange,
   type DiffLine,
@@ -222,6 +222,19 @@ function drawingFor(
   }
 }
 
+// How a cited result reads in one line. The transcript row names its tool and
+// nothing else, so this is the only place a finding is drawn as prose.
+function resultSummary(
+  toolName: string,
+  result: unknown,
+): { text: string; tone: string } {
+  const finding = findingFor(toolName, result);
+  return {
+    text: finding?.text ?? "",
+    tone: finding?.tone === "bad" ? "text-fail" : "text-muted-foreground",
+  };
+}
+
 export function Evidence({
   entry,
   alert,
@@ -235,15 +248,10 @@ export function Evidence({
 }): React.JSX.Element | null {
   if (repeat) return null;
 
-  const summary = resultSummary(
-    entry.toolName,
-    entry.result,
-    entry.toolOutcome,
-  );
-  // A call that answered nothing has nothing to draw: its outcome is the whole
+  const summary = resultSummary(entry.toolName, entry.result);
+  // A call that failed has nothing to draw: that it failed is the whole
   // reading, and it is what the line carries.
-  const drawing =
-    entry.toolOutcome === undefined ? drawingFor(entry, alert) : null;
+  const drawing = entry.isError === true ? null : drawingFor(entry, alert);
 
   if (drawing === null) {
     return summary.text === "" ? null : (

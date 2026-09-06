@@ -197,34 +197,35 @@ describe("API-local session store", () => {
     });
   });
 
-  it("carries a tool call's toolOutcome class into the rebuilt transcript", async () => {
-    // Stamped onto the part on the way to disk, because the provider message has
-    // nowhere to put it. Without it a reload draws a miss as a crash.
+  it("keeps a failed tool call's own flag, and shows its result on the card", async () => {
+    // Recorded on the part, because no wire format carries it. Without it a
+    // reload cannot tell a call that failed from one that answered.
     const m = meta();
     await seedAlertSession(m, [alert]);
     await appendTranscriptRows([
       {
         ...msg(m.sessionId, 0, { kind: "assistant" }),
         parts: [
-          { type: "tool_call", id: "tu-miss", name: "Read", input: {} },
+          { type: "tool_call", toolCallId: "tu-miss", name: "Read", input: {} },
           {
             type: "tool_result",
             toolCallId: "tu-miss",
             output: "not found",
-            toolOutcome: "expected_miss",
+            isError: true,
           },
         ],
       },
     ]);
 
+    const answering = (await getTranscriptRows(m.sessionId))
+      .flatMap((row) => row.parts)
+      .find((p) => p.type === "tool_result" && p.toolCallId === "tu-miss");
+    expect(answering).toMatchObject({ output: "not found", isError: true });
+
     const card = (await buildTranscript(m.sessionId)).find(
       (item) => item.kind === "tool_call",
     );
-    expect(card?.state).toEqual({
-      phase: "complete",
-      result: "not found",
-      toolOutcome: "expected_miss",
-    });
+    expect(card?.state).toEqual({ phase: "complete", result: "not found" });
   });
 
   it("rejects a duplicate (session_id, seq) so a hole can never be re-filled", async () => {
@@ -318,7 +319,7 @@ describe("API-local session store", () => {
       await seedAlertSession(waiting, [alert]);
       await appendRowsAndPark([msg(waiting.sessionId, 0)], {
         sessionId: waiting.sessionId,
-        toolUseId: "tu-float",
+        toolCallId: "tu-float",
         kind: "approval",
         completedResults: [],
         claimedAt: null,
@@ -341,7 +342,7 @@ describe("API-local session store", () => {
     await seedAlertSession(m, [alert]);
     await appendRowsAndPark([msg(m.sessionId, 0)], {
       sessionId: m.sessionId,
-      toolUseId: "tu-del-1",
+      toolCallId: "tu-del-1",
       kind: "approval",
       completedResults: [],
       claimedAt: null,
@@ -385,7 +386,12 @@ describe("API-local session store", () => {
         {
           ...msg(sessionId, 0, { kind: "assistant" }),
           parts: [
-            { type: "tool_call", id: "tu-seed", name: "Read", input: {} },
+            {
+              type: "tool_call",
+              toolCallId: "tu-seed",
+              name: "Read",
+              input: {},
+            },
             { type: "tool_result", toolCallId: "tu-seed", output: "ok" },
           ],
         },
@@ -429,7 +435,7 @@ describe("API-local session store", () => {
           parts: [
             {
               type: "tool_call",
-              id: "tu-exec",
+              toolCallId: "tu-exec",
               name: "RestartDockerService",
               input: { target: "prod-1/app/web" },
             },
@@ -764,25 +770,24 @@ describe("API-local session store", () => {
     // is stamped as the loop stamps it, so the handle returned is the stored one.
     async function cite(
       sessionId: string,
-      toolUseId: string,
+      toolCallId: string,
       seq: number,
     ): Promise<string> {
       const from =
         highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1;
-      await appendTranscriptRows(
-        withEvidenceIds(
-          [
-            {
-              ...msg(sessionId, seq, { kind: "assistant" }),
-              parts: [
-                { type: "tool_call", id: toolUseId, name: "Read", input: {} },
-                { type: "tool_result", toolCallId: toolUseId, output: "ok" },
-              ],
-            },
-          ],
-          from,
-        ),
+      const { rows } = withEvidenceIds(
+        [
+          {
+            ...msg(sessionId, seq, { kind: "assistant" }),
+            parts: [
+              { type: "tool_call", toolCallId, name: "Read", input: {} },
+              { type: "tool_result", toolCallId, output: "ok" },
+            ],
+          },
+        ],
+        from,
       );
+      await appendTranscriptRows(rows);
       return `e${from}`;
     }
 
@@ -790,7 +795,7 @@ describe("API-local session store", () => {
       const sessionId = await investigation();
       await appendRowsAndPark([msg(sessionId, 0)], {
         sessionId,
-        toolUseId: "tu-gate",
+        toolCallId: "tu-gate",
         kind: "approval",
         completedResults: [],
         claimedAt: null,

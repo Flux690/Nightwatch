@@ -28,9 +28,9 @@ export function highestEvidenceNumber(rows: readonly TranscriptRow[]): number {
 export function withEvidenceIds(
   rows: TranscriptRow[],
   from: number,
-): TranscriptRow[] {
+): { rows: TranscriptRow[]; next: number } {
   let next = from;
-  return rows.map((row) => ({
+  const stamped = rows.map((row) => ({
     ...row,
     parts: row.parts.map((part) =>
       part.type === "tool_call" && isCitable(part.name)
@@ -38,18 +38,19 @@ export function withEvidenceIds(
         : part,
     ),
   }));
+  return { rows: stamped, next };
 }
 
 export function evidenceIdsIn(
   rows: readonly TranscriptRow[],
 ): Map<string, string> {
-  const byToolUseId = new Map<string, string>();
+  const byToolCallId = new Map<string, string>();
   for (const row of rows) {
     for (const part of row.parts) {
       if (part.type === "tool_call" && part.evidenceId !== undefined) {
-        byToolUseId.set(part.id, part.evidenceId);
+        byToolCallId.set(part.toolCallId, part.evidenceId);
       }
     }
   }
-  return byToolUseId;
+  return byToolCallId;
 }

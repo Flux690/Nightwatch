@@ -306,16 +306,19 @@ export class OpenRouterProvider implements LLMProvider {
     );
 
     const choice = response.choices[0];
-    if (!choice) return { stopReason: "end_turn", toolUses: [], text: "" };
+    if (!choice) {
+      return { stopReason: "end_turn", toolUses: [], text: "", parts: [] };
+    }
 
-    if (thinking) this.thinkingByIndex.set(this.messages.length, thinking);
+    const index = this.messages.length;
+    if (thinking) this.thinkingByIndex.set(index, thinking);
     this.messages.push(choice.message);
 
     const toolUses: ToolUse[] = [];
     for (const call of choice.message.tool_calls ?? []) {
       if (call.type !== "function") continue;
       toolUses.push({
-        id: call.id,
+        toolCallId: call.id,
         name: call.function.name,
         input: parseToolArguments(call.function.arguments, call.function.name),
       });
@@ -325,6 +328,8 @@ export class OpenRouterProvider implements LLMProvider {
       stopReason: mapStopReason(choice.finish_reason),
       toolUses,
       text: choice.message.content ?? "",
+      parts: this.toParts(choice.message, index),
+      native: { dialect: DIALECT, message: choice.message },
     };
   }
 
@@ -344,8 +349,8 @@ export class OpenRouterProvider implements LLMProvider {
       // This dialect has no is_error flag; fold it into the content the model reads.
       this.messages.push({
         role: "tool",
-        tool_call_id: r.tool_use_id,
-        content: r.is_error ? `ERROR: ${r.content}` : r.content,
+        tool_call_id: r.toolCallId,
+        content: r.isError ? `ERROR: ${r.content}` : r.content,
       });
     }
   }
@@ -416,7 +421,7 @@ export class OpenRouterProvider implements LLMProvider {
       if (call.type !== "function") continue;
       parts.push({
         type: "tool_call",
-        id: call.id,
+        toolCallId: call.id,
         name: call.function.name,
         input: parseToolArguments(call.function.arguments, call.function.name),
       });
@@ -456,7 +461,7 @@ function toNativeMessages(
   const toolCalls = m.parts
     .filter((p) => p.type === "tool_call")
     .map((p) => ({
-      id: p.id,
+      id: p.toolCallId,
       type: "function" as const,
       function: { name: p.name, arguments: JSON.stringify(p.input) },
     }));

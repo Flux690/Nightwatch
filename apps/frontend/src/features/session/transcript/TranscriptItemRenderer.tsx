@@ -179,11 +179,11 @@ export function TranscriptItemRenderer({
   item: TranscriptItem;
   submitting?: boolean;
   onResolve?: (
-    toolUseId: string,
+    toolCallId: string,
     action: "approve" | "reject",
     reason?: string,
   ) => void;
-  onAnswer?: (toolUseId: string, answer: string | string[]) => void;
+  onAnswer?: (toolCallId: string, answer: string | string[]) => void;
   onRetryReport?: () => void;
 }): React.JSX.Element {
   switch (item.kind) {
@@ -212,7 +212,7 @@ export function TranscriptItemRenderer({
           submitting={submitting}
           onResolve={
             onResolve
-              ? (action, reason) => onResolve(item.toolUseId, action, reason)
+              ? (action, reason) => onResolve(item.toolCallId, action, reason)
               : undefined
           }
         />
@@ -221,7 +221,7 @@ export function TranscriptItemRenderer({
           item={item}
           submitting={submitting}
           onAnswer={
-            onAnswer ? (answer) => onAnswer(item.toolUseId, answer) : undefined
+            onAnswer ? (answer) => onAnswer(item.toolCallId, answer) : undefined
           }
         />
       );
@@ -240,7 +240,7 @@ export function TranscriptItemRenderer({
           submitting={submitting}
           onResolve={
             onResolve
-              ? (action) => onResolve(item.toolUseId, action)
+              ? (action) => onResolve(item.toolCallId, action)
               : undefined
           }
         />

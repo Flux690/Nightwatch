@@ -83,8 +83,7 @@ export async function executeTool(
   /* Parsed once here rather than in each handler, so a tool declares its shape
      and receives it: the arguments reaching a runner are checked too. */
   const parsed = parseInput(tool.input, input);
-  if (!parsed.ok)
-    return { content: parsed.failure.content, toolOutcome: "system" };
+  if (!parsed.ok) return { content: parsed.failure.content, isError: true };
   const result =
     tool.on === "api"
       ? await tool.execute(parsed.data, effectiveCtx)
@@ -97,14 +96,12 @@ export async function executeTool(
   if (content.length > MAX_TOOL_RESULT_CHARS) {
     return {
       content: tooLarge(tool.schema.name, content.length),
-      toolOutcome: "system",
+      isError: true,
     };
   }
   return {
     content,
-    ...(result.toolOutcome !== undefined && {
-      toolOutcome: result.toolOutcome,
-    }),
+    ...(result.isError === true && { isError: true as const }),
   };
 }
 

@@ -5,6 +5,7 @@ import type {
   LLMProvider,
   ProviderMessage,
   ToolResult,
+  ToolUse,
 } from "../llm/types.js";
 
 interface ToolUseBlock {
@@ -42,7 +43,7 @@ interface NativeUserMessage {
 type NativeMessage = NativeAssistantMessage | NativeUserMessage;
 
 export interface ScriptedTurn {
-  toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }>;
+  toolUses: ToolUse[];
   text: string;
   stopReason?: ChatResponse["stopReason"];
 }
@@ -84,8 +85,8 @@ function validateTranscript(messages: NativeMessage[]): void {
       );
     }
 
-    const toolUseIds = extractToolUseIds(prev);
-    if (toolUseIds.length > 0) {
+    const toolCallIds = extractToolUseIds(prev);
+    if (toolCallIds.length > 0) {
       if (curr.role !== "user") {
         throw new Error(
           `Contract violation: tool_use at index ${i - 1} not followed by user message`,
@@ -97,7 +98,7 @@ function validateTranscript(messages: NativeMessage[]): void {
           if (block.type === "tool_result") resultIds.add(block.tool_use_id);
         }
       }
-      for (const id of toolUseIds) {
+      for (const id of toolCallIds) {
         if (!resultIds.has(id)) {
           throw new Error(
             `Contract violation: tool_use ${id} at index ${i - 1} has no matching tool_result`,
@@ -106,19 +107,6 @@ function validateTranscript(messages: NativeMessage[]): void {
       }
     }
   }
-}
-
-function nativeToText(m: NativeMessage): string {
-  if (typeof m.content === "string") return m.content;
-  return m.content
-    .map((b) => {
-      if (b.type === "text") return b.text;
-      if (b.type === "tool_use") return `[tool_use: ${b.name}]`;
-      if (b.type === "tool_result") return b.content;
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
 }
 
 // The fake's native shape mirrors Anthropic's blocks, so it claims that dialect
@@ -132,7 +120,12 @@ function nativeToParts(m: NativeMessage): MessagePart[] {
   return m.content.map((b): MessagePart => {
     if (b.type === "text") return { type: "text", text: b.text };
     if (b.type === "tool_use")
-      return { type: "tool_call", id: b.id, name: b.name, input: b.input };
+      return {
+        type: "tool_call",
+        toolCallId: b.id,
+        name: b.name,
+        input: b.input,
+      };
     return {
       type: "tool_result",
       toolCallId: b.tool_use_id,
@@ -147,7 +140,7 @@ function partsToNative(m: ProviderMessage): NativeMessage {
     p.type === "text"
       ? [{ type: "text", text: p.text }]
       : p.type === "tool_call"
-        ? [{ type: "tool_use", id: p.id, name: p.name, input: p.input }]
+        ? [{ type: "tool_use", id: p.toolCallId, name: p.name, input: p.input }]
         : [],
   );
   if (m.role === "assistant") return { role: "assistant", content: blocks };
@@ -182,15 +175,6 @@ function makeProvider(
 ): ContractFakeProvider {
   const messages: NativeMessage[] = [];
 
-  function toProviderMessages(): ProviderMessage[] {
-    return messages.map((m) => ({
-      role: m.role,
-      content: nativeToText(m),
-      parts: nativeToParts(m),
-      native: { dialect: DIALECT, message: m },
-    }));
-  }
-
   return {
     start: vi.fn((msg: string) => {
       messages.push({ role: "user", content: msg });
@@ -208,8 +192,6 @@ function makeProvider(
       messages.length = 0;
       messages.push(...native);
     }),
-
-    snapshot: vi.fn((): ProviderMessage[] => toProviderMessages()),
 
     chat: vi.fn(
       async (
@@ -237,7 +219,11 @@ function makeProvider(
           ? {
               text: "",
               toolUses: [
-                { id: `forced-${forceTool}`, name: forceTool!, input: {} },
+                {
+                  toolCallId: `forced-${forceTool}`,
+                  name: forceTool!,
+                  input: {},
+                },
               ],
               // Carried: a turn cut short at the output limit still reports it,
               // and the loop reads stopReason before it reads the call.
@@ -255,7 +241,7 @@ function makeProvider(
         for (const tu of turn.toolUses) {
           content.push({
             type: "tool_use",
-            id: tu.id,
+            id: tu.toolCallId,
             name: tu.name,
             input: tu.input,
           });
@@ -267,10 +253,13 @@ function makeProvider(
           turn.stopReason ??
           (turn.toolUses.length > 0 ? "tool_use" : "end_turn");
 
+        const message: NativeMessage = { role: "assistant", content };
         return Promise.resolve({
           stopReason,
           toolUses: turn.toolUses,
           text: turn.text,
+          parts: nativeToParts(message),
+          native: { dialect: DIALECT, message },
         });
       },
     ),
@@ -278,9 +267,9 @@ function makeProvider(
     appendToolResults: vi.fn((results: ToolResult[]) => {
       const blocks: Array<ToolResultBlock | TextBlock> = results.map((r) => ({
         type: "tool_result" as const,
-        tool_use_id: r.tool_use_id,
+        tool_use_id: r.toolCallId,
         content: r.content,
-        ...(r.is_error && { is_error: true }),
+        ...(r.isError && { is_error: true }),
       }));
       messages.push({ role: "user", content: blocks });
     }),

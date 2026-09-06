@@ -414,6 +414,6 @@ describe("AnthropicProvider", () => {
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("ListDockerServices");
-    expect(response.toolUses[0].id).toBe("tu-1");
+    expect(response.toolUses[0].toolCallId).toBe("tu-1");
   });
 });

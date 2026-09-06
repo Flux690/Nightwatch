@@ -1,19 +1,16 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { TestProviders } from "./renderWithProviders.js";
 
 import { TranscriptItemRenderer } from "@/features/session/transcript/TranscriptItemRenderer";
-import type {
-  ToolOutcome,
-  TranscriptItem,
-} from "@/features/session/transcript/types";
+import type { TranscriptItem } from "@/features/session/transcript/types";
 
 function wrap(
   item: TranscriptItem,
   opts?: {
-    onResolve?: (toolUseId: string, action: "approve" | "reject") => void;
-    onAnswer?: (toolUseId: string, answer: string | string[]) => void;
+    onResolve?: (toolCallId: string, action: "approve" | "reject") => void;
+    onAnswer?: (toolCallId: string, answer: string | string[]) => void;
     onRetryReport?: () => void;
   },
 ): void {
@@ -56,7 +53,7 @@ describe("TranscriptItemRenderer", () => {
   describe("a call awaiting approval", () => {
     const approvalItem: TranscriptItem = {
       kind: "tool_call",
-      toolUseId: "tu-gate",
+      toolCallId: "tu-gate",
       toolName: "RestartDockerService",
       input: {
         service: { project: "web-01", service: "web-01" },
@@ -166,7 +163,7 @@ describe("TranscriptItemRenderer", () => {
     };
     const clarItem: TranscriptItem = {
       kind: "tool_call",
-      toolUseId: "tu-clar",
+      toolCallId: "tu-clar",
       toolName: "AskUserQuestion",
       input: clarInput,
       state: { phase: "awaiting_human", gate: "clarification" },
@@ -250,7 +247,7 @@ describe("TranscriptItemRenderer", () => {
   describe("continue_card", () => {
     const continueItem = {
       kind: "continue_card" as const,
-      toolUseId: "continue-uuid-1",
+      toolCallId: "continue-uuid-1",
       state: { phase: "awaiting_human" as const },
     };
 
@@ -326,7 +323,7 @@ describe("TranscriptItemRenderer", () => {
     it("draws nothing for the submission the report card already announces", () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-report",
+        toolCallId: "tu-report",
         toolName: "SubmitInvestigationReport",
         input: { headline: "Pool exhausted" },
         state: { phase: "complete", result: "recorded" },
@@ -340,7 +337,7 @@ describe("TranscriptItemRenderer", () => {
     it("draws a recorded hypothesis, which is a step the reader can follow", () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-hypo",
+        toolCallId: "tu-hypo",
         toolName: "RecordHypothesis",
         input: { statement: "The pool was exhausted" },
         state: { phase: "complete", result: "recorded" },
@@ -375,7 +372,7 @@ describe("TranscriptItemRenderer", () => {
     it("renders Edit results as a colored diff card", () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-1",
+        toolCallId: "tu-1",
         toolName: "Edit",
         input: { path: "src/app.ts" },
         state: { phase: "complete", result: DIFF_RESULT },
@@ -392,7 +389,7 @@ describe("TranscriptItemRenderer", () => {
     it("parses the persisted JSON-string form of a diff result too", () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-2",
+        toolCallId: "tu-2",
         toolName: "Write",
         input: { path: "src/app.ts" },
         state: { phase: "complete", result: JSON.stringify(DIFF_RESULT) },
@@ -405,7 +402,7 @@ describe("TranscriptItemRenderer", () => {
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-4",
+        toolCallId: "tu-4",
         toolName: "OpenPullRequest",
         input: { title: "Fix the leak" },
         state: {
@@ -431,22 +428,22 @@ describe("TranscriptItemRenderer", () => {
   });
 
   describe("output disclosure", () => {
-    it("shows an unknown tool's first line as the finding and the rest on expand", async () => {
+    it("keeps an unknown tool's output folded until the row is opened", async () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-5",
+        toolCallId: "tu-5",
         toolName: "SomeToolWeDoNotRender",
         input: { target: "web-01/api/api" },
         state: { phase: "complete", result: "cpu 0.91\nmem 0.44" },
       });
 
-      // The row carries the answer; the remainder stays folded away.
-      expect(screen.getByText(/cpu 0.91/)).toBeInTheDocument();
-      expect(screen.queryByText(/mem 0.44/)).not.toBeInTheDocument();
+      // The row names its tool and nothing else, so nothing shows until it opens.
+      expect(screen.queryByText(/cpu 0.91/)).not.toBeInTheDocument();
 
       await userEvent
         .setup()
         .click(screen.getByRole("button", { name: /SomeToolWeDoNotRender/ }));
+      expect(screen.getByText(/cpu 0.91/)).toBeInTheDocument();
       expect(screen.getByText(/mem 0.44/)).toBeInTheDocument();
     });
 
@@ -455,7 +452,7 @@ describe("TranscriptItemRenderer", () => {
     it("draws a log line beside the time the engine stamped on it", async () => {
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-log",
+        toolCallId: "tu-log",
         toolName: "GetDockerLogs",
         input: { target: "web-01/api/api" },
         state: {
@@ -485,15 +482,13 @@ describe("TranscriptItemRenderer", () => {
       );
       wrap({
         kind: "tool_call",
-        toolUseId: "tu-6",
+        toolCallId: "tu-6",
         toolName: "Bash",
         input: { command: "ls" },
         state: { phase: "complete", result: { exitCode: 0, output } },
       });
 
       const user = userEvent.setup();
-      // Exit status is the finding, so the row reports it without expanding.
-      expect(screen.getByText(/exit 0/)).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /Bash/ }));
       expect(screen.getByText(/line-1/)).toBeInTheDocument();
@@ -501,55 +496,6 @@ describe("TranscriptItemRenderer", () => {
 
       await user.click(screen.getByRole("button", { name: /show all 12/i }));
       expect(screen.getByText(/line-12/)).toBeInTheDocument();
-    });
-  });
-
-  describe("toolOutcome classes", () => {
-    function finding(
-      toolOutcome: ToolOutcome | undefined,
-      result: unknown,
-    ): HTMLElement {
-      wrap({
-        kind: "tool_call",
-        toolUseId: `tu-${toolOutcome ?? "ok"}`,
-        toolName: "Read",
-        input: { path: "docker-compose.yml" },
-        state: {
-          phase: "complete",
-          result,
-          ...(toolOutcome !== undefined && { toolOutcome }),
-        },
-      });
-      // The finding is the row's third span: name, target, then the answer.
-      return screen.getByRole("button", { name: /Read/ })
-        .children[2] as HTMLElement;
-    }
-
-    it("reads a missing file as ordinary muted text, not as a failure", () => {
-      const cell = finding(
-        "expected_miss",
-        "File not found in the repository: docker-compose.yml.",
-      );
-      expect(cell).toHaveClass("text-muted-foreground");
-      expect(cell.textContent).toContain("File not found");
-      expect(cell.textContent).not.toContain("Failed");
-    });
-
-    it("tells a permission failure apart from a crashed tool by word and colour", () => {
-      const denied = finding("permission", "GitHub rejected the token.");
-      expect(denied.textContent).toContain("Permission denied");
-      expect(denied).toHaveClass("text-wait");
-
-      cleanup();
-      const crashed = finding("system", "Error executing Read: boom");
-      expect(crashed.textContent).toContain("Failed");
-      expect(crashed).toHaveClass("text-fail");
-    });
-
-    it("says so when only some runners in a fan-out answered", () => {
-      const cell = finding("partial", JSON.stringify({ byServer: [] }));
-      expect(cell.textContent).toContain("Some runners failed");
-      expect(cell).not.toHaveClass("text-fail");
     });
   });
 
@@ -590,7 +536,7 @@ describe("TranscriptItemRenderer", () => {
           <TranscriptItemRenderer
             item={{
               kind: "tool_call",
-              toolUseId: "tu-logs",
+              toolCallId: "tu-logs",
               toolName: "GetDockerLogs",
               input: { target: "prod-1/encodr/cache" },
               state: {
@@ -605,7 +551,7 @@ describe("TranscriptItemRenderer", () => {
           <TranscriptItemRenderer
             item={{
               kind: "tool_call",
-              toolUseId: "tu-stats",
+              toolCallId: "tu-stats",
               toolName: "GetDockerStats",
               input: { target: "prod-1/encodr/cache" },
               state: {

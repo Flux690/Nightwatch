@@ -14,7 +14,7 @@ import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 const CTX: ToolDispatchContext = {
   toolCallCeilingMs: 30_000,
   sessionId: "budget-session",
-  toolUseId: "tu-budget",
+  toolCallId: "tu-budget",
 };
 
 function toolReturning(content: unknown): Tool {
@@ -43,7 +43,7 @@ describe("the ceiling on one tool result", () => {
     );
     const result = await executeTool(toolReturning({ lines }), {}, CTX);
 
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     // Not one character of it: a prefix would read as the whole answer.
     expect(result.content).not.toContain("connection refused");
     expect(result.content).toContain("GetDockerLogs");

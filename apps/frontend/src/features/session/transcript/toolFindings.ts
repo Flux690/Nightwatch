@@ -56,7 +56,7 @@ function formatPercent(value: number): string {
 // ellipsis where the interesting part was. A question is held to the same rule.
 const LINE_CLIP = 120;
 
-export function clipLine(line: string): string {
+function clipLine(line: string): string {
   const trimmed = line.trim();
   return trimmed.length > LINE_CLIP
     ? `${trimmed.slice(0, LINE_CLIP)}…`

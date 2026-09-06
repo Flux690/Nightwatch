@@ -22,6 +22,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **A tool call in the transcript is now one row naming the tool it called.** Every row used to carry a one-line summary of what the call returned, together with a status word such as "Permission denied" or "Unavailable". Two of those words shared a colour, the one for a query that found nothing was blank, and none of them said more than the result itself does. The row is now the tool's name, the service it addressed, and a chevron; what the call returned is one click inside it. — `0.5.5`
+
 - **Every limit a tool places on its arguments is now stated in that argument's own description.** A bound like "must be above zero" was declared in code but deleted before the model ever saw the schema, so a call could be refused for a rule the model was never told. Whole-number fields now say they are whole numbers, and every floor and ceiling is written where the model reads it. A test fails the build if a new field carries a bound its description does not state. — `0.5.3`
 
 - **Tool schemas are now built for whichever model provider you picked.** The schema sent to Anthropic and the schema sent through OpenRouter are each reduced to what that provider documents itself as accepting, instead of both receiving one shape derived from Anthropic's rules. Switching provider no longer risks a tool being refused for a keyword the other one happened to allow. — `0.5.3`
@@ -64,6 +66,10 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - An alert label can no longer close the harness tag and speak as NightWarden. Anything the harness sends the model is stripped of the marker first, so text arriving from a monitored host reaches the model as data rather than as an instruction wearing the system's voice. — `0.3.157` (`bea9083`)
 
 ### Fixed
+
+- **A released write that the provider refused no longer reports as having run.** The report's actions list read a write as "Ran" unless the tool crashed or timed out, so a `403` from GitHub on an approved pull request, or a rejected token, showed alongside the writes that succeeded. Any released write that failed now reads as "Failed". — `0.5.5`
+
+- **A search that matched nothing now counts as a read.** The agent is nudged to record what it has settled once it has read enough without settling anything, and a query returning no rows was excluded from that count, so an investigation that ruled things out by finding nothing could read indefinitely without being asked. A call that answered counts whether or not it found something; only a call that failed does not. — `0.5.5`
 
 - **A response NightWarden cannot read is now reported as unreadable, instead of as an empty result.** Every reply from your metrics source, Loki, Sentry and GitHub used to be read field by field, and any field that did not look as expected became an empty list or a blank string. An investigation was therefore told "no changes were merged" or "no log lines matched" when the truth was that the answer could not be parsed at all, which is indistinguishable from a healthy service. Each response is now checked against the shape its vendor documents, and a reply that does not match fails the tool call with the field named, so the agent records an unknown rather than a finding. — `0.5.4`
 

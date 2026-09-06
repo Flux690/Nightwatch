@@ -7,7 +7,7 @@ export interface ApprovalRequest {
   sessionId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
-  toolUseId: string; // Anthropic tool_use_id — correlation key
+  toolCallId: string; // Anthropic tool_use_id — correlation key
   kind?: "approval" | "clarification" | "continue";
   status: ApprovalStatus;
   resolvedAt?: string;
@@ -15,7 +15,7 @@ export interface ApprovalRequest {
 
 export interface ApprovalResponse {
   sessionId: string;
-  toolUseId: string;
+  toolCallId: string;
   status: ApprovalStatus;
   resolvedAt: string;
 }

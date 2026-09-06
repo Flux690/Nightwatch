@@ -1,25 +1,19 @@
 import type { z } from "zod";
-import type { EvidenceKind, Platform, ToolOutcome } from "@nightwarden/shared";
+import type { EvidenceKind, Platform } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
 
 export interface ToolExecuteResult {
+  // A structured value where the tool has one, so a caller can ask what it
+  // found rather than reading it back out of prose.
   content: unknown;
-  // Every failure path names its class instead of a boolean, and is_error is
-  // derived from it, so the two cannot disagree.
-  toolOutcome?: ToolOutcome;
+  isError?: true;
 }
 
 // What the dispatcher hands back: the result already rendered to the string the
 // model reads, and already bounded, so no caller can enter context past the cap.
 export interface DispatchedToolResult {
   content: string;
-  toolOutcome?: ToolOutcome;
-}
-
-// A fan-out where some runners answered still carries an answer; everything
-// else the model must read as an error.
-export function isToolFailure(toolOutcome: ToolOutcome | undefined): boolean {
-  return toolOutcome !== undefined && toolOutcome !== "partial";
+  isError?: true;
 }
 
 interface ToolCallIdentity {
@@ -27,8 +21,8 @@ interface ToolCallIdentity {
   // stateless; the sandbox module owns all bookkeeping.
   sessionId: string;
   // The tool_use id of this call: OpenPullRequest keys its write-ahead audit row on
-  // (sessionId, toolUseId), the same idempotency the approval path uses.
-  toolUseId: string;
+  // (sessionId, toolCallId), the same idempotency the approval path uses.
+  toolCallId: string;
 }
 
 // What a caller hands the dispatcher: the upper bound this call may not exceed,

@@ -156,7 +156,7 @@ describe("the marker the harness speaks by", () => {
         text: "Reading logs.",
         toolUses: [
           {
-            id: "tu-logs-1",
+            toolCallId: "tu-logs-1",
             name: "GetDockerLogs",
             input: { target: "marker-host/web-01/web-01" },
           },
@@ -189,7 +189,7 @@ describe("the marker the harness speaks by", () => {
         text: "Need clarification.",
         toolUses: [
           {
-            id: "tu-ask-1",
+            toolCallId: "tu-ask-1",
             name: "AskUserQuestion",
             input: { question: "Which service is degraded?", options: [] },
           },

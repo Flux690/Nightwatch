@@ -109,7 +109,7 @@ const READ: ScriptedTurn = {
   text: "",
   toolUses: [
     {
-      id: "tu-read",
+      toolCallId: "tu-read",
       name: "ListDockerServices",
       input: {},
     },
@@ -342,7 +342,7 @@ describe("mid-run alert injection (loop seam)", () => {
           text: "",
           toolUses: [
             {
-              id: "tu-gate",
+              toolCallId: "tu-gate",
               name: "RestartDockerService",
               input: {
                 target: `${SERVER}/web-01/web-01`,
@@ -373,7 +373,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // The interrupt points at the gated call; the transcript row written in the
     // same transaction is what says which tool it was and with what arguments.
     const pending = (await getPendingHumanInputBySessionId(sessionId))!;
-    const call = (await findToolCall(sessionId, pending.toolUseId))!;
+    const call = (await findToolCall(sessionId, pending.toolCallId))!;
     expect(call.name).toBe("RestartDockerService");
     expect(call.input).toMatchObject({
       target: `${SERVER}/web-01/web-01`,
@@ -443,7 +443,7 @@ describe("mid-run alert injection (loop seam)", () => {
           text: "Restarting.",
           toolUses: [
             {
-              id: "tu-gate-resume",
+              toolCallId: "tu-gate-resume",
               name: "RestartDockerService",
               input: {
                 target: `${SERVER}/web-01/web-01`,

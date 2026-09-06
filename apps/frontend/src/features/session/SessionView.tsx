@@ -86,11 +86,11 @@ function TranscriptColumn({
   showWorking: boolean;
   submittingToolUseId: string | null;
   onResolve: (
-    toolUseId: string,
+    toolCallId: string,
     action: "approve" | "reject",
     reason?: string,
   ) => void;
-  onAnswer: (toolUseId: string, answer: string | string[]) => void;
+  onAnswer: (toolCallId: string, answer: string | string[]) => void;
   onRetryReport: () => void;
 }): React.JSX.Element {
   return (
@@ -116,7 +116,7 @@ function TranscriptColumn({
           <TranscriptItemRenderer
             item={item}
             submitting={
-              "toolUseId" in item && item.toolUseId === submittingToolUseId
+              "toolCallId" in item && item.toolCallId === submittingToolUseId
             }
             onResolve={onResolve}
             onAnswer={onAnswer}
@@ -319,7 +319,7 @@ export function SessionView({
   );
 
   const respond = useMutation({
-    mutationFn: (vars: { toolUseId: string; body: Record<string, unknown> }) =>
+    mutationFn: (vars: { toolCallId: string; body: Record<string, unknown> }) =>
       apiFetch<void>(`/api/sessions/${activeSessionId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -335,11 +335,11 @@ export function SessionView({
   });
 
   const handleResolve = useCallback(
-    (toolUseId: string, action: "approve" | "reject", reason?: string) => {
+    (toolCallId: string, action: "approve" | "reject", reason?: string) => {
       // Nothing is stamped on the item: the decision in flight belongs to this
       // browser, and `submitting` below is what draws it.
       respond.mutate({
-        toolUseId,
+        toolCallId,
         // The comment rides the same request the decision does; the API feeds it
         // to the agent so a rejection says why instead of only saying no.
         body: {
@@ -372,9 +372,9 @@ export function SessionView({
   }, [retryReport]);
 
   const handleAnswer = useCallback(
-    (toolUseId: string, answer: string | string[]) => {
+    (toolCallId: string, answer: string | string[]) => {
       const text = Array.isArray(answer) ? answer.join(", ") : answer;
-      respond.mutate({ toolUseId, body: { text } });
+      respond.mutate({ toolCallId, body: { text } });
     },
     [respond],
   );
@@ -414,7 +414,7 @@ export function SessionView({
     (item) => !docked.has(transcriptItemKey(item)),
   );
   const submittingToolUseId = respond.isPending
-    ? (respond.variables?.toolUseId ?? null)
+    ? (respond.variables?.toolCallId ?? null)
     : null;
   // The run is working but silent: nothing is streaming into the transcript, so
   // show the animation in the reply's place. Any live streaming tail hides it.
@@ -479,8 +479,8 @@ export function SessionView({
             <TranscriptItemRenderer
               item={dockedItem}
               submitting={
-                "toolUseId" in dockedItem &&
-                dockedItem.toolUseId === submittingToolUseId
+                "toolCallId" in dockedItem &&
+                dockedItem.toolCallId === submittingToolUseId
               }
               onResolve={handleResolve}
               onAnswer={handleAnswer}

@@ -13,7 +13,7 @@ export interface FrontendHumanInputResolved extends FrontendEnvelope {
   type: "HUMAN_INPUT_RESOLVED";
   payload: {
     sessionId: string;
-    toolUseId: string;
+    toolCallId: string;
     status: "approved" | "rejected" | "answered" | "continued";
     resolvedAt?: string;
   };
@@ -68,7 +68,7 @@ export interface FrontendHumanInputRequired extends FrontendEnvelope {
   type: "HUMAN_INPUT_REQUIRED";
   payload: {
     sessionId: string;
-    toolUseId: string;
+    toolCallId: string;
     toolName: string;
     input: Record<string, unknown>;
     kind: "approval" | "clarification" | "continue";

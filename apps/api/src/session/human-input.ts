@@ -20,11 +20,15 @@ import { executeApprovedTool } from "./approval-executor.js";
 import { messagePartsToText } from "@nightwarden/shared";
 import type {
   ApprovalResponse,
-  HumanDecision,
+  ApprovalStatus,
   MessagePart,
   RespondRequest,
   TranscriptRow,
 } from "@nightwarden/shared";
+
+// The three a person can settle a gate with. `pending` and `continued` are the
+// other two an approval can be, and neither reaches this turn.
+type Settled = Extract<ApprovalStatus, "approved" | "rejected" | "answered">;
 
 export class HumanInputError extends Error {
   constructor(
@@ -54,13 +58,13 @@ async function requirePendingHumanInput(sessionId: string) {
 // rather than a case to carry forward with an empty tool name.
 async function requireGatedCall(
   sessionId: string,
-  toolUseId: string,
+  toolCallId: string,
 ): Promise<{ name: string; input: Record<string, unknown> }> {
-  const call = await findToolCall(sessionId, toolUseId);
+  const call = await findToolCall(sessionId, toolCallId);
   if (!call) {
     throw new HumanInputError(
       409,
-      `No tool call ${toolUseId} in session ${sessionId}`,
+      `No tool call ${toolCallId} in session ${sessionId}`,
     );
   }
   return call;
@@ -98,15 +102,17 @@ async function ensureDeleted(sessionId: string): Promise<void> {
 async function answeredTurn(
   sessionId: string,
   results: ToolResult[],
+  decision: MessagePart,
 ): Promise<TranscriptRow> {
-  const parts: MessagePart[] = results.map((r) => ({
-    type: "tool_result",
-    toolCallId: r.tool_use_id,
-    output: r.content,
-    ...(r.is_error === true && { isError: true }),
-    ...(r.toolOutcome !== undefined && { toolOutcome: r.toolOutcome }),
-    ...(r.humanDecision !== undefined && { humanDecision: r.humanDecision }),
-  }));
+  const parts: MessagePart[] = [
+    ...results.map((r): MessagePart => ({
+      type: "tool_result",
+      toolCallId: r.toolCallId,
+      output: r.content,
+      ...(r.isError === true && { isError: true }),
+    })),
+    decision,
+  ];
   return {
     sessionId,
     seq: await getNextSeq(sessionId),
@@ -119,26 +125,33 @@ async function answeredTurn(
 
 async function unpause(
   sessionId: string,
-  toolUseId: string,
-  status: HumanDecision,
+  toolCallId: string,
+  status: Settled,
   completedResults: ToolResult[],
   answer: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
+  said: string,
 ): Promise<HumanInputActionResult> {
   const resolvedAt = new Date().toISOString();
-  // Stamped here rather than at each call site: every path through this
-  // function had a human at the end of it, and no other path did.
-  const gatedResult: ToolResult = { ...answer, humanDecision: status };
-  // Read off the result rather than passed beside it: how a call went belongs
-  // to the call, and two ways to say it is one way to say two things.
-  const { toolOutcome } = gatedResult;
+  // A part of its own rather than a field on the result: being asked a question
+  // and permitting a write are different acts, and only this records either.
+  const decision: MessagePart =
+    status === "answered"
+      ? { type: "elicitation_answer", toolCallId, text: said }
+      : {
+          type: "tool_approval",
+          toolCallId,
+          approved: status === "approved",
+          ...(said !== "" && { reason: said }),
+        };
 
   // One transaction with the gate clear, so the seed the resumed run builds
   // already holds this answer and nothing has to hand it over.
-  const answered = await answeredTurn(sessionId, [
-    ...completedResults,
-    gatedResult,
-  ]);
+  const answered = await answeredTurn(
+    sessionId,
+    [...completedResults, answer],
+    decision,
+  );
   if (!(await appendRowsAndResolve(sessionId, [answered]))) {
     throw new HumanInputError(
       409,
@@ -149,30 +162,30 @@ async function unpause(
   publishTranscriptItem({
     sessionId,
     item: toolCallCard({
-      toolUseId,
+      toolCallId,
       toolName: card.toolName,
       input: card.input,
       state: {
         phase: "resolved",
         decision: status,
         // An approved tool ran and an answer is what the person said; a
-        // rejection ran nothing, and its outcome already reads as Declined.
-        ...(status !== "rejected" && { result: gatedResult.content }),
-        ...(toolOutcome !== undefined && { toolOutcome }),
+        // rejection ran nothing, and already reads as Declined.
+        ...(status !== "rejected" && { result: answer.content }),
+        ...(answer.isError === true && { isError: true }),
       },
     }),
   });
 
   publishInterruptResolved({
     sessionId,
-    toolUseId,
+    toolCallId,
     status,
     resolvedAt,
   });
 
   await dispatcher.dispatch({ sessionId, seed: await buildSeed(sessionId) });
 
-  return { sessionId, toolUseId, status, resolvedAt };
+  return { sessionId, toolCallId, status, resolvedAt };
 }
 
 export async function respondToPendingHumanInput(
@@ -190,7 +203,7 @@ export async function respondToPendingHumanInput(
     if (decision === "reject") {
       publishInterruptResolved({
         sessionId,
-        toolUseId: pending.toolUseId,
+        toolCallId: pending.toolCallId,
         status: "rejected",
         resolvedAt,
       });
@@ -202,14 +215,14 @@ export async function respondToPendingHumanInput(
       });
       return {
         sessionId,
-        toolUseId: pending.toolUseId,
+        toolCallId: pending.toolCallId,
         status: "rejected",
         resolvedAt,
       };
     }
     publishInterruptResolved({
       sessionId,
-      toolUseId: pending.toolUseId,
+      toolCallId: pending.toolCallId,
       status: "continued",
       resolvedAt,
     });
@@ -217,14 +230,14 @@ export async function respondToPendingHumanInput(
     await dispatcher.dispatch({ sessionId, seed: await buildSeed(sessionId) });
     return {
       sessionId,
-      toolUseId: pending.toolUseId,
+      toolCallId: pending.toolCallId,
       status: "continued",
       resolvedAt,
     };
   }
 
   // Everything past the continue branch gates on a real tool call.
-  const call = await requireGatedCall(sessionId, pending.toolUseId);
+  const call = await requireGatedCall(sessionId, pending.toolCallId);
 
   // Before the claim, so a malformed request is refused without taking the lock
   // and wedging the interrupt for the well-formed retry behind it.
@@ -248,22 +261,22 @@ export async function respondToPendingHumanInput(
 
   if ((await claim(sessionId, pending.claimedAt ?? null)) === "stale") {
     logger.warn(
-      { sessionId, tool: call.name, toolUseId: pending.toolUseId },
+      { sessionId, tool: call.name, toolCallId: pending.toolCallId },
       "stale claim: a previous attempt died holding it, toolOutcome unknown",
     );
     return await unpause(
       sessionId,
-      pending.toolUseId,
+      pending.toolCallId,
       "approved",
       pending.completedResults,
       {
-        tool_use_id: pending.toolUseId,
+        toolCallId: pending.toolCallId,
         content:
-          "This call was already attempted and the toolOutcome is unknown - it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
-        is_error: true,
-        toolOutcome: "system",
+          "This call was already attempted and it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
+        isError: true,
       },
       { toolName: call.name, input: call.input },
+      "",
     );
   }
 
@@ -271,11 +284,12 @@ export async function respondToPendingHumanInput(
     logger.info({ sessionId }, "clarification answered");
     return await unpause(
       sessionId,
-      pending.toolUseId,
+      pending.toolCallId,
       "answered",
       pending.completedResults,
-      { tool_use_id: pending.toolUseId, content: answer },
+      { toolCallId: pending.toolCallId, content: answer },
       { toolName: call.name, input: call.input },
+      "",
     );
   }
 
@@ -287,34 +301,36 @@ export async function respondToPendingHumanInput(
     logger.info({ sessionId, tool: call.name }, "approved");
     return await unpause(
       sessionId,
-      pending.toolUseId,
+      pending.toolCallId,
       "approved",
       pending.completedResults,
       result,
       { toolName: call.name, input: call.input },
+      "",
     );
   }
 
   // Only what is true: the user said no. Inferring a motive from severity
   // would hand the agent one nobody gave, so this asks what to do next.
   const gatedResult: ToolResult = {
-    tool_use_id: pending.toolUseId,
+    toolCallId: pending.toolCallId,
     content: `The user rejected this call, so it did not run and nothing on the system changed. ${
       answer
         ? `They said: "${answer}". Take that into account`
         : "They gave no reason. Take the rejection itself as the signal"
     }, then continue the investigation with a different approach. Do not call this tool again with the same arguments.`,
-    // No outcome: the tool never ran. That a person chose this is a fact about
-    // them, which humanDecision carries.
-    is_error: true,
+    // The tool never ran. That a person chose this is their own fact, which
+    // the approval part beside this result carries.
+    isError: true,
   };
   logger.info({ sessionId, tool: call.name }, "rejected");
   return await unpause(
     sessionId,
-    pending.toolUseId,
+    pending.toolCallId,
     "rejected",
     pending.completedResults,
     gatedResult,
     { toolName: call.name, input: call.input },
+    answer,
   );
 }

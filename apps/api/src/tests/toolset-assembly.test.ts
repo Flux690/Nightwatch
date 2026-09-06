@@ -381,7 +381,7 @@ describe("toolset assembly by fleet capabilities", () => {
           text: "Restarting K8s workload.",
           toolUses: [
             {
-              id: "tu-k8s-write-1",
+              toolCallId: "tu-k8s-write-1",
               name: "RestartK8sWorkload",
               input: {
                 target: "toolset-k8s-001/production/api-server",
@@ -443,7 +443,7 @@ describe("toolset assembly by fleet capabilities", () => {
         {
           text: "Let me look.",
           toolUses: [
-            { id: "tu-look-1", name: "ListDockerServices", input: {} },
+            { toolCallId: "tu-look-1", name: "ListDockerServices", input: {} },
           ],
         },
         { text: "Redis is fine.", toolUses: [] },
@@ -542,7 +542,9 @@ describe("toolset assembly by fleet capabilities", () => {
       setScript([
         {
           text: "",
-          toolUses: [{ id: "tu-a", name: "ListDockerServices", input: {} }],
+          toolUses: [
+            { toolCallId: "tu-a", name: "ListDockerServices", input: {} },
+          ],
         },
         { text: "Done.", toolUses: [] },
       ]);

@@ -1,7 +1,6 @@
 import type { MessagePart, TranscriptRow } from "@nightwarden/shared";
 import { evidenceIdsIn } from "../agent/evidence-id.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
-import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
 import { hasPendingHumanInput } from "./gate-store.js";
 import {
@@ -31,7 +30,7 @@ const ABANDONED =
   "This investigation was interrupted: NightWarden stopped just after the approved call ran, so its result was lost. Whether the call took effect is unknown - check the target before approving it again.";
 
 interface PendingCall {
-  toolUseId: string;
+  toolCallId: string;
   name: string;
   input: Record<string, unknown>;
 }
@@ -44,13 +43,17 @@ function unansweredCalls(rows: TranscriptRow[]): PendingCall[] {
   for (const row of rows) {
     for (const part of row.parts) {
       if (part.type === "tool_call") {
-        calls.push({ toolUseId: part.id, name: part.name, input: part.input });
+        calls.push({
+          toolCallId: part.toolCallId,
+          name: part.name,
+          input: part.input,
+        });
       } else if (part.type === "tool_result") {
         answered.add(part.toolCallId);
       }
     }
   }
-  return calls.filter((call) => !answered.has(call.toolUseId));
+  return calls.filter((call) => !answered.has(call.toolCallId));
 }
 
 // A read changed nothing, so reading again is reading. A write is replayable
@@ -76,19 +79,18 @@ async function answerPendingCalls(
   for (const call of calls) {
     const tool = findTool(call.name);
     if (tool === undefined) return false;
-    const evidenceId = evidenceIds.get(call.toolUseId);
-    const { content, toolOutcome } = await executeTool(tool, call.input, {
+    const evidenceId = evidenceIds.get(call.toolCallId);
+    const { content, isError } = await executeTool(tool, call.input, {
       sessionId,
-      toolUseId: call.toolUseId,
+      toolCallId: call.toolCallId,
       toolCallCeilingMs: (await loadConfig()).toolCallCeilingMs,
       ...(evidenceId !== undefined && { evidenceId }),
     });
     parts.push({
       type: "tool_result",
-      toolCallId: call.toolUseId,
+      toolCallId: call.toolCallId,
       output: content,
-      ...(isToolFailure(toolOutcome) && { isError: true }),
-      ...(toolOutcome !== undefined && { toolOutcome }),
+      ...(isError === true && { isError: true }),
     });
     texts.push(content);
   }

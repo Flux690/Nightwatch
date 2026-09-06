@@ -146,7 +146,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Listing containers.",
         toolUses: [
           {
-            id: "tu-read-1",
+            toolCallId: "tu-read-1",
             name: "ListDockerServices",
             input: {},
           },
@@ -193,7 +193,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Restarting service.",
         toolUses: [
           {
-            id: "tu-write-1",
+            toolCallId: "tu-write-1",
             name: "RestartDockerService",
             input: {
               target: "access-gate-host/svc-01/svc-01",
@@ -252,7 +252,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Asking for clarification.",
         toolUses: [
           {
-            id: "tu-ask-1",
+            toolCallId: "tu-ask-1",
             name: "AskUserQuestion",
             input: {
               question: "What is the most likely root cause?",
@@ -312,7 +312,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Listing first.",
         toolUses: [
           {
-            id: "tu-c-read",
+            toolCallId: "tu-c-read",
             name: "ListDockerServices",
             input: {},
           },
@@ -322,7 +322,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Need more info.",
         toolUses: [
           {
-            id: "tu-c-ask",
+            toolCallId: "tu-c-ask",
             name: "AskUserQuestion",
             input: {
               question: "Is this a recurring issue?",
@@ -335,7 +335,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         text: "Proceeding with restart.",
         toolUses: [
           {
-            id: "tu-c-write",
+            toolCallId: "tu-c-write",
             name: "RestartDockerService",
             input: {
               target: "access-gate-host/svc-01/svc-01",

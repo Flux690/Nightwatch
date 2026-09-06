@@ -87,7 +87,7 @@ const CONVICTION: ReportConviction = { h1: "corroborated", h2: "cited" };
 const EVIDENCE: ResolvedEvidence[] = [
   {
     evidenceId: "e-stats",
-    toolUseId: "tu-stats",
+    toolCallId: "tu-stats",
     toolName: "GetDockerStats",
     kind: "metric",
     input: { target: "prod-1/encodr/payments-worker" },
@@ -99,7 +99,7 @@ const EVIDENCE: ResolvedEvidence[] = [
   },
   {
     evidenceId: "e-changes",
-    toolUseId: "tu-changes",
+    toolCallId: "tu-changes",
     toolName: "GetRecentChanges",
     kind: "change",
     input: {},
@@ -299,7 +299,7 @@ describe("ReportPanel", () => {
       panel({
         decisions: [
           {
-            toolUseId: "tu-1",
+            toolCallId: "tu-1",
             toolName: "RestartDockerService",
             target: "prod-1/encodr/cache",
             at: "2026-07-21T12:20:00.000Z",
@@ -394,7 +394,7 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-log",
-            toolUseId: "tu-log",
+            toolCallId: "tu-log",
             toolName: "GetDockerLogs",
             kind: "logs",
             input: { target: "prod-1/encodr/payments-worker" },
@@ -466,7 +466,7 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-now",
-            toolUseId: "tu-now",
+            toolCallId: "tu-now",
             toolName: "QueryMetrics",
             kind: "metric",
             input: { query: "redis_memory_used_bytes" },
@@ -501,7 +501,7 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-top",
-            toolUseId: "tu-top",
+            toolCallId: "tu-top",
             toolName: "QueryMetrics",
             kind: "metric",
             input: { query: "topk(2, container_memory_rss)" },
@@ -541,12 +541,12 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-miss",
-            toolUseId: "tu-miss",
+            toolCallId: "tu-miss",
             toolName: "ReadHostFile",
             kind: "text",
             input: { path: "/etc/redis/redis.conf" },
             result: "File not found: /etc/redis/redis.conf",
-            toolOutcome: "expected_miss",
+            isError: true,
           },
         ],
       }),
@@ -571,7 +571,7 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-host",
-            toolUseId: "tu-host",
+            toolCallId: "tu-host",
             toolName: "GetHostMemory",
             kind: "metric",
             input: {},
@@ -611,7 +611,7 @@ describe("ReportPanel", () => {
         evidence: [
           {
             evidenceId: "e-range",
-            toolUseId: "tu-range",
+            toolCallId: "tu-range",
             toolName: "QueryMetricsRange",
             kind: "metric",
             input: { query: "container_memory_rss" },
@@ -719,7 +719,7 @@ describe("ReportPanel", () => {
       panel({
         decisions: [
           {
-            toolUseId: "tu-1",
+            toolCallId: "tu-1",
             toolName: "RestartDockerService",
             target: "encodr-prod/encodr/cache",
             at: "2026-07-21T12:10:00.000Z",
@@ -727,7 +727,7 @@ describe("ReportPanel", () => {
             result: '{"restarted":true}',
           },
           {
-            toolUseId: "tu-2",
+            toolCallId: "tu-2",
             toolName: "DockerExec",
             target: null,
             at: "2026-07-21T12:12:00.000Z",
@@ -735,12 +735,12 @@ describe("ReportPanel", () => {
             result: null,
           },
           {
-            toolUseId: "tu-3",
+            toolCallId: "tu-3",
             toolName: "OpenPullRequest",
             target: null,
             at: "2026-07-21T12:14:00.000Z",
             decision: "approved",
-            toolOutcome: "system",
+            isError: true,
             result:
               "There is nothing to propose: this branch has no commits against the base branch.",
           },

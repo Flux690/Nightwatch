@@ -72,10 +72,10 @@ function Band({
 // no, or it broke. Who decided is not shown, since there is one user.
 function decisionView(call: {
   decision: "approved" | "rejected";
-  toolOutcome?: string;
+  isError?: boolean;
 }): { label: string; tone: StatusTone } {
   if (call.decision === "rejected") return { label: "Declined", tone: "muted" };
-  return call.toolOutcome === "system" || call.toolOutcome === "retryable"
+  return call.isError === true
     ? { label: "Failed", tone: "fail" }
     : { label: "Ran", tone: "ok" };
 }
@@ -150,9 +150,7 @@ function timelineRows(
         toolName: call.toolName,
         target: call.target,
         decision: call.decision,
-        ...(call.toolOutcome !== undefined && {
-          toolOutcome: call.toolOutcome,
-        }),
+        ...(call.isError === true && { isError: true }),
       },
     },
   }));
@@ -177,7 +175,9 @@ function EvidenceChip({
   const cited =
     entry.evidenceId === undefined ? undefined : evidence.get(entry.evidenceId);
   if (cited === undefined) return null;
-  return <CitationChip toolUseId={cited.toolUseId} toolName={cited.toolName} />;
+  return (
+    <CitationChip toolCallId={cited.toolCallId} toolName={cited.toolName} />
+  );
 }
 
 // Every row on one grid, the alert's included: one time column, one size, one
@@ -388,11 +388,11 @@ export function ReportPanel({
   const evidenceUnder = (ids: string[]): React.JSX.Element[] => {
     const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
     return cited.map((entry) => {
-      const repeat = drawn.has(entry.toolUseId);
-      drawn.add(entry.toolUseId);
+      const repeat = drawn.has(entry.toolCallId);
+      drawn.add(entry.toolCallId);
       return (
         <Evidence
-          key={entry.toolUseId}
+          key={entry.toolCallId}
           entry={entry}
           alert={alert}
           repeat={repeat}
@@ -411,8 +411,8 @@ export function ReportPanel({
         <span className={cn("mr-1", SECTION_HEADING)}>Sources</span>
         {cited.map((entry) => (
           <CitationChip
-            key={entry.toolUseId}
-            toolUseId={entry.toolUseId}
+            key={entry.toolCallId}
+            toolCallId={entry.toolCallId}
             toolName={entry.toolName}
           />
         ))}

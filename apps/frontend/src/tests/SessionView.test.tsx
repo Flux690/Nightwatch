@@ -457,7 +457,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-1",
+              toolCallId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
               state: { phase: "running" },
@@ -489,7 +489,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-1",
+              toolCallId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
               state: { phase: "running" },
@@ -510,7 +510,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-1",
+              toolCallId: "tu-1",
               toolName: "check_service_status",
               input: {},
               state: {
@@ -533,7 +533,7 @@ describe("SessionView", () => {
       expect(screen.getByText(/stopped/)).toBeInTheDocument();
     });
 
-    it("replaces the right card by toolUseId, leaving the other alone", async () => {
+    it("replaces the right card by toolCallId, leaving the other alone", async () => {
       setup();
 
       await waitFor(() => {
@@ -550,7 +550,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-1",
+              toolCallId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
               state: { phase: "running" },
@@ -564,7 +564,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-2",
+              toolCallId: "tu-2",
               toolName: "list_processes",
               input: { filter: "http" },
               state: { phase: "running" },
@@ -586,7 +586,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-2",
+              toolCallId: "tu-2",
               toolName: "check_service_status",
               input: {},
               state: {
@@ -631,7 +631,7 @@ describe("SessionView", () => {
             sessionId: "other-session",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-99",
+              toolCallId: "tu-99",
               toolName: "should_not_appear",
               input: {},
               state: { phase: "running" },
@@ -834,7 +834,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-1",
+              toolCallId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
               state: { phase: "running" },
@@ -942,7 +942,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-gated",
+              toolCallId: "tu-gated",
               toolName: "RestartDockerService",
               input: { target: "prod-1/web-01/web-01" },
               state: { phase: "awaiting_human", gate: "approval" },
@@ -1017,7 +1017,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-gated",
+              toolCallId: "tu-gated",
               toolName: "RestartDockerService",
               input: { target: "prod-1/web-01/web-01" },
               state: {
@@ -1037,8 +1037,9 @@ describe("SessionView", () => {
       });
       expect(screen.getAllByText("RestartDockerService")).toHaveLength(1);
 
-      // The result is the row's finding, so it reads without being expanded.
+      // The row names the call; what it returned is one click inside it.
       const row = screen.getByTestId("tool-call");
+      await userEvent.setup().click(within(row).getByRole("button"));
       expect(within(row).getByText(/web-01 restarted/)).toBeInTheDocument();
     });
   });
@@ -1049,7 +1050,7 @@ describe("SessionView", () => {
         USER_TURN,
         {
           kind: "tool_call",
-          toolUseId: "tu-durable",
+          toolCallId: "tu-durable",
           toolName: "RestartDockerService",
           input: { target: "prod-1/web-01/web-01" },
           state: { phase: "awaiting_human", gate: "approval" },
@@ -1072,7 +1073,7 @@ describe("SessionView", () => {
         USER_TURN,
         {
           kind: "tool_call",
-          toolUseId: "tu-durable-clar",
+          toolCallId: "tu-durable-clar",
           toolName: "AskUserQuestion",
           input: {
             question: "Which service first?",
@@ -1098,7 +1099,7 @@ describe("SessionView", () => {
         USER_TURN,
         {
           kind: "tool_call",
-          toolUseId: "tu-durable",
+          toolCallId: "tu-durable",
           toolName: "RestartDockerService",
           input: { target: "prod-1/web-01/web-01" },
           state: { phase: "awaiting_human", gate: "approval" },
@@ -1368,7 +1369,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-clar",
+              toolCallId: "tu-clar",
               toolName: "AskUserQuestion",
               input: {
                 question: "Which service should I investigate first?",
@@ -1445,7 +1446,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("settles into a row naming what was asked, with the answer inside", async () => {
+    it("settles into a row naming the tool, with the exchange inside", async () => {
       setup();
 
       await waitFor(() => {
@@ -1468,7 +1469,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             item: {
               kind: "tool_call",
-              toolUseId: "tu-clar",
+              toolCallId: "tu-clar",
               toolName: "AskUserQuestion",
               input: {
                 question: "Which service should I investigate first?",
@@ -1483,8 +1484,6 @@ describe("SessionView", () => {
         });
       });
 
-      // Its line names what was asked, which is what a reader scanning back is
-      // looking for, rather than the word "Answered".
       await waitFor(() => {
         expect(
           screen.queryByTestId("clarification-card"),
@@ -1492,13 +1491,13 @@ describe("SessionView", () => {
       });
       const row = screen.getByTestId("tool-call");
       expect(within(row).getByText("AskUserQuestion")).toBeInTheDocument();
+
+      // The exchange reads whole one click inside the row.
+      const user = userEvent.setup();
+      await user.click(within(row).getByRole("button"));
       expect(
         within(row).getByText(/which service should I investigate first/i),
       ).toBeInTheDocument();
-
-      // The answer is one click away, where the exchange reads whole.
-      const user = userEvent.setup();
-      await user.click(within(row).getByRole("button"));
       expect(within(row).getByText("nginx")).toBeInTheDocument();
     });
 
@@ -1582,7 +1581,7 @@ describe("SessionView", () => {
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "other-session",
-            toolUseId: "tu-other",
+            toolCallId: "tu-other",
             toolName: "AskUserQuestion",
             input: {},
             incidentId: "inc-other",

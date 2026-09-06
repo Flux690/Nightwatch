@@ -102,12 +102,12 @@ const SUBMIT_REPORT_INPUT = z.object({
   }),
 });
 
-// A refusal is the record holding its ground, not a fault: the tool worked and
-// what was asked for is not available.
+// A refusal is the record holding its ground. It reads as an error because the
+// submission did not land and the model has to correct it and try again.
 function toResult(recording: RecordOutcome): ToolExecuteResult {
   return recording.recorded
     ? { content: recording.message }
-    : { content: recording.message, toolOutcome: "expected_miss" };
+    : { content: recording.message, isError: true };
 }
 
 export const REPORT_TOOLS: Tool[] = [

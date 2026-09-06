@@ -123,13 +123,13 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   });
 
   it("critical rejection resumes with coherent transcript: no escalation, model continues", async () => {
-    const toolUseId = `tu-crit-${randomUUID()}`;
+    const toolCallId = `tu-crit-${randomUUID()}`;
 
     const firstRunScript: ScriptedTurn[] = [
       {
         toolUses: [
           {
-            id: toolUseId,
+            toolCallId: toolCallId,
             name: "RestartDockerService",
             input: {
               target: "prod-1/web-01/web-01",

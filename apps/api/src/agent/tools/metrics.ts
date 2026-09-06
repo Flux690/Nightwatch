@@ -91,7 +91,7 @@ async function resolveMetricsSource(): Promise<
     (await getMetricsSource()) ?? {
       content:
         "No metrics source is connected. The user can connect one from the Integrations page. Continue without metric evidence.",
-      toolOutcome: "permission",
+      isError: true,
     }
   );
 }
@@ -121,21 +121,21 @@ function corrective(err: unknown): ToolExecuteResult {
     if (err.code === "bad_query") {
       return {
         content: `The source rejected the query: ${err.message}. Fix the PromQL and retry.`,
-        toolOutcome: "system",
+        isError: true,
       };
     }
     // A shape this cannot read will not read differently on a second attempt.
     if (err.code === "bad_response") {
-      return { content: err.message, toolOutcome: "system" };
+      return { content: err.message, isError: true };
     }
     return {
       content: `Metrics request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
-      toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",
+      isError: true,
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    toolOutcome: "system",
+    isError: true,
   };
 }
 
@@ -229,7 +229,6 @@ export const METRICS_TOOLS: Tool[] = [
               ...result,
               note: withEmpty(result, query, source.label),
             },
-            toolOutcome: "expected_miss",
           };
         }
         return { content: result };
@@ -295,7 +294,6 @@ export const METRICS_TOOLS: Tool[] = [
               ...result,
               note: withEmpty(result, query, source.label),
             },
-            toolOutcome: "expected_miss",
           };
         }
         return { content: result };
@@ -331,7 +329,6 @@ export const METRICS_TOOLS: Tool[] = [
         if (names.length === 0) {
           return {
             content: `No metric names matched. ${searched} Widen the substring, or drop it to see what this source stores at all.`,
-            toolOutcome: "expected_miss",
           };
         }
         const result: MetricNamesResult = {
@@ -366,7 +363,6 @@ export const METRICS_TOOLS: Tool[] = [
       if (!source.capabilities.metricMetadata) {
         return {
           content: `${source.label} may not serve metric metadata: it needs v1.130.0 or newer with -enableMetadata set, and answers empty for every metric otherwise. So nothing here can tell you the type or unit of "${metric.trim()}", and nothing here can tell you which of those two it is. This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,
-          toolOutcome: "expected_miss",
         };
       }
       try {
@@ -374,7 +370,6 @@ export const METRICS_TOOLS: Tool[] = [
         if (meta === null) {
           return {
             content: `No exporter declared metadata for "${metric.trim()}" on ${source.label}. The metric may still exist and be queryable.`,
-            toolOutcome: "expected_miss",
           };
         }
         return { content: meta };
@@ -401,7 +396,7 @@ export const METRICS_TOOLS: Tool[] = [
       if (source.rules === null) {
         return {
           content: `No rules endpoint is configured for ${source.label}, so nothing here can say which alerting rules it evaluates or whether any is firing. This is a gap in the connection, not an absence of rules. The user can add the rules URL on the Integrations page - on VictoriaMetrics it is vmalert's address, and on Grafana Cloud the Grafana stack's.`,
-          toolOutcome: "permission",
+          isError: true,
         };
       }
       const contains = input.contains ?? null;
@@ -418,7 +413,6 @@ export const METRICS_TOOLS: Tool[] = [
               needle === null
                 ? `${source.label} returned no alerting rules. That is not proof it evaluates none: a VictoriaMetrics query endpoint answers this the same way, with an empty list, when the rules actually live in vmalert.`
                 : `No alerting rule name contains "${contains}".`,
-            toolOutcome: "expected_miss",
           };
         }
         const { kept } = fitWithinBudget(matched.slice(0, MAX_ALERT_RULES));

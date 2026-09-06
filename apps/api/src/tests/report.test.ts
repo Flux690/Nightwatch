@@ -14,12 +14,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type {
-  HumanDecision,
-  NormalizedAlert,
-  ToolOutcome,
-  TranscriptRow,
-} from "@nightwarden/shared";
+import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
@@ -117,24 +112,23 @@ describe("the investigation record", () => {
 
   async function appendCitableRows(rows: TranscriptRow[]): Promise<void> {
     const sessionId = rows[0]!.sessionId;
-    await appendTranscriptRows(
-      withEvidenceIds(
-        rows,
-        highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1,
-      ),
+    const stamped = withEvidenceIds(
+      rows,
+      highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1,
     );
+    await appendTranscriptRows(stamped.rows);
   }
 
   // One record entry at a chosen instant, so a read after a remediation is
-  // distinguishable from one before. `toolOutcome` rides the part, as production does.
+  // distinguishable from one before. The parts carry what production carries.
   async function appendCall(
     sessionId: string,
     seq: number,
-    entry: { id: string; name: string; input: Record<string, unknown> },
+    entry: { toolCallId: string; name: string; input: Record<string, unknown> },
     output: string,
     at: string,
-    toolOutcome?: ToolOutcome,
-    humanDecision?: HumanDecision,
+    isError?: true,
+    approved?: boolean,
   ): Promise<void> {
     // Stamped as the loop stamps it, so a call here is citable exactly when a
     // call in a real run would be.
@@ -147,7 +141,7 @@ describe("the investigation record", () => {
         parts: [
           {
             type: "tool_call",
-            id: entry.id,
+            toolCallId: entry.toolCallId,
             name: entry.name,
             input: entry.input,
           },
@@ -162,11 +156,19 @@ describe("the investigation record", () => {
         parts: [
           {
             type: "tool_result",
-            toolCallId: entry.id,
+            toolCallId: entry.toolCallId,
             output,
-            ...(toolOutcome !== undefined && { toolOutcome }),
-            ...(humanDecision !== undefined && { humanDecision }),
+            ...(isError === true && { isError: true }),
           },
+          ...(approved === undefined
+            ? []
+            : [
+                {
+                  type: "tool_approval" as const,
+                  toolCallId: entry.toolCallId,
+                  approved,
+                },
+              ]),
         ],
         timestamp: at,
       },
@@ -183,14 +185,18 @@ describe("the investigation record", () => {
     await appendCall(
       sessionId,
       0,
-      { id: "tu-1", name: "QueryMetricsRange", input: { query: "rss" } },
+      {
+        toolCallId: "tu-1",
+        name: "QueryMetricsRange",
+        input: { query: "rss" },
+      },
       METRICS,
       "2026-07-03T02:00:00.000Z",
     );
     await appendCall(
       sessionId,
       2,
-      { id: "tu-2", name: "GetRecentChanges", input: {} },
+      { toolCallId: "tu-2", name: "GetRecentChanges", input: {} },
       CHANGES,
       "2026-07-03T02:01:00.000Z",
     );
@@ -202,22 +208,24 @@ describe("the investigation record", () => {
     toolName: string,
     sessionId: string,
     input: Record<string, unknown>,
-  ): Promise<{ content: unknown; toolOutcome?: string }> {
-    const toolUseId = `tu-${toolName}-${randomUUID()}`;
+  ): Promise<{ content: unknown; isError?: true }> {
+    const toolCallId = `tu-${toolName}-${randomUUID()}`;
     await appendCitableRows([
       {
         sessionId,
         seq: await getNextSeq(sessionId),
         kind: "assistant",
         content: `[tool: ${toolName}]`,
-        parts: [{ type: "tool_call", id: toolUseId, name: toolName, input }],
+        parts: [
+          { type: "tool_call", toolCallId: toolCallId, name: toolName, input },
+        ],
         timestamp: new Date().toISOString(),
       },
     ]);
     const tool = REPORT_TOOLS.find((t) => t.schema.name === toolName);
     return await executeTool(tool!, input, {
       sessionId,
-      toolUseId,
+      toolCallId,
       toolCallCeilingMs: 15_000,
     });
   }
@@ -247,7 +255,7 @@ describe("the investigation record", () => {
   async function submit(
     sessionId: string,
     input: Record<string, unknown>,
-  ): Promise<{ content: unknown; toolOutcome?: string }> {
+  ): Promise<{ content: unknown; isError?: true }> {
     const complete = {
       headline: "the cache bump raised the memory floor",
       affected: "web-01",
@@ -257,7 +265,7 @@ describe("the investigation record", () => {
     };
     return await executeTool(SUBMIT_REPORT_TOOL, complete, {
       sessionId,
-      toolUseId: "tu-submit",
+      toolCallId: "tu-submit",
       toolCallCeilingMs: 15_000,
     });
   }
@@ -312,7 +320,7 @@ describe("the investigation record", () => {
         finding: "still looking",
         evidenceIds: ["e1"],
       });
-      expect(result.toolOutcome).toBe("system");
+      expect(result.isError).toBe(true);
       expect(await getRecord(sessionId)).toBeUndefined();
     });
 
@@ -326,7 +334,7 @@ describe("the investigation record", () => {
           finding: "no reason given",
           evidenceIds: [],
         });
-        expect(result.toolOutcome).toBe("system");
+        expect(result.isError).toBe(true);
         // The one rule broken most often, so the refusal says what to do about
         // it rather than only which field failed.
         expect(String(result.content)).toContain("at least one citation");
@@ -518,7 +526,7 @@ describe("the investigation record", () => {
         timeline: [],
       });
 
-      expect(refused.toolOutcome).toBe("system");
+      expect(refused.isError).toBe(true);
       expect(String(refused.content)).toContain("headline");
       expect((await getRecord(sessionId))?.report ?? null).toBeNull();
     });
@@ -550,7 +558,7 @@ describe("the investigation record", () => {
         recommendation: "",
       });
 
-      expect(refused.toolOutcome).toBe("system");
+      expect(refused.isError).toBe(true);
       expect(String(refused.content)).toContain("summary");
       expect((await getRecord(sessionId))?.report ?? null).toBeNull();
     });
@@ -578,7 +586,7 @@ describe("the investigation record", () => {
         sessionId,
         (await getRecord(sessionId))!,
       );
-      expect(evidence.map((e) => e.toolUseId)).toEqual(["tu-1", "tu-2"]);
+      expect(evidence.map((e) => e.toolCallId)).toEqual(["tu-1", "tu-2"]);
       expect(evidence[0]).toMatchObject({
         toolName: "QueryMetricsRange",
         input: { query: "rss" },
@@ -635,7 +643,7 @@ describe("the investigation record", () => {
         sessionId,
         (await getRecord(sessionId))!,
       );
-      expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
+      expect(resolved.map((e) => e.toolCallId)).toEqual(["tu-1"]);
     });
 
     /* The id a result carries is the id the record resolves that call by, and a
@@ -676,8 +684,8 @@ describe("the investigation record", () => {
         { sessionId, title: "t", createdAt: new Date().toISOString() },
         [alert("prior-runs")],
       );
-      const restart = (id: string, target: string) => ({
-        id,
+      const restart = (toolCallId: string, target: string) => ({
+        toolCallId,
         name: "RestartDockerService",
         input: { target, reason: "r" },
       });
@@ -688,7 +696,7 @@ describe("the investigation record", () => {
         "ok",
         "T1",
         undefined,
-        "approved",
+        true,
       );
       await appendCall(
         sessionId,
@@ -697,7 +705,7 @@ describe("the investigation record", () => {
         "ok",
         "T2",
         undefined,
-        "approved",
+        true,
       );
       // A different service, so it must not add to the count above.
       await appendCall(
@@ -707,7 +715,7 @@ describe("the investigation record", () => {
         "ok",
         "T3",
         undefined,
-        "approved",
+        true,
       );
       await appendCall(
         sessionId,
@@ -716,14 +724,14 @@ describe("the investigation record", () => {
         "ok",
         "T4",
         undefined,
-        "approved",
+        true,
       );
 
       const cards = (await buildTranscript(sessionId)).flatMap((item) =>
         item.kind === "tool_call" ? [item] : [],
       );
-      const priorOf = (toolUseId: string): number | undefined =>
-        cards.find((c) => c.toolUseId === toolUseId)?.priorRuns;
+      const priorOf = (toolCallId: string): number | undefined =>
+        cards.find((c) => c.toolCallId === toolCallId)?.priorRuns;
 
       // Counted in transcript order, so a card reports what ran before it and
       // never counts itself.
@@ -760,7 +768,7 @@ describe("the investigation record", () => {
       await appendCall(
         sessionId,
         4,
-        { id: "tu-3", name: "QueryMetrics", input: { query: "rss" } },
+        { toolCallId: "tu-3", name: "QueryMetrics", input: { query: "rss" } },
         "{}",
         "2026-07-03T02:02:00.000Z",
       );
@@ -779,20 +787,20 @@ describe("the investigation record", () => {
       sessionId: string,
       seq: number,
       at: string,
-      humanDecision: HumanDecision = "approved",
+      approved = true,
     ): Promise<void> {
       await appendCall(
         sessionId,
         seq,
         {
-          id: "tu-restart",
+          toolCallId: "tu-restart",
           name: "RestartDockerService",
           input: { target: "prod-1/app/web" },
         },
         "restarted",
         at,
         undefined,
-        humanDecision,
+        approved,
       );
     }
 
@@ -804,7 +812,11 @@ describe("the investigation record", () => {
       await appendCall(
         sessionId,
         6,
-        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        {
+          toolCallId: "tu-after",
+          name: "QueryMetricsRange",
+          input: { query: "rss" },
+        },
         METRICS,
         "2026-07-03T02:06:00.000Z",
       );
@@ -840,14 +852,25 @@ describe("the investigation record", () => {
        for a tool that is not there. Only the clock used to stop it. */
     it("ends a run that spends three turns asking for tools it does not have", async () => {
       const barren = {
-        toolUses: [{ id: "tu-x", name: "GetK8sLogs", input: { target: "x" } }],
+        toolUses: [
+          { toolCallId: "tu-x", name: "GetK8sLogs", input: { target: "x" } },
+        ],
         text: "",
       };
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-1" }] },
-          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-2" }] },
-          { ...barren, toolUses: [{ ...barren.toolUses[0]!, id: "tu-3" }] },
+          {
+            ...barren,
+            toolUses: [{ ...barren.toolUses[0]!, toolCallId: "tu-1" }],
+          },
+          {
+            ...barren,
+            toolUses: [{ ...barren.toolUses[0]!, toolCallId: "tu-2" }],
+          },
+          {
+            ...barren,
+            toolUses: [{ ...barren.toolUses[0]!, toolCallId: "tu-3" }],
+          },
           // Never reached: the run ends on the third barren turn.
           { toolUses: [], text: "still going" },
         ]),
@@ -876,9 +899,13 @@ describe("the investigation record", () => {
         createContractFakeProvider([
           {
             toolUses: [
-              { id: "tu-withheld", name: "GetK8sLogs", input: { target: "x" } },
-              { id: "tu-near", name: "RecordHypotheses", input: {} },
-              { id: "tu-far", name: "SendSlackMessage", input: {} },
+              {
+                toolCallId: "tu-withheld",
+                name: "GetK8sLogs",
+                input: { target: "x" },
+              },
+              { toolCallId: "tu-near", name: "RecordHypotheses", input: {} },
+              { toolCallId: "tu-far", name: "SendSlackMessage", input: {} },
             ],
             text: "",
           },
@@ -892,10 +919,10 @@ describe("the investigation record", () => {
 
       await runSession({ sessionId, alerts: [alert("refusals")] });
 
-      const answerTo = async (toolUseId: string): Promise<string> => {
+      const answerTo = async (toolCallId: string): Promise<string> => {
         const part = (await getTranscriptRows(sessionId))
           .flatMap((row) => row.parts)
-          .find((p) => p.type === "tool_result" && p.toolCallId === toolUseId);
+          .find((p) => p.type === "tool_result" && p.toolCallId === toolCallId);
         return part !== undefined && part.type === "tool_result"
           ? part.output
           : "";
@@ -924,14 +951,18 @@ describe("the investigation record", () => {
       }
     });
 
-    // A provider carries the wire's error flag and nothing else, so the class is
-    // put back on the way to disk. Without it a reload cannot tell miss from crash.
-    it("keeps the toolOutcome class on the persisted result, not beside it", async () => {
+    // The record is built from what the turn did, so a failure reaches disk
+    // without being read back out of a provider that cannot carry it.
+    it("keeps a refused call's failure on the persisted result", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
           {
             toolUses: [
-              { id: "tu-gone", name: "GetK8sLogs", input: { target: "x" } },
+              {
+                toolCallId: "tu-gone",
+                name: "GetK8sLogs",
+                input: { target: "x" },
+              },
             ],
             text: "",
           },
@@ -946,21 +977,25 @@ describe("the investigation record", () => {
       await runSession({ sessionId, alerts: [alert("stamped")] });
 
       // No Kubernetes runner is connected, so the tool is not in the offered
-      // set and the turn answers with a class rather than a result.
+      // set and the turn answers with a refusal rather than a result.
       const answering = (await getTranscriptRows(sessionId))
         .flatMap((row) => row.parts)
         .find((p) => p.type === "tool_result" && p.toolCallId === "tu-gone");
-      expect(answering).toMatchObject({ toolOutcome: "system", isError: true });
+      expect(answering).toMatchObject({ isError: true });
     });
 
     it("never counts a declined call as the write a later read confirms", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
-      await appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z", "rejected");
+      await appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z", false);
       await appendCall(
         sessionId,
         6,
-        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        {
+          toolCallId: "tu-after",
+          name: "QueryMetricsRange",
+          input: { query: "rss" },
+        },
         METRICS,
         "2026-07-03T02:06:00.000Z",
       );
@@ -986,7 +1021,7 @@ describe("the investigation record", () => {
         sessionId,
         4,
         {
-          id: "tu-ask",
+          toolCallId: "tu-ask",
           name: "AskUserQuestion",
           input: { question: "Which deploy?", options: [] },
         },
@@ -996,7 +1031,11 @@ describe("the investigation record", () => {
       await appendCall(
         sessionId,
         6,
-        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        {
+          toolCallId: "tu-after",
+          name: "QueryMetricsRange",
+          input: { query: "rss" },
+        },
         METRICS,
         "2026-07-03T02:06:00.000Z",
       );
@@ -1023,18 +1062,22 @@ describe("the investigation record", () => {
         sessionId,
         4,
         {
-          id: "tu-refused",
+          toolCallId: "tu-refused",
           name: "DockerExec",
           input: { target: "prod-1/app/web", executable: "df", args: ["-h"] },
         },
         'Tool "DockerExec" is not available in this investigation.',
         "2026-07-03T02:05:00.000Z",
-        "system",
+        true,
       );
       await appendCall(
         sessionId,
         6,
-        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        {
+          toolCallId: "tu-after",
+          name: "QueryMetricsRange",
+          input: { query: "rss" },
+        },
         METRICS,
         "2026-07-03T02:06:00.000Z",
       );
@@ -1086,7 +1129,7 @@ describe("the investigation record", () => {
         {
           toolUses: [
             {
-              id: `tu-read-${n}`,
+              toolCallId: `tu-read-${n}`,
               name: "GetDockerLogs",
               input: { target: "host/app/web" },
             },
@@ -1096,7 +1139,7 @@ describe("the investigation record", () => {
         {
           toolUses: [
             {
-              id: `tu-record-${n}`,
+              toolCallId: `tu-record-${n}`,
               name: "RecordHypothesis",
               input: {
                 statement,
@@ -1117,7 +1160,7 @@ describe("the investigation record", () => {
       return {
         toolUses: [
           {
-            id: "tu-submit",
+            toolCallId: "tu-submit",
             name: "SubmitInvestigationReport",
             input: {
               headline: "the worker exhausted its memory limit",
@@ -1210,7 +1253,7 @@ describe("the investigation record", () => {
           parts: [
             {
               type: "tool_call",
-              id: "tu-silent",
+              toolCallId: "tu-silent",
               name: "QueryMetricsRange",
               input: { query: "rss" },
             },
@@ -1396,7 +1439,7 @@ describe("the investigation record", () => {
             ...Array.from({ length: 5 }, () => ({
               toolUses: [
                 {
-                  id: `bad-${randomUUID()}`,
+                  toolCallId: `bad-${randomUUID()}`,
                   name: "SubmitInvestigationReport" as const,
                   input: { headline: "" },
                 },
@@ -1500,8 +1543,8 @@ describe("the investigation record", () => {
       function readTurn() {
         return {
           toolUses: [
-            { id: randomUUID(), name: "ListDockerServices", input: {} },
-            { id: randomUUID(), name: "ListDockerServices", input: {} },
+            { toolCallId: randomUUID(), name: "ListDockerServices", input: {} },
+            { toolCallId: randomUUID(), name: "ListDockerServices", input: {} },
           ],
           text: "",
         };
@@ -1732,14 +1775,14 @@ describe("the investigation record", () => {
           sessionId,
           seq,
           {
-            id: "tu-released",
+            toolCallId: "tu-released",
             name: "RestartDockerService",
             input: { target: "prod-1/app/web" },
           },
           "restarted",
           "2026-07-03T02:05:00.000Z",
           undefined,
-          "approved",
+          true,
         );
       }
 

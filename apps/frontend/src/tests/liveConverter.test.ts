@@ -35,51 +35,51 @@ function itemEvent(item: TranscriptItem): FrontendEvent {
   };
 }
 
-function toolCallStart(toolUseId: string): FrontendEvent {
+function toolCallStart(toolCallId: string): FrontendEvent {
   return itemEvent({
     kind: "tool_call",
-    toolUseId,
+    toolCallId,
     toolName: "check_service_status",
     input: {},
     state: { phase: "running" },
   });
 }
 
-function toolCallEnd(toolUseId: string, result: unknown): FrontendEvent {
+function toolCallEnd(toolCallId: string, result: unknown): FrontendEvent {
   return itemEvent({
     kind: "tool_call",
-    toolUseId,
+    toolCallId,
     toolName: "check_service_status",
     input: {},
     state: { phase: "complete", result },
   });
 }
 
-function interrupt(toolUseId: string): FrontendEvent {
+function interrupt(toolCallId: string): FrontendEvent {
   return itemEvent({
     kind: "tool_call",
-    toolUseId,
+    toolCallId,
     toolName: "RestartDockerService",
     input: {},
     state: { phase: "awaiting_human", gate: "approval" },
   });
 }
 
-function continueInterrupt(toolUseId: string): FrontendEvent {
+function continueInterrupt(toolCallId: string): FrontendEvent {
   return itemEvent({
     kind: "continue_card",
-    toolUseId,
+    toolCallId,
     state: { phase: "awaiting_human" },
   });
 }
 
 function interruptResolved(
-  toolUseId: string,
+  toolCallId: string,
   status: "approved" | "rejected" | "answered" | "continued",
 ): FrontendEvent {
   return itemEvent({
     kind: "continue_card",
-    toolUseId,
+    toolCallId,
     state: { phase: "resolved", decision: status },
   });
 }
@@ -91,7 +91,7 @@ describe("applyLiveEvent — continue interrupt", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       kind: "continue_card",
-      toolUseId: "ci-1",
+      toolCallId: "ci-1",
     });
   });
 
@@ -132,7 +132,7 @@ describe("applyLiveEvent — continue interrupt", () => {
     expect(items[0]).toMatchObject({ kind: "thinking", streaming: false });
     expect(items[1]).toMatchObject({
       kind: "continue_card",
-      toolUseId: "ci-2",
+      toolCallId: "ci-2",
     });
   });
 });

@@ -132,7 +132,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     return {
       toolCallCeilingMs: 60_000,
       sessionId,
-      toolUseId: `tu-${sessionSeq}`,
+      toolCallId: `tu-${sessionSeq}`,
     };
   }
 
@@ -171,10 +171,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.filesByPr = { 42: ["src/redis.ts", "src/config.ts"] };
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(toolOutcome.toolOutcome).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    expect(dispatched.isError).toBeUndefined();
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.branch).toBe("main");
     expect(result.windowStart).toBe(WINDOW_START_24H);
     expect(result.windowEnd).toBe(FIRED_AT);
@@ -207,14 +207,14 @@ describe("GetRecentChanges through the tool dispatch", () => {
     );
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.commits.length).toBeLessThan(400);
     expect(result.changesOmitted).toBe(400 - result.commits.length);
     // Bounded here rather than refused at the ceiling, so the agent still gets
     // the changes nearest the alert instead of nothing at all.
-    expect(toolOutcome.toolOutcome).toBeUndefined();
+    expect(dispatched.isError).toBeUndefined();
   });
 
   it("a chat session with no alert anchors the window to now", async () => {
@@ -223,10 +223,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     installFetchMock(mock);
 
     const before = Date.now();
-    const toolOutcome = await executeTool(tool, {}, await toolContext(null));
+    const dispatched = await executeTool(tool, {}, await toolContext(null));
     const after = Date.now();
 
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     const end = Date.parse(result.windowEnd);
     expect(end).toBeGreaterThanOrEqual(before);
     expect(end).toBeLessThanOrEqual(after);
@@ -246,7 +246,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     );
 
     expect(result.content).toMatch(/windowHours/);
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(mock.requests).toHaveLength(0);
   });
 
@@ -275,9 +275,9 @@ describe("GetRecentChanges through the tool dispatch", () => {
     ];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.commits.map((c) => c.sha)).toEqual(["plain-1"]);
   });
 
@@ -290,9 +290,9 @@ describe("GetRecentChanges through the tool dispatch", () => {
     for (let n = 1; n <= 16; n++) mock.filesByPr[n] = [`file-${n}.ts`];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.pullRequests).toHaveLength(16);
     const fileRequests = mock.requests.filter((u) => u.includes("/files"));
     expect(fileRequests).toHaveLength(15);
@@ -308,10 +308,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.commits = [commit("c1", "fix: something", "2026-07-16T11:31:00Z")];
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(toolOutcome.toolOutcome).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    expect(dispatched.isError).toBeUndefined();
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.pullRequests).toEqual([]);
     expect(result.commits).toHaveLength(1);
     expect(result.note).toContain("Pull requests read access");
@@ -323,10 +323,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.commitsStatus = 409;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(toolOutcome.toolOutcome).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(toolOutcome);
+    expect(dispatched.isError).toBeUndefined();
+    const result = parsedContent<GetRecentChangesResult>(dispatched);
     expect(result.commits).toEqual([]);
   });
 
@@ -336,10 +336,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     mock.repoStatus = 500;
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(toolOutcome.toolOutcome).toBe("retryable");
-    expect(toolOutcome.content).toContain(
+    expect(dispatched.isError).toBe(true);
+    expect(dispatched.content).toContain(
       "Continue the investigation without recent-change context",
     );
   });
@@ -348,10 +348,10 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const mock = makeMock();
     installFetchMock(mock);
 
-    const toolOutcome = await executeTool(tool, {}, await toolContext(ALERT));
+    const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(toolOutcome.toolOutcome).toBe("permission");
-    expect(toolOutcome.content).toContain("not configured");
+    expect(dispatched.isError).toBe(true);
+    expect(dispatched.content).toContain("not configured");
     expect(mock.requests).toEqual([]);
   });
 
@@ -375,7 +375,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const result = await executeTool(tool, {}, await toolContext(ALERT));
 
-    expect(result.toolOutcome).toBe("system");
+    expect(result.isError).toBe(true);
     expect(result.content).toContain("shape this cannot read");
     expect(result.content).toContain("treat this as unknown");
   });
