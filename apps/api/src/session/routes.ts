@@ -160,7 +160,7 @@ export async function registerSessionRoutes(
       const started = await dispatcher.dispatch({
         sessionId,
         seed: await buildSeed(sessionId),
-        harnessMessage: REPORT_RETRY_REQUEST,
+        systemReminder: REPORT_RETRY_REQUEST,
       });
       if (!started) {
         return reply

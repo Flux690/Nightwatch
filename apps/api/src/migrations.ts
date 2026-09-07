@@ -1,5 +1,5 @@
-// Applied in order and never edited once applied, because a version is a fact
-// about every install. What each column is for lives in `schema.ts`.
+/* Applied in order. A version is a fact about every install, so an entry is
+   frozen from the first release; before it the baseline is edited directly. */
 
 export interface Migration {
   version: number;
@@ -48,14 +48,6 @@ CREATE TABLE IF NOT EXISTS provider_config (
   compaction          INTEGER  NOT NULL DEFAULT 0,
   reasoning           TEXT,
   updated_at          TEXT     NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS user (
-  id              TEXT     PRIMARY KEY,
-  email           TEXT,
-  hash            TEXT,
-  login_version   INTEGER  NOT NULL DEFAULT 0,
-  updated_at      TEXT     NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS integrations (
@@ -136,17 +128,9 @@ CREATE TABLE IF NOT EXISTS session_transcript (
   PRIMARY KEY (session_id, seq)
 );
 
-`;
 
-const HARNESS_KIND = `
-UPDATE session_transcript SET kind = 'harness' WHERE kind = 'nightwarden';
-`;
-
-/* Transcribed from what Better Auth's own getMigrations emits for this config,
-   so the columns are the library's answer rather than a reading of its docs. */
-const BETTER_AUTH = `
-
-DROP TABLE IF EXISTS user;
+-- Better Auth's own four tables, shaped by what its getMigrations emits. It
+-- writes dates as ISO strings and booleans as 0/1.
 
 CREATE TABLE user (
   id             TEXT     NOT NULL PRIMARY KEY,
@@ -207,8 +191,9 @@ CREATE UNIQUE INDEX account_issuer_account_id_uidx ON account (issuer, account_i
 
 `;
 
+/* Transcribed from what Better Auth's own getMigrations emits for this config,
+   so the columns are the library's answer rather than a reading of its docs. */
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", sql: BASELINE },
-  { version: 2, name: "transcript kind harness", sql: HARNESS_KIND },
-  { version: 3, name: "better auth tables", sql: BETTER_AUTH },
 ];

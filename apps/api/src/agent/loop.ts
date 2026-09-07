@@ -18,7 +18,7 @@ import {
 } from "./report.js";
 import { highestEvidenceNumber, withEvidenceIds } from "./evidence-id.js";
 import { isCitable } from "./evidence-source.js";
-import { harnessTurn, stripHarnessMarker } from "./harness-marker.js";
+import { asSystemReminder, stripSystemReminder } from "./system-reminder.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getRecord } from "../session/record-store.js";
 import { recoveryState } from "../verification/recovery.js";
@@ -254,8 +254,9 @@ function recordDebtPolicy(investigation: boolean, spent: number): RecordDebt {
 
 // What earlier runs on this session already spent, read off the turns they sent.
 function spentOn(rows: readonly TranscriptRow[], opening: string): number {
-  return rows.filter((r) => r.kind === "harness" && r.content.includes(opening))
-    .length;
+  return rows.filter(
+    (r) => r.kind === "system_reminder" && r.content.includes(opening),
+  ).length;
 }
 
 /* Calls that answered and could back a claim; a refused one taught nothing.
@@ -338,7 +339,7 @@ export interface RunSessionInput {
   investigation?: boolean;
   // Stored as ours and never drawn: words the reader did not write must never
   // appear in their own voice.
-  harnessMessage?: string;
+  systemReminder?: string;
   // Aborts the LLM request in flight when the dispatcher stops this run.
   signal?: AbortSignal;
   // When true: seed prior transcript and run exactly one closing turn (no tools),
@@ -450,7 +451,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // A harness row draws nothing, so publishing it costs a refetch that
     // changes no pixel.
     for (const row of stamped.rows) {
-      if (row.kind !== "harness") publishMessage(sessionId, row);
+      if (row.kind !== "system_reminder") publishMessage(sessionId, row);
     }
   };
 
@@ -464,10 +465,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   // The one emitter of the marker, so also the door untrusted text arrives at:
   // an injected alert's labels are the sender's and must not close our tag.
-  const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
-    const marked = harnessTurn(stripHarnessMarker(text));
+  const sendSystemReminder = (provider: LLMProvider, text: string): void => {
+    const marked = asSystemReminder(stripSystemReminder(text));
     provider.appendUserMessage(marked);
-    stage("harness", [{ type: "text", text: marked }]);
+    stage("system_reminder", [{ type: "text", text: marked }]);
   };
 
   // User declined a continue-request: replay the transcript and run one free-form
@@ -541,12 +542,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // Written immediately so the frontend shows the turn the moment it is sent,
     // rather than waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
-      const text = stripHarnessMarker(input.userMessage);
+      const text = stripSystemReminder(input.userMessage);
       provider.appendUserMessage(text);
       stage("user", [{ type: "text", text }]);
       await flush();
-    } else if (input.harnessMessage) {
-      sendHarnessMessage(provider, input.harnessMessage);
+    } else if (input.systemReminder) {
+      sendSystemReminder(provider, input.systemReminder);
       await flush();
     }
   } else {
@@ -554,10 +555,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // marks it as its own. A person's own first message is theirs.
     const own = input.userMessage === undefined && openingTurn !== null;
     const first = own
-      ? harnessTurn(openingTurn)
-      : stripHarnessMarker(input.userMessage ?? "");
+      ? asSystemReminder(openingTurn)
+      : stripSystemReminder(input.userMessage ?? "");
     provider.start(first);
-    stage(own ? "harness" : "user", [{ type: "text", text: first }]);
+    stage(own ? "system_reminder" : "user", [{ type: "text", text: first }]);
     await flush();
     // Brand-new session only: refine the title in the background. Chat uses the
     // message; an alert, a compact summary.
@@ -608,7 +609,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     publishReportCard(sessionId, "building");
     let problem: string | null = null;
     for (let attempt = 1; attempt <= MAX_REPORT_ATTEMPTS; attempt++) {
-      sendHarnessMessage(
+      sendSystemReminder(
         provider,
         problem === null
           ? reportRequest(
@@ -708,7 +709,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     if (change !== null) {
       log.info({ turn, change }, "offered toolset changed mid-run");
       offered = nowOffered;
-      sendHarnessMessage(provider, change);
+      sendSystemReminder(provider, change);
       await flush();
     }
     const toolSchemas = offeredSchemas(offered);
@@ -795,7 +796,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             },
             "finish gate: record incomplete, pushing back",
           );
-          sendHarnessMessage(provider, pushback.say);
+          sendSystemReminder(provider, pushback.say);
           await flush();
           continue;
         }
@@ -928,7 +929,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // exists to tell the model, which is a separate concern from keeping it.
     const injected = input.drainInbox?.(sessionId) ?? [];
     if (injected.length > 0) {
-      sendHarnessMessage(provider, formatInjectedAlerts(injected));
+      sendSystemReminder(provider, formatInjectedAlerts(injected));
     }
 
     const claims = ((await getRecord(sessionId))?.hypotheses ?? []).length;
@@ -941,7 +942,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         { turn, unaccounted: recordDebt.unaccounted() },
         "reads unaccounted for; asking",
       );
-      sendHarnessMessage(provider, ask);
+      sendSystemReminder(provider, ask);
     }
     await flush();
   }

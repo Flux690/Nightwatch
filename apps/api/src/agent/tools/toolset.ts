@@ -1,6 +1,6 @@
 import { executeRunnerTool } from "../executor.js";
 import { parseInput } from "./schema.js";
-import { stripHarnessMarker } from "../harness-marker.js";
+import { stripSystemReminder } from "../system-reminder.js";
 import {
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_TOOL_RESULT_CHARS,
@@ -90,7 +90,7 @@ export async function executeTool(
       : await executeRunnerTool(tool, parsed.data, effectiveCtx);
   // Stripped here rather than per tool: a log line or a file is the outside
   // world speaking, and this is the one door all of it comes through.
-  const content = stripHarnessMarker(
+  const content = stripSystemReminder(
     withEvidenceId(result.content, ctx.evidenceId),
   );
   if (content.length > MAX_TOOL_RESULT_CHARS) {

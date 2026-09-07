@@ -174,7 +174,7 @@ export async function buildTranscript(
 
     // The harness talking to the model, not the user. Stored so a resume replays
     // faithfully, and never drawn, so the transcript reads as one conversation.
-    if (msg.kind === "harness") continue;
+    if (msg.kind === "system_reminder") continue;
 
     if (msg.kind === "error") {
       if (msg.content) {

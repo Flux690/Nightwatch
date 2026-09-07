@@ -8,7 +8,7 @@ import {
   findToolCall,
   getNextSeq,
 } from "./transcript-store.js";
-import { stripHarnessMarker } from "../agent/harness-marker.js";
+import { stripSystemReminder } from "../agent/system-reminder.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
@@ -241,7 +241,7 @@ export async function respondToPendingHumanInput(
 
   // Before the claim, so a malformed request is refused without taking the lock
   // and wedging the interrupt for the well-formed retry behind it.
-  const answer = stripHarnessMarker(text?.trim() ?? "");
+  const answer = stripSystemReminder(text?.trim() ?? "");
   if (pending.kind === "clarification") {
     if (decision !== undefined) {
       throw new HumanInputError(

@@ -1156,7 +1156,7 @@ describe("the investigation record", () => {
       };
       return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
     }
-    // Matched on content, not the first character: the <harness> tag is
+    // Matched on content, not the first character: the <system-reminder> tag is
     // asserted on its own below rather than by each of these.
     function recordGapsMessages(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
@@ -1244,8 +1244,8 @@ describe("the investigation record", () => {
       const written = harnessMessages();
       expect(written.length).toBeGreaterThan(0);
       for (const message of written) {
-        expect(message.startsWith("<harness>")).toBe(true);
-        expect(message.endsWith("</harness>")).toBe(true);
+        expect(message.startsWith("<system-reminder>")).toBe(true);
+        expect(message.endsWith("</system-reminder>")).toBe(true);
       }
     });
 
@@ -1751,7 +1751,7 @@ describe("the investigation record", () => {
       await runSession({
         sessionId,
         seed: await buildSeed(sessionId),
-        harnessMessage: REPORT_RETRY_REQUEST,
+        systemReminder: REPORT_RETRY_REQUEST,
       });
 
       expect((await getRecord(sessionId))!.report).toMatchObject({

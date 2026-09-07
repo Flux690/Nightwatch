@@ -15,7 +15,7 @@ import {
 import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
 import { resolveAlertTarget } from "../alerts/resolve-target.js";
-import { stripHarnessMarker } from "./harness-marker.js";
+import { stripSystemReminder } from "./system-reminder.js";
 
 interface InitialContext {
   systemPrompt: string;
@@ -105,7 +105,7 @@ Begin now. Start with whichever read tool most directly addresses this alert typ
   // and nothing we write here contains the marker for it to remove.
   return {
     systemPrompt: systemPromptFor(opts, true),
-    openingTurn: stripHarnessMarker(openingTurn),
+    openingTurn: stripSystemReminder(openingTurn),
   };
 }
 

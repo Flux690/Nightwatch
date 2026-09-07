@@ -174,7 +174,7 @@ describe("API-local session store", () => {
       msg(m.sessionId, 0),
       msg(m.sessionId, 1),
       msg(m.sessionId, 2, {
-        kind: "harness",
+        kind: "system_reminder",
         content: "Your investigation record is not finished.",
         parts: [
           { type: "text", text: "Your investigation record is not finished." },

@@ -12,7 +12,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Added
 
-- **OpenAI is a provider you can pick.** Settings, Provider now offers Anthropic, OpenAI and OpenRouter. OpenAI models run through the Responses API, so reasoning summaries stream into the transcript the way Anthropic's already do, and a long investigation is compacted rather than refused. Set it up with a key and a model exactly as the other two, or seed it with `OPENAI_API_KEY` and `OPENAI_MODEL`. — `0.5.7`
+- **OpenAI is a provider you can pick.** Settings, Provider now offers Anthropic, OpenAI and OpenRouter. OpenAI models run through the Responses API, so reasoning summaries stream into the transcript the way Anthropic's already do, and a long investigation is compacted rather than refused. Set it up with a key and a model exactly as the other two, or seed it with `OPENAI_API_KEY` and `OPENAI_MODEL`. — `0.5.7` (`37cc598`)
 
 - **You can change your password in the app, and see which devices are signed in.** Settings → Account now shows the account you are signed in as, a change-password form, and a list of signed-in browsers with a Revoke button on each. Changing your password signs out every other device. Previously there was no way to change a password at all: the only documented recovery was wiping the volume and setting the install up again. — `0.5.0` (`0581fa8`)
 
@@ -24,9 +24,9 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
-- **Every model now shows the reasoning levels and the two limits it actually publishes.** What a model supports is read from models.dev alongside the list your provider returns, so the settings form describes an OpenAI or OpenRouter model as precisely as an Anthropic one - OpenAI's own endpoint publishes no capabilities at all, so before this its models offered no reasoning control and no context window. A model that cannot call tools is no longer listed, because it cannot run an investigation. A model too new for models.dev is still listed and still selectable; it just describes itself with blanks until the snapshot catches up. The reasoning row is labelled "Reasoning" for every provider. — `0.5.7`
+- **Every model now shows the reasoning levels and the two limits it actually publishes.** What a model supports is read from models.dev alongside the list your provider returns, so the settings form describes an OpenAI or OpenRouter model as precisely as an Anthropic one - OpenAI's own endpoint publishes no capabilities at all, so before this its models offered no reasoning control and no context window. A model that cannot call tools is no longer listed, because it cannot run an investigation. A model too new for models.dev is still listed and still selectable; it just describes itself with blanks until the snapshot catches up. The reasoning row is labelled "Reasoning" for every provider. — `0.5.7` (`37cc598`)
 
-- **The Anthropic Base URL default now ends in `/v1`,** matching OpenAI and OpenRouter, so all three name the endpoint they actually call. Only the placeholder changed; a Base URL you saved yourself is untouched. — `0.5.7`
+- **The Anthropic Base URL default now ends in `/v1`,** matching OpenAI and OpenRouter, so all three name the endpoint they actually call. Only the placeholder changed; a Base URL you saved yourself is untouched. — `0.5.7` (`37cc598`)
 
 - **A report timeline entry has to carry a real timestamp.** The `at` field took any non-empty string, so a moment could be written as "around 03:10" and the report rendered it as given, next to entries that were exact. It now has to be an ISO 8601 timestamp carrying a timezone, so every row on a timeline can be placed against the others. — `0.5.6` (`d367643`)
 
@@ -75,9 +75,9 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Fixed
 
-- **"Add an API key" and "that key was rejected" are no longer decided by which provider you picked.** The endpoint's own answer settles it: a rejection carrying no key asks for one, and the same rejection carrying a key says that key is wrong. An endpoint that lists models without a key still does. — `0.5.7`
+- **"Add an API key" and "that key was rejected" are no longer decided by which provider you picked.** The endpoint's own answer settles it: a rejection carrying no key asks for one, and the same rejection carrying a key says that key is wrong. An endpoint that lists models without a key still does. — `0.5.7` (`37cc598`)
 
-- **A resumed investigation is no longer nudged twice.** The two requests that chase an unfinished record - the finish gate asking for what is missing, and the check that asks whether recent reads settled anything - are capped so a run cannot loop on a model that will not record. Those caps counted per run, so an investigation that paused for an approval came back with a full fresh allowance and could be asked the same questions all over again. They now count against the session, read from the requests already on the transcript. — `0.5.8`
+- **A resumed investigation is no longer nudged twice.** The two requests that chase an unfinished record - the finish gate asking for what is missing, and the check that asks whether recent reads settled anything - are capped so a run cannot loop on a model that will not record. Those caps counted per run, so an investigation that paused for an approval came back with a full fresh allowance and could be asked the same questions all over again. They now count against the session, read from the requests already on the transcript. — `0.5.8` (`c975a41`)
 
 - **A tool call is no longer refused for an argument the model chose to leave out.** OpenRouter's schema dialect has no optional argument: every field is required, and an optional one is offered as "a value or null", so a model skipping a field sends null. NightWarden then rejected the call as malformed and asked the model to correct it, spending a turn each time on a call that was already right. A null now reads as the omission it means, wherever it appears in the arguments. — `0.5.6` (`d367643`)
 
