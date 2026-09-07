@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import {
+  RECORD_CHECK_OPENING,
+  RECORD_GAPS_OPENING,
   recordGapsMessage,
   recordCheck,
   reportRequest,
@@ -63,6 +65,7 @@ import { logger } from "../logger.js";
 import { messagePartsToText, METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 import type {
   AlertGroupContext,
+  GatedCall,
   MessagePart,
   NormalizedAlert,
   ToolName,
@@ -73,6 +76,7 @@ import type {
   ChatResponse,
   LLMProvider,
   ProviderMessage,
+  StopReason,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -164,8 +168,8 @@ type FinishGate = (gaps: RecordGap[]) => {
   repeated: RecordGap["kind"][];
 } | null;
 
-function finishGatePolicy(): FinishGate {
-  let pushbacks = 0;
+function finishGatePolicy(spent: number): FinishGate {
+  let pushbacks = spent;
   const seen = new Map<RecordGap["kind"], number>();
   return (gaps) => {
     if (pushbacks >= MAX_FINISH_PUSHBACKS) return null;
@@ -223,13 +227,13 @@ interface RecordDebt {
 
 /* Recording is what clears the debt, so a run that settles something early and
    then reads on is asked again. */
-function recordDebtPolicy(investigation: boolean): RecordDebt {
+function recordDebtPolicy(investigation: boolean, spent: number): RecordDebt {
   let sinceClaim = 0;
   let claimsSeen = 0;
   // The debt when the check last spoke, so it asks again after another eight
   // rather than every turn.
   let checkedAt = 0;
-  let checks = 0;
+  let checks = spent;
   return {
     unaccounted: () => sinceClaim,
     check: (claims, answered) => {
@@ -248,6 +252,12 @@ function recordDebtPolicy(investigation: boolean): RecordDebt {
   };
 }
 
+// What earlier runs on this session already spent, read off the turns they sent.
+function spentOn(rows: readonly TranscriptRow[], opening: string): number {
+  return rows.filter((r) => r.kind === "harness" && r.content.includes(opening))
+    .length;
+}
+
 /* Calls that answered and could back a claim; a refused one taught nothing.
    Counted from the turn because a harness turn orphans a tool_use from its result. */
 function citableAnswers(
@@ -264,6 +274,45 @@ function citableAnswers(
 // Matching the finish gate. The write-up is the deliverable, so an attempt
 // costs far less than ending a run without one.
 const MAX_REPORT_ATTEMPTS = 5;
+
+/* Why a turn carries no usable answer, said in the transcript rather than only
+   the log. Null where the turn is usable and the loop reads what it holds. */
+function turnEnding(
+  reason: StopReason,
+  maxOutputTokens: number,
+): string | null {
+  switch (reason) {
+    case "done":
+    case "tools":
+      return null;
+    case "length":
+      return `The model's reply was cut off at this model's output limit of ${maxOutputTokens} tokens, so this turn is incomplete. Send a message to continue, or pick a model with a larger limit in Settings.`;
+    case "filtered":
+      return "The model declined to continue this investigation. Nothing further was read, and anything already recorded stands.";
+    case "error":
+    case "unknown":
+      return "The model provider ended this turn without an answer and without saying why, so nothing was added. Send a message to continue.";
+  }
+}
+
+// The same question for the report turn, which has its own deliverable to name.
+function reportEnding(
+  reason: StopReason,
+  maxOutputTokens: number,
+): string | null {
+  switch (reason) {
+    case "done":
+    case "tools":
+      return null;
+    case "length":
+      return `The report was cut off at this model's output limit of ${maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`;
+    case "filtered":
+      return "The model declined to write the report.";
+    case "error":
+    case "unknown":
+      return "The model provider ended the report turn without an answer and without saying why.";
+  }
+}
 
 /* Read from the tool's own answer: a follow-up run already holds a report, so
    the record's contents prove nothing about the turn that just ran. */
@@ -378,8 +427,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let nextSeq = await getNextSeq(sessionId);
   // Carried for the run rather than recounted, so a long investigation does not
   // re-read its whole transcript to number one call.
-  let nextEvidence =
-    highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1;
+  const priorRows = await getTranscriptRows(sessionId);
+  let nextEvidence = highestEvidenceNumber(priorRows) + 1;
 
   const stage = (kind: TranscriptRow["kind"], parts: MessagePart[]): void => {
     pending.push({
@@ -519,9 +568,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let turn = 0;
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   const refusedNames = new Map<string, number>();
-  const finishGate = finishGatePolicy();
+  /* The record belongs to the session, so its two allowances carry across a
+     resume; a barren turn counts consecutive turns and starts afresh. */
+  const finishGate = finishGatePolicy(spentOn(priorRows, RECORD_GAPS_OPENING));
   const barrenTurns = barrenTurnPolicy();
-  const recordDebt = recordDebtPolicy(opensInvestigation);
+  const recordDebt = recordDebtPolicy(
+    opensInvestigation,
+    spentOn(priorRows, RECORD_CHECK_OPENING),
+  );
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
   const deadline = Date.now() + config.checkInAfterMs;
@@ -535,6 +589,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const writeReport = async (
     unrecovered: boolean,
     turn: number,
+    // Handed over rather than read again: the report turn offers one ungated
+    // tool, so nothing it does can change the list.
+    gated: GatedCall[],
   ): Promise<RunOutcome> => {
     // Said out loud rather than only to the server log: an investigation with no
     // write-up looked exactly like one whose model chose not to write much.
@@ -556,7 +613,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         problem === null
           ? reportRequest(
               (await getRecord(sessionId))?.hypotheses ?? [],
-              await gatedCalls(sessionId),
+              gated,
               unrecovered,
               /* So a follow-up revises what a previous run wrote rather than
                  rebuilding it from a context that may since have been compacted. */
@@ -604,16 +661,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         return "stopped";
       }
 
-      // A reply cut off mid-call carries half-written arguments, so the refusal
-      // below would name a schema fault and hide the real cause.
-      if (written.stopReason === "max_tokens") {
-        return await notWritten(
-          `The report was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`,
-        );
-      }
-      if (written.stopReason === "refusal") {
-        return await notWritten("The model declined to write the report.");
-      }
+      /* Read before the tool results: a reply cut off mid-call carries
+         half-written arguments, which would refuse as a schema fault instead. */
+      const ended = reportEnding(written.stopReason, llm.maxOutputTokens);
+      if (ended !== null) return await notWritten(ended);
 
       const { toolResults } = await processToolUses({
         toolUses: written.toolUses,
@@ -703,25 +754,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     );
     await flush();
 
-    if (response.stopReason === "refusal") {
-      log.warn({ turn }, "model refused to continue");
-      // Said in the transcript, not only the log: without an error row the
-      // session derives to completed and the refusal is invisible.
-      await appendErrorMessage(
-        sessionId,
-        "The model declined to continue this investigation. Nothing further was read, and anything already recorded stands.",
+    /* Without an error row the session derives to completed and a turn that
+       answered nothing is invisible, so the ending is said in the transcript. */
+    const ending = turnEnding(response.stopReason, llm.maxOutputTokens);
+    if (ending !== null) {
+      log.warn(
+        { turn, model: llm.model, stopReason: response.stopReason },
+        "turn ended without an answer",
       );
-      return "completed";
-    }
-
-    // A turn cut off at max_tokens is not an answer, and its last tool call may
-    // carry truncated arguments. Say so rather than reading the stump as one.
-    if (response.stopReason === "max_tokens") {
-      log.warn({ turn, model: llm.model }, "turn truncated at max_tokens");
-      await appendErrorMessage(
-        sessionId,
-        `The model's reply was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so this turn is incomplete. Send a message to continue, or pick a model with a larger limit in Settings.`,
-      );
+      await appendErrorMessage(sessionId, ending);
       return "completed";
     }
 
@@ -765,7 +806,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
-      const approvedWrites = approvedWriteCount(await gatedCalls(sessionId));
+      const gated = await gatedCalls(sessionId);
+      const approvedWrites = approvedWriteCount(gated);
       /* Rewriting is lossy, so a write-up that still covers the record is kept.
          Recovery is not a reason: a cleared alert already reads as Resolved. */
       const record = await getRecord(sessionId);
@@ -776,6 +818,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       return await writeReport(
         approvedWrites > 0 && recovery === "unconfirmed",
         turn,
+        gated,
       );
     }
 

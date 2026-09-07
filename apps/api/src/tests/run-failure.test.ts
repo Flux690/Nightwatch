@@ -163,7 +163,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
         {
           toolUses: [],
           text: "Partial answer that stops mid-",
-          stopReason: "max_tokens",
+          stopReason: "length",
         },
       ]),
     );

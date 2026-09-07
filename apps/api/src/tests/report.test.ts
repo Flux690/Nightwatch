@@ -1357,7 +1357,7 @@ describe("the investigation record", () => {
         createContractFakeProvider([
           ...recordTurn("root_cause", "the disk filled up"),
           { toolUses: [], text: "I am done." },
-          { toolUses: [], text: "", stopReason: "max_tokens" },
+          { toolUses: [], text: "", stopReason: "length" },
         ]),
       );
       const sessionId = randomUUID();
@@ -1731,7 +1731,7 @@ describe("the investigation record", () => {
           createContractFakeProvider([
             ...recordTurn("root_cause", "the disk filled up"),
             { toolUses: [], text: "I am done." },
-            { toolUses: [], text: "", stopReason: "max_tokens" },
+            { toolUses: [], text: "", stopReason: "length" },
           ]),
         )
         .mockImplementationOnce(() =>

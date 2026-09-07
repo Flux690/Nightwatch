@@ -25,7 +25,8 @@ function fakeModel(
 }
 
 function finish(
-  unified: "stop" | "length" | "content-filter" | "tool-calls" | "other",
+  unified:
+    "stop" | "length" | "content-filter" | "tool-calls" | "other" | "error",
 ): LanguageModelV4StreamPart {
   return {
     type: "finish",
@@ -37,8 +38,7 @@ function finish(
         cacheRead: undefined,
         cacheWrite: undefined,
       },
-      outputTokens: { total: 1, reasoning: undefined },
-      totalTokens: 2,
+      outputTokens: { total: 1, text: 1, reasoning: undefined },
     },
   };
 }
@@ -98,7 +98,7 @@ describe("what the run sends a model, and what it makes of the answer", () => {
     p.start("first");
     const turn = await p.chat(NO_TOOLS);
 
-    expect(turn.stopReason).toBe("tool_use");
+    expect(turn.stopReason).toBe("tools");
     expect(turn.toolUses).toEqual([
       {
         toolCallId: "tu-1",
@@ -271,11 +271,12 @@ describe("what the run sends a model, and what it makes of the answer", () => {
   });
 
   it.each([
-    ["content-filter", "refusal"],
-    ["length", "max_tokens"],
-    ["tool-calls", "tool_use"],
-    ["stop", "end_turn"],
-    ["other", "end_turn"],
+    ["content-filter", "filtered"],
+    ["length", "length"],
+    ["tool-calls", "tools"],
+    ["stop", "done"],
+    ["other", "unknown"],
+    ["error", "error"],
   ] as const)("reads a %s finish as %s", async (unified, expected) => {
     const model = fakeModel([...text("t", "x"), finish(unified)]);
     const p = provider(model);

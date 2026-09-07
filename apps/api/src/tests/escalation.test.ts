@@ -40,7 +40,11 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
   it("model refusal ends on model's own text: no synthetic message, no ESCALATED", async () => {
     const refusalScript: ScriptedTurn[] = [
-      { toolUses: [], text: "I cannot help with that.", stopReason: "refusal" },
+      {
+        toolUses: [],
+        text: "I cannot help with that.",
+        stopReason: "filtered",
+      },
     ];
     mockCreateProvider.mockImplementationOnce(() =>
       createContractFakeProvider(refusalScript),

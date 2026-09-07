@@ -38,17 +38,19 @@ const RECOVERY_SENTENCE =
 
 // Asks rather than insists: a run pushed into recording something it has not
 // tested records a guess, which the record must never hold.
+/* Each opens the message that spends one of its allowance, so the loop counts
+   what it already sent by the same words rather than a second tally. */
+export const RECORD_CHECK_OPENING = "You have answered";
+export const RECORD_GAPS_OPENING = "Your investigation record is not finished.";
+
 export function recordCheck(callsSinceClaim: number): string {
-  return `You have answered ${callsSinceClaim} tool calls since your last recorded claim. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
+  return `${RECORD_CHECK_OPENING} ${callsSinceClaim} tool calls since your last recorded claim. If any of what you have read has settled a candidate explanation - including one you have ruled out - record it now with RecordHypothesis, while the results are still close to hand. If you are still narrowing and have settled nothing yet, carry on; this is a question, not an instruction.`;
 }
 
 // Names the gaps and nothing else: a model one finding short is not told
 // about the four things it did do.
 export function recordGapsMessage(gaps: RecordGap[]): string {
-  return [
-    "Your investigation record is not finished.",
-    ...gaps.map(sentenceFor),
-  ].join(" ");
+  return [RECORD_GAPS_OPENING, ...gaps.map(sentenceFor)].join(" ");
 }
 
 // Told, not inferred: verdict, recency and supersession decide it together, and

@@ -202,6 +202,8 @@ One narrow case sits between them. If the process dies between running an approv
 
 A failed run is retried up to three times, minutes apart, on the same schedule that re-checks recovery, and only when waiting could help: a dropped connection, a rate limit, a provider having a bad day. A rejected key, an empty account or a missing model fails identically every time, so those stop and say which one it was. A retry resumes from the last complete exchange.
 
+**A turn that carries no answer says so.** Every reason a provider can report has its own value, and a turn that ended because the output ceiling was reached, a content filter fired, the provider faulted, or for a reason this build does not recognise, writes a line into the transcript naming which. None of them reads as the model having finished, so a run cannot go on to write a report over a turn that answered nothing.
+
 ### Recovery
 
 A fix is never believed because the model says so. The condition that fired is re-checked, two independent ways:
@@ -314,7 +316,7 @@ A run may not end on an incomplete record. Two gaps are checked:
 - **Empty record** - it recorded nothing at all.
 - **Unaccounted calls** - reads answered since the last claim that nothing on the record speaks for.
 
-Two rather than four, because a hypothesis is recorded already settled so none can be left open, and the recording tool refuses an unsupported claim so one cannot reach the record to be caught. The harness message names only the gaps that remain, so a model one claim short is not told about the four things it did do. It is capped, and the run composes anyway once the cap is reached: the status an unfinished record derives to is already honest.
+Two rather than four, because a hypothesis is recorded already settled so none can be left open, and the recording tool refuses an unsupported claim so one cannot reach the record to be caught. The harness message names only the gaps that remain, so a model one claim short is not told about the four things it did do. It is capped, and the run composes anyway once the cap is reached: the status an unfinished record derives to is already honest. The cap belongs to the session rather than the run, counted from the requests already on the transcript, so resuming after an approval continues the allowance instead of opening a second one.
 
 ### The report turn
 

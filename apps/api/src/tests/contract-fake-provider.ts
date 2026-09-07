@@ -241,8 +241,7 @@ function makeProvider(
         messages.push({ role: "assistant", content });
 
         const stopReason: ChatResponse["stopReason"] =
-          turn.stopReason ??
-          (turn.toolUses.length > 0 ? "tool_use" : "end_turn");
+          turn.stopReason ?? (turn.toolUses.length > 0 ? "tools" : "done");
 
         const message: NativeMessage = { role: "assistant", content };
         return Promise.resolve({

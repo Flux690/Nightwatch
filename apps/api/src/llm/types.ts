@@ -28,8 +28,13 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/* One value per reason a provider can report, so nothing it says is folded into
+   a word meaning something else. */
+export type StopReason =
+  "done" | "tools" | "length" | "filtered" | "error" | "unknown";
+
 export interface ChatResponse {
-  stopReason: "end_turn" | "tool_use" | "max_tokens" | "refusal";
+  stopReason: StopReason;
   toolUses: ToolUse[];
   text: string;
   // What the record stores for this turn, so the run never reads its own

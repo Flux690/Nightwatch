@@ -19,6 +19,7 @@ import type {
   LLMProvider,
   OnDelta,
   ProviderMessage,
+  StopReason,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -146,13 +147,16 @@ function promptFrom(
   return prompt;
 }
 
-// content-filter is where a refusal lands, whichever provider raised it.
-function stopReasonOf(unified: string): ChatResponse["stopReason"] {
-  if (unified === "content-filter") return "refusal";
-  if (unified === "length") return "max_tokens";
-  if (unified === "tool-calls") return "tool_use";
-  return "end_turn";
-}
+// The provider's own six, unmapped. A reason absent from this table is unknown
+// rather than an ending, so nothing new can read as a turn the model finished.
+const STOP_REASONS: Readonly<Record<string, StopReason>> = {
+  stop: "done",
+  "tool-calls": "tools",
+  length: "length",
+  "content-filter": "filtered",
+  error: "error",
+  other: "unknown",
+};
 
 /* Model-generated JSON can be malformed; empty input reaches per-tool validation,
    which refuses it with a correction rather than crashing the run. */
@@ -280,12 +284,12 @@ export class SdkProvider implements LLMProvider {
   ): Promise<{
     parts: MessagePart[];
     toolUses: ToolUse[];
-    stopReason: ChatResponse["stopReason"];
+    stopReason: StopReason;
   }> {
     const parts: MessagePart[] = [];
     const toolUses: ToolUse[] = [];
     const open = new Map<string, StreamedPart>();
-    let stopReason: ChatResponse["stopReason"] = "end_turn";
+    let stopReason: StopReason = "done";
 
     for await (const event of stream) {
       switch (event.type) {
@@ -338,11 +342,16 @@ export class SdkProvider implements LLMProvider {
           break;
         }
         case "finish": {
-          stopReason = stopReasonOf(event.finishReason.unified);
+          stopReason = STOP_REASONS[event.finishReason.unified] ?? "unknown";
           logger.info(
             {
               model: this.model.modelId,
               turns: this.turns.length,
+              // Kept for diagnosis alone: nothing branches on a provider's word.
+              stopReason,
+              ...(stopReason === "unknown" && {
+                reported: event.finishReason.raw ?? event.finishReason.unified,
+              }),
               input: event.usage.inputTokens.total,
               output: event.usage.outputTokens.total,
               cacheRead: event.usage.inputTokens.cacheRead,
