@@ -35,6 +35,9 @@ export interface ToolDispatchContext extends ToolCallIdentity {
 // the ceiling above so neither can be mistaken for the other.
 export interface ToolExecuteContext extends ToolCallIdentity {
   toolTimeoutMs: number;
+  // The same limit as a signal, for a call that reaches the network. Required,
+  // so a client that forgets to bound its request will not compile.
+  signal: AbortSignal;
 }
 
 // Two facts, not one: a write can be safe for where it lands, so a tool that

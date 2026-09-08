@@ -17,6 +17,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createContractFakeProvider,
+  messagesSentTo,
   type ContractFakeProvider,
 } from "./contract-fake-provider.js";
 import { waitFor } from "./wait.js";
@@ -232,10 +233,11 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       (await getTranscriptRows(sessionId)).some((m) => m.kind === "assistant"),
     );
 
-    // The failed exchange stays in the transcript but never reached the model:
-    // the provider was started fresh, not seeded.
-    expect(healthy.seed).not.toHaveBeenCalled();
-    expect(healthy.start).toHaveBeenCalledWith("try again");
+    // The failed exchange stays in the transcript but never reached the model,
+    // so the retry carries the new message alone.
+    expect(messagesSentTo(healthy)).toEqual([
+      { role: "user", content: "try again", parts: [expect.anything()] },
+    ]);
     expect(
       (await getTranscriptRows(sessionId)).map((m) => [m.seq, m.kind]),
     ).toEqual([

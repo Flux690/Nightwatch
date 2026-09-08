@@ -88,6 +88,7 @@ export function gitHubErrorDetail(err: GitHubApiError): string {
 
 async function pullRequestsWithFiles(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   branch: string,
@@ -102,6 +103,7 @@ async function pullRequestsWithFiles(
   try {
     merged = await listMergedPullRequests(
       token,
+      signal,
       owner,
       name,
       branch,
@@ -134,7 +136,13 @@ async function pullRequestsWithFiles(
       try {
         return {
           ...base,
-          files: await listPullRequestFiles(token, owner, name, pr.number),
+          files: await listPullRequestFiles(
+            token,
+            signal,
+            owner,
+            name,
+            pr.number,
+          ),
         };
       } catch {
         return { ...base, filesOmitted: true };
@@ -181,18 +189,32 @@ export const GITHUB_TOOLS: Tool[] = [
       // becomes a corrective result the agent can act on.
       try {
         const token = integration.token;
-        const branch = await defaultBranch(token, repoOwner, repoName);
+        const branch = await defaultBranch(
+          token,
+          ctx.signal,
+          repoOwner,
+          repoName,
+        );
         const [{ pullRequests, mergeShas, note }, allCommits] =
           await Promise.all([
             pullRequestsWithFiles(
               token,
+              ctx.signal,
               repoOwner,
               repoName,
               branch,
               since,
               until,
             ),
-            listCommits(token, repoOwner, repoName, branch, since, until),
+            listCommits(
+              token,
+              ctx.signal,
+              repoOwner,
+              repoName,
+              branch,
+              since,
+              until,
+            ),
           ]);
 
         // Drop merge commits so the two lists do not double-report: multi-parent

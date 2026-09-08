@@ -286,6 +286,7 @@ export const LOKI_TOOLS: Tool[] = [
           integration.baseUrl,
           integration.authorization,
           integration.orgId,
+          ctx.signal,
           query,
           start,
           end,
@@ -400,6 +401,7 @@ export const LOKI_TOOLS: Tool[] = [
           integration.baseUrl,
           integration.authorization,
           integration.orgId,
+          ctx.signal,
           query,
           start,
           end,
@@ -444,7 +446,15 @@ export const LOKI_TOOLS: Tool[] = [
       try {
         const { selector } = input;
         if (selector !== undefined) {
-          const all = await series(baseUrl, auth, orgId, selector, start, end);
+          const all = await series(
+            baseUrl,
+            auth,
+            orgId,
+            ctx.signal,
+            selector,
+            start,
+            end,
+          );
           const matches = all.slice(0, MAX_SERIES_MATCHES);
           const omitted = all.length - matches.length;
           const result: LogLabelsResult = {
@@ -468,6 +478,7 @@ export const LOKI_TOOLS: Tool[] = [
             baseUrl,
             auth,
             orgId,
+            ctx.signal,
             label,
             start,
             end,
@@ -489,7 +500,14 @@ export const LOKI_TOOLS: Tool[] = [
           return { content: result };
         }
 
-        const all = await labelNames(baseUrl, auth, orgId, start, end);
+        const all = await labelNames(
+          baseUrl,
+          auth,
+          orgId,
+          ctx.signal,
+          start,
+          end,
+        );
         const labels = all.slice(0, MAX_LABELS);
         const omitted = all.length - labels.length;
         const result: LogLabelsResult = {

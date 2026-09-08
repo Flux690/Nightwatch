@@ -136,7 +136,7 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Evidence trail.** The durable transcript, walked for its tool calls. Nothing writes a second copy; the agent cites entries and cannot add, remove or renumber them.
 
-**Evidence id.** The handle a claim cites a call by, written `e1`, `e2`, `e3` in the order results returned. Stamped by `resultParts` in `agent/evidence-id.ts` as the answer is built and stored on the result, because a call that has not returned shows nothing anyone can cite. Rendered into that result's own text so the model reads its handle where it reads the answer. A citation naming the provider's own call id is refused, and so is one naming a call made in the same reply.
+**Evidence id.** The handle a claim cites a call by, written `e1`, `e2`, `e3` in the order results returned. Stamped by `resultParts` in `agent/evidence-id.ts` as the answer is built and stored on the result, because a call that has not returned shows nothing anyone can cite. The stored result is the handle's only home; `toolResultText` opens the copy the model reads with `Evidence ID: e1`, so the transcript card and the report draw the answer alone. A citation naming the provider's own call id is refused, and so is one naming a call made in the same reply.
 
 **Citable.** Whether a claim may rest on a call. Declared on the tool as `citable`, which carries the renderer with it, so a tool that observes nothing has neither. Recording a claim, writing the report and asking a person are not observations, so they carry no id and nothing can cite them - which is what stops a run grading its own assertion as evidence for itself. A call that established nothing is issued no id either, whatever tool it named.
 
@@ -287,7 +287,7 @@ An elicitation is offered to the model as one, because tool-calling is the only 
 
 A result still over the line is refused **whole**, and the agent is told to narrow the call. It is never truncated: half a JSON result parses cleanly as a smaller truth, and a list of three failing pods cut to two reads as two failing pods with nothing about it looking wrong.
 
-Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool where the work justifies it - repo tools run clones, installs and test suites. A caller supplies a ceiling and a tool's own limit can only narrow it.
+Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool where the work justifies it - repo tools run clones, installs and test suites. A caller supplies a ceiling and a tool's own limit can only narrow it. `executeTool` resolves the two into one figure and hands the call both the number and an `AbortSignal` carrying it, so a client that reaches the network is bound by the compiler rather than by convention. Nothing the API dials is unbounded: a call made outside a run carries the bound of whatever asked for it - `PROBE_TIMEOUT_MS` for a Connect probe and the recovery re-check, `CATALOG_TIMEOUT_MS` for listing models, `GITHUB_TIMEOUT_MS` for the pull-request calls a cached sandbox outlives its own tool call to make.
 
 ### What a model can do
 
@@ -486,10 +486,10 @@ Anything that must be replayed to a third party is encrypted rather than hashed,
 | `<PROVIDER>_BASE_URL`                         | no       | Override for a gateway or proxy                                                                                                                                                                                                  |
 | `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`             | no       | Image the Docker install command hands out                                                                                                                                                                                       |
 | `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE`         | no       | Image the Kubernetes manifest hands out                                                                                                                                                                                          |
-| `PROMETHEUS_URL`, `PROMETHEUS_AUTH_HEADER`    | no       | Seeds a metrics source on first boot only. Probed before it saves                                                                                                                                                                |
+| `PROMETHEUS_URL`, `PROMETHEUS_AUTH_HEADER`    | no       | Seeds a metrics source on first boot only                                                                                                                                                                                        |
 | `LOKI_URL`, `LOKI_AUTH_HEADER`, `LOKI_ORG_ID` | no       | Seeds Loki on first boot only, on the same terms                                                                                                                                                                                 |
 
-**Seeding applies on first boot only.** A value whose slot the database already fills is ignored, so rotating a key in `.env` and restarting does nothing.
+**Seeding applies on first boot only.** A value whose slot the database already fills is ignored, so rotating a key in `.env` and restarting does nothing. Boot writes the row without dialling out, so a host that is down cannot stop the API from starting; the Integrations card reports what the connection is actually doing.
 
 ### Runners
 

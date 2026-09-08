@@ -37,10 +37,6 @@ export interface LokiMetricData {
   series: LokiMetricSeries[];
 }
 
-// No per-request timeout param exists on Loki's query API (unlike Prometheus), so
-// bound the fetch here, kept under the tools' 30s budget so Loki gives up first.
-const FETCH_TIMEOUT_MS = 28_000;
-
 function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
@@ -55,6 +51,7 @@ async function lokiFetch(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   path: string,
   form?: Record<string, string>,
 ): Promise<Response> {
@@ -66,7 +63,7 @@ async function lokiFetch(
   let res: Response;
   try {
     res = await fetch(joinUrl(baseUrl, path), {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal,
       // Queries POST as form bodies: LogQL can exceed URL limits, and label
       // values stay out of access logs (same posture as Prometheus).
       headers:
@@ -189,6 +186,7 @@ export async function queryLogRange(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   query: string,
   start: Date,
   end: Date,
@@ -198,6 +196,7 @@ export async function queryLogRange(
     baseUrl,
     authHeader,
     orgId,
+    signal,
     "/loki/api/v1/query_range",
     {
       query,
@@ -220,6 +219,7 @@ export async function queryMetricRange(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   query: string,
   start: Date,
   end: Date,
@@ -229,6 +229,7 @@ export async function queryMetricRange(
     baseUrl,
     authHeader,
     orgId,
+    signal,
     "/loki/api/v1/query_range",
     {
       query,
@@ -262,6 +263,7 @@ export async function labelNames(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   start: Date,
   end: Date,
 ): Promise<string[]> {
@@ -273,6 +275,7 @@ export async function labelNames(
     baseUrl,
     authHeader,
     orgId,
+    signal,
     `/loki/api/v1/labels?${qs.toString()}`,
   );
   const data = parse(
@@ -288,6 +291,7 @@ export async function labelValues(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   label: string,
   start: Date,
   end: Date,
@@ -300,6 +304,7 @@ export async function labelValues(
     baseUrl,
     authHeader,
     orgId,
+    signal,
     `/loki/api/v1/label/${encodeURIComponent(label)}/values?${qs.toString()}`,
   );
   const data = parse(
@@ -317,6 +322,7 @@ export async function series(
   baseUrl: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
   selector: string,
   start: Date,
   end: Date,
@@ -330,6 +336,7 @@ export async function series(
     baseUrl,
     authHeader,
     orgId,
+    signal,
     `/loki/api/v1/series?${qs.toString()}`,
   );
   const data = parse(
@@ -347,8 +354,9 @@ export async function probeLoki(
   url: string,
   authHeader: string | null,
   orgId: string | null,
+  signal: AbortSignal,
 ): Promise<void> {
   const end = new Date();
   const start = new Date(end.getTime() - 60 * 60 * 1000);
-  await labelNames(url, authHeader, orgId, start, end);
+  await labelNames(url, authHeader, orgId, signal, start, end);
 }

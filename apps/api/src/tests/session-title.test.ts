@@ -9,7 +9,10 @@ import {
   mockCreateProvider,
   mockCreateTitleProvider,
 } from "./llm-factory-mock.js";
-import { createContractFakeProvider } from "./contract-fake-provider.js";
+import {
+  createContractFakeProvider,
+  messagesSentTo,
+} from "./contract-fake-provider.js";
 import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { subscribeFrontend } from "../session/bus.js";
@@ -156,7 +159,7 @@ describe("session title generation", () => {
       configuredConfig(),
     );
 
-    const framed: unknown = provider.start.mock.calls[0]?.[0];
+    const framed: unknown = messagesSentTo(provider)[0]?.content;
     expect(framed).toContain("Hey there, how's it going?");
     expect(framed).toContain("<content>");
     expect(framed).not.toBe("Hey there, how's it going?");

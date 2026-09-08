@@ -1,3 +1,4 @@
+import { probeSignal } from "../reachability.js";
 import { z } from "zod";
 import { readable } from "../../request-body.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -96,9 +97,16 @@ export async function registerMetricsRoutes(
         });
       }
       try {
-        await instantQuery(endpointFrom(query, name, kind), "up");
+        await instantQuery(
+          endpointFrom(query, name, kind),
+          probeSignal(),
+          "up",
+        );
         if (rules !== undefined) {
-          await alertingRules(endpointFrom(rules, `${name} rules`, kind));
+          await alertingRules(
+            endpointFrom(rules, `${name} rules`, kind),
+            probeSignal(),
+          );
         }
         await saveMetricsSource({
           kind,

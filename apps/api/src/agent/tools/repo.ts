@@ -6,6 +6,7 @@ import { getSession } from "../../session/store.js";
 import { getTranscriptRows } from "../../session/transcript-store.js";
 import {
   buildAuthHeader,
+  githubSignal,
   createPullRequest,
   findOpenPullRequestByBranch,
   updatePullRequest,
@@ -126,13 +127,20 @@ async function workspaceOptionsFor(
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
       create: async (req) =>
-        await createPullRequest(await tokenFor(), repoOwner, repoName, {
-          ...req,
-          head: await branchNameFor(sessionId),
-        }),
+        await createPullRequest(
+          await tokenFor(),
+          githubSignal(),
+          repoOwner,
+          repoName,
+          {
+            ...req,
+            head: await branchNameFor(sessionId),
+          },
+        ),
       findOpenByBranch: async (branch) =>
         await findOpenPullRequestByBranch(
           await tokenFor(),
+          githubSignal(),
           repoOwner,
           repoName,
           branch,
@@ -140,6 +148,7 @@ async function workspaceOptionsFor(
       update: async (prNumber, patch) =>
         await updatePullRequest(
           await tokenFor(),
+          githubSignal(),
           repoOwner,
           repoName,
           prNumber,
@@ -323,7 +332,7 @@ export const REPO_TOOLS: Tool[] = [
   apiTool({
     name: "Read",
     description:
-      "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line, and you must read a file with this before you may edit it.",
+      "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line.",
     input: READ_INPUT,
     effect: "read",
     policy: "auto",
@@ -346,7 +355,7 @@ export const REPO_TOOLS: Tool[] = [
   apiTool({
     name: "Edit",
     description:
-      "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read, or created it with Write, earlier in this session. The result is a diff showing what changed.",
+      "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with the Read tool, or created it with the Write tool, earlier in this session. The result is a diff showing what changed.",
     input: EDIT_INPUT,
     effect: "write",
     policy: "auto",
@@ -370,7 +379,7 @@ export const REPO_TOOLS: Tool[] = [
   apiTool({
     name: "Write",
     description:
-      "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session, and creating one leaves it editable without that. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
+      "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with the Read tool earlier in this session, and creating one leaves it editable without that. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
     input: WRITE_INPUT,
     effect: "write",
     policy: "auto",
@@ -388,7 +397,7 @@ export const REPO_TOOLS: Tool[] = [
   apiTool({
     name: "Bash",
     description:
-      "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerExec or K8sExec when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
+      "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerExec or K8sExec to run a command on a monitored server. If the output is long, you are shown its beginning and its end.",
     input: BASH_INPUT,
     effect: "write",
     policy: "auto",

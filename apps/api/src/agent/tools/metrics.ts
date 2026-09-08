@@ -218,6 +218,7 @@ export const METRICS_TOOLS: Tool[] = [
       try {
         const data = await instantQuery(
           source.query,
+          ctx.signal,
           query,
           input.at === "alert"
             ? (await alertAnchorFor(ctx.sessionId)).toISOString()
@@ -279,6 +280,7 @@ export const METRICS_TOOLS: Tool[] = [
       try {
         const data = await rangeQuery(
           source.query,
+          ctx.signal,
           query,
           start.toISOString(),
           end.toISOString(),
@@ -315,7 +317,7 @@ export const METRICS_TOOLS: Tool[] = [
     citable: true,
     renderAs: "text",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const contains = input.contains ?? null;
@@ -324,6 +326,7 @@ export const METRICS_TOOLS: Tool[] = [
         const start = new Date(end.getTime() - NAME_WINDOW_MINUTES * 60_000);
         const names = await metricNames(
           source.query,
+          ctx.signal,
           contains,
           start.toISOString(),
           end.toISOString(),
@@ -358,7 +361,7 @@ export const METRICS_TOOLS: Tool[] = [
     citable: true,
     renderAs: "text",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       const { metric } = input;
@@ -370,7 +373,11 @@ export const METRICS_TOOLS: Tool[] = [
         };
       }
       try {
-        const meta = await metricMetadata(source.query, metric.trim());
+        const meta = await metricMetadata(
+          source.query,
+          ctx.signal,
+          metric.trim(),
+        );
         if (meta === null) {
           return {
             content: `No exporter declared metadata for "${metric.trim()}" on ${source.label}. The metric may still exist and be queryable.`,
@@ -393,7 +400,7 @@ export const METRICS_TOOLS: Tool[] = [
     citable: true,
     renderAs: "text",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
       if (!isSource(source)) return source;
       // A source with no rules endpoint has told us nothing, not that it
@@ -407,7 +414,7 @@ export const METRICS_TOOLS: Tool[] = [
       const contains = input.contains ?? null;
       const needle = contains ? contains.toLowerCase() : null;
       try {
-        const rules = await alertingRules(source.rules);
+        const rules = await alertingRules(source.rules, ctx.signal);
         const matched =
           needle === null
             ? rules

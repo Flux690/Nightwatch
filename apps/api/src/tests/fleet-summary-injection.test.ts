@@ -72,14 +72,15 @@ function makeAlert(service: string): NormalizedAlert {
   };
 }
 
-// Extracts what provider.start() was called with for the most recently created provider.
+// The opening turn the most recently created provider was handed.
 function captureStartMessage(): string | undefined {
   const idx = mockCreateProvider.mock.results.length - 1;
   // Vitest types mock.results[n].value as unknown; narrow to the actual mock shape.
   const provider = mockCreateProvider.mock.results[idx]?.value as
-    { start: ReturnType<typeof vi.fn> } | undefined;
-  // mock.calls[n][m] is unknown; the first argument to start() is always the firstUserMessage string.
-  return provider?.start.mock.calls[0]?.[0] as string | undefined;
+    { chat: ReturnType<typeof vi.fn> } | undefined;
+  const sent = provider?.chat.mock.calls[0]?.[0] as
+    Array<{ content: string }> | undefined;
+  return sent?.[0]?.content;
 }
 
 describe("fleet summary injection", () => {

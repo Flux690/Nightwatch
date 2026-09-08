@@ -7,7 +7,7 @@ import {
   type Platform,
   type RunnerCommandMessage,
 } from "@nightwarden/shared";
-import type { ToolResult, ToolSchema } from "../llm/types.js";
+import type { LLMProvider, ToolSchema } from "../llm/types.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -15,6 +15,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
+  messagesSentTo,
   type ContractFakeProvider,
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
@@ -526,17 +527,21 @@ describe("toolset assembly by fleet capabilities", () => {
       const provider = scriptRunner.create();
       /* Cast because getMockImplementation unions in a constructor signature
          this method cannot have. */
-      const record = provider.appendToolResults.getMockImplementation() as
-        ((results: ToolResult[]) => void) | undefined;
-      /* Connected as the first turn's results land, between the two reads of the
-         toolset, where a user connecting Loki in another tab would land. */
-      provider.appendToolResults.mockImplementation(async (results) => {
-        await saveLokiIntegration({
-          baseUrl: "http://loki.internal:3100",
-          orgId: null,
-          authorization: null,
-        });
-        record?.(results);
+      const scripted =
+        provider.chat.getMockImplementation() as LLMProvider["chat"];
+      /* Connected while the first turn is in flight, between the two reads of
+         the toolset, where a user connecting Loki in another tab would land. */
+      provider.chat.mockImplementation(async (messages, tools, ...rest) => {
+        const first = provider.chat.mock.calls.length === 1;
+        const turn = await scripted(messages, tools, ...rest);
+        if (first) {
+          await saveLokiIntegration({
+            baseUrl: "http://loki.internal:3100",
+            orgId: null,
+            authorization: null,
+          });
+        }
+        return turn;
       });
       mockCreateProvider.mockImplementationOnce(() => provider);
       setScript([
@@ -553,14 +558,14 @@ describe("toolset assembly by fleet capabilities", () => {
       await seedChatSession(sessionId, "what is running?");
       await runSession({ sessionId, userMessage: "what is running?" });
 
-      const told = provider.appendUserMessage.mock.calls
-        .map(([msg]) => String(msg))
-        .find((msg) => msg.includes("connected while you were working"));
+      const told = messagesSentTo(provider, 1)
+        .map((m) => m.content)
+        .find((c) => c.includes("connected while you were working"));
       expect(told, "the model was never told").toBeDefined();
       expect(told).toContain("QueryLogs");
 
       // And the tool is actually on the next request, not only announced.
-      const second = (provider.chat.mock.calls[1]?.[0] ?? []) as ToolSchema[];
+      const second = (provider.chat.mock.calls[1]?.[1] ?? []) as ToolSchema[];
       expect(second.map((s) => s.name)).toContain("QueryLogs");
 
       await deleteLokiIntegration();

@@ -11,6 +11,7 @@ import {
   capabilitiesFor,
   type ModelCapabilities,
 } from "./model-capabilities.js";
+import { CATALOG_TIMEOUT_MS } from "./config.js";
 
 export const ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
 export const OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -209,7 +210,10 @@ export async function fetchCatalog(
 ): Promise<ProviderCatalog> {
   const url = `${baseUrl ?? PROVIDER_OPTIONS.find((p) => p.name === provider)?.defaultBaseUrl ?? ""}${MODELS_PATH}`;
   try {
-    const res = await fetch(url, { headers: authHeaders(provider, apiKey) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS),
+      headers: authHeaders(provider, apiKey),
+    });
     // The response decides which of the two credential faults it is: nothing
     // here has to know whether this provider publishes its list unauthenticated.
     if (res.status === 401 || res.status === 403) {

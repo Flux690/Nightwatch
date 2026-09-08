@@ -146,7 +146,7 @@ export type {
   MessagePart,
   PartProviderOptions,
 } from "./messages.js";
-export { messagePartsToText } from "./messages.js";
+export { messagePartsToText, toolResultText } from "./messages.js";
 export type {
   ToolGate,
   ToolCallState,

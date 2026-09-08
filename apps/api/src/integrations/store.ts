@@ -102,17 +102,6 @@ export async function connectedKinds(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.kind));
 }
 
-export async function integrationById(
-  id: string,
-): Promise<IntegrationRow | null> {
-  const raw = await getDb()
-    .selectFrom("integrations")
-    .select(COLUMNS)
-    .where("id", "=", id)
-    .executeTakeFirst();
-  return raw === undefined ? null : toRow(raw);
-}
-
 // Every row, for the unauthenticated token match and for name derivation.
 export async function allIntegrations(): Promise<IntegrationRow[]> {
   const rows = await getDb()

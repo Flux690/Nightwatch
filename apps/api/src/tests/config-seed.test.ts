@@ -196,15 +196,6 @@ describe("first-boot integration seed from the environment", () => {
     expect(stored.secrets).not.toContain("prom-secret");
   });
 
-  it("leaves an unreachable URL unconfigured rather than saving something broken", async () => {
-    vi.stubEnv("PROMETHEUS_URL", "http://prom.internal:9090");
-    vi.stubGlobal("fetch", answering(false));
-
-    await seedIntegrationsFromEnv();
-
-    expect(await metricsSourceRow()).toBeNull();
-  });
-
   it("never overwrites an integration the user already connected", async () => {
     await connectTestMetrics({ queryUrl: "http://chosen-by-user:9090" });
     vi.stubEnv("PROMETHEUS_URL", "http://from-stale-compose-file:9090");
@@ -216,7 +207,7 @@ describe("first-boot integration seed from the environment", () => {
     expect((await metricsSourceRow())?.queryUrl).toBe(
       "http://chosen-by-user:9090",
     );
-    // Not even probed: the database already owns this one.
+    // Boot dials nothing at all, whether or not a row is already there.
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

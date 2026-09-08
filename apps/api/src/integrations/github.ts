@@ -96,14 +96,24 @@ function parseExpiryHeader(res: Response): string | null {
 
 // Shared error ladder: 401 and 403-with-SSO are deterministic signals and map
 // the same way on every GitHub call; everything else is the caller's business.
+/* What a call reaching GitHub outside a tool's own budget may take. The sandbox
+   caches a workspace, so its pull-request closures outlive the call that built them. */
+export const GITHUB_TIMEOUT_MS = 30_000;
+
+export function githubSignal(): AbortSignal {
+  return AbortSignal.timeout(GITHUB_TIMEOUT_MS);
+}
+
 async function githubFetch(
   token: string,
+  signal: AbortSignal,
   path: string,
   init?: { method: string; body: unknown },
 ): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(`${GITHUB_API}${path}`, {
+      signal,
       headers:
         init === undefined
           ? baseHeaders(token)
@@ -141,10 +151,12 @@ interface RepoListResult extends GitHubRepoPage {
 // the consent the user gave on GitHub's token page.
 export async function listRepos(
   token: string,
+  signal: AbortSignal,
   page: number,
 ): Promise<RepoListResult> {
   const res = await githubFetch(
     token,
+    signal,
     `/user/repos?per_page=100&page=${page}&sort=pushed`,
   );
   if (!res.ok) {
@@ -179,10 +191,11 @@ interface ValidatedRepo {
 // alike; the route layer adds the org-approval hint when the owner is an org.
 export async function validateRepoAccess(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
 ): Promise<ValidatedRepo> {
-  const res = await githubFetch(token, `/repos/${owner}/${name}`);
+  const res = await githubFetch(token, signal, `/repos/${owner}/${name}`);
   if (res.status === 404) {
     throw new GitHubApiError(
       "repo_not_found",
@@ -202,9 +215,13 @@ export async function validateRepoAccess(
 
 // Public check, no permissions needed: an org owner makes "pending org-admin
 // approval" a plausible cause of a 404; a user owner rules it out.
-export async function ownerIsOrganization(owner: string): Promise<boolean> {
+export async function ownerIsOrganization(
+  owner: string,
+  signal: AbortSignal,
+): Promise<boolean> {
   try {
     const res = await fetch(`${GITHUB_API}/users/${owner}`, {
+      signal,
       headers: {
         Accept: "application/vnd.github+json",
         "User-Agent": "nightwarden",
@@ -240,12 +257,14 @@ function toPullRequestInfo(pr: z.infer<typeof PULL_REQUEST>): PullRequestInfo {
 // branch up before creating, so a second call updates instead of duplicating.
 export async function findOpenPullRequestByBranch(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   branch: string,
 ): Promise<PullRequestInfo | null> {
   const res = await githubFetch(
     token,
+    signal,
     `/repos/${owner}/${name}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`,
   );
   if (!res.ok) {
@@ -266,10 +285,11 @@ export async function findOpenPullRequestByBranch(
 
 export async function defaultBranch(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
 ): Promise<string> {
-  const res = await githubFetch(token, `/repos/${owner}/${name}`);
+  const res = await githubFetch(token, signal, `/repos/${owner}/${name}`);
   if (!res.ok) {
     throw new GitHubApiError(
       "network",
@@ -289,11 +309,12 @@ function isDraftUnsupported(status: number, bodyText: string): boolean {
 // repos under Free) the PR is created regular and draft:false reflects that.
 export async function createPullRequest(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   req: { title: string; body: string; head: string; draft: boolean },
 ): Promise<PullRequestInfo> {
-  const base = await defaultBranch(token, owner, name);
+  const base = await defaultBranch(token, signal, owner, name);
   const payload = {
     title: req.title,
     body: req.body,
@@ -301,7 +322,7 @@ export async function createPullRequest(
     base,
     draft: req.draft,
   };
-  let res = await githubFetch(token, `/repos/${owner}/${name}/pulls`, {
+  let res = await githubFetch(token, signal, `/repos/${owner}/${name}/pulls`, {
     method: "POST",
     body: payload,
   });
@@ -314,7 +335,7 @@ export async function createPullRequest(
         `GitHub refused the pull request: ${text.slice(0, 300)}`,
       );
     }
-    res = await githubFetch(token, `/repos/${owner}/${name}/pulls`, {
+    res = await githubFetch(token, signal, `/repos/${owner}/${name}/pulls`, {
       method: "POST",
       body: { ...payload, draft: false },
     });
@@ -333,6 +354,7 @@ export async function createPullRequest(
 
 export async function updatePullRequest(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   prNumber: number,
@@ -340,6 +362,7 @@ export async function updatePullRequest(
 ): Promise<void> {
   const res = await githubFetch(
     token,
+    signal,
     `/repos/${owner}/${name}/pulls/${prNumber}`,
     { method: "PATCH", body: patch },
   );
@@ -364,6 +387,7 @@ interface CommitInfo {
 // than that is beyond what change correlation needs, so no pagination.
 export async function listCommits(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   branch: string,
@@ -372,6 +396,7 @@ export async function listCommits(
 ): Promise<CommitInfo[]> {
   const res = await githubFetch(
     token,
+    signal,
     `/repos/${owner}/${name}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&per_page=100`,
   );
   // An empty repository 409s on the commits listing; that is "no commits",
@@ -407,6 +432,7 @@ interface MergedPullRequestInfo {
 // can be no later in-window merge and the scan stops.
 export async function listMergedPullRequests(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   branch: string,
@@ -415,6 +441,7 @@ export async function listMergedPullRequests(
 ): Promise<MergedPullRequestInfo[]> {
   const res = await githubFetch(
     token,
+    signal,
     `/repos/${owner}/${name}/pulls?state=closed&base=${encodeURIComponent(branch)}&sort=updated&direction=desc&per_page=100`,
   );
   if (!res.ok) {
@@ -459,12 +486,14 @@ export async function listMergedPullRequests(
 
 export async function listPullRequestFiles(
   token: string,
+  signal: AbortSignal,
   owner: string,
   name: string,
   prNumber: number,
 ): Promise<string[]> {
   const res = await githubFetch(
     token,
+    signal,
     `/repos/${owner}/${name}/pulls/${prNumber}/files?per_page=100`,
   );
   if (!res.ok) {

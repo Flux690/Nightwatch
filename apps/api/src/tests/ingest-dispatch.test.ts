@@ -12,6 +12,7 @@ import { expectDuplicateAlert } from "./setup.js";
 import {
   createContractFakeProvider,
   createGateController,
+  messagesSentTo,
   type ContractFakeProvider,
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
@@ -216,8 +217,8 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
 
     const provider = mockCreateProvider.mock.results.at(-1)
       ?.value as ContractFakeProvider;
-    await waitFor(() => provider.start.mock.calls.length > 0);
-    expect(provider.start.mock.calls[0]?.[0]).toContain(
+    await waitFor(() => provider.chat.mock.calls.length > 0);
+    expect(messagesSentTo(provider)[0]?.content).toContain(
       "left 6 further alerts out of this delivery",
     );
   });

@@ -1,3 +1,11 @@
+/* What a call made outside a run may take: a person clicking Connect is waiting
+   on it, and boot and the recovery sweep must not stall on a silent host. */
+export const PROBE_TIMEOUT_MS = 10_000;
+
+export function probeSignal(): AbortSignal {
+  return AbortSignal.timeout(PROBE_TIMEOUT_MS);
+}
+
 // Read from the error's own code, never guessed from the URL: loopback, a
 // container name and a private address are all legitimate and alike by shape.
 function failureCode(err: unknown): string | null {
@@ -10,6 +18,10 @@ function failureCode(err: unknown): string | null {
 // was made from, which is the part a browser cannot tell them.
 export function describeNetworkFailure(err: unknown, service: string): string {
   const from = `Attempted from the NightWarden API`;
+  // An abort carries the caller's own limit rather than the network's verdict.
+  if ((err as { name?: unknown })?.name === "TimeoutError") {
+    return `${service} did not answer within the time this call was given. ${from}.`;
+  }
   switch (failureCode(err)) {
     case "ENOTFOUND":
     case "EAI_AGAIN":

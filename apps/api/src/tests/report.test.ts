@@ -16,6 +16,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
+import type { ProviderMessage } from "../llm/types.js";
 import { runSession } from "../agent/loop.js";
 import {
   gatedCalls,
@@ -1060,13 +1061,20 @@ describe("the investigation record", () => {
       unregisterRunner(runner);
     });
 
-    // Only the harness's own turns: on a resume the opening turn is an
-    // appendUserMessage too, and these assertions are about what it said.
+    /* Only what this run added after its opening request, so a resume's seed
+       does not read as turns it wrote, and only its own prose turns. */
     function harnessMessages(index = 0): string[] {
       const provider = mockCreateProvider.mock.results[index]!.value as {
-        appendUserMessage: ReturnType<typeof vi.fn>;
+        chat: ReturnType<typeof vi.fn>;
       };
-      return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
+      const calls = provider.chat.mock.calls as Array<[ProviderMessage[]]>;
+      const opening = calls[0]?.[0]?.length ?? 0;
+      return (calls.at(-1)?.[0] ?? [])
+        .slice(opening)
+        .filter(
+          (m) => m.role === "user" && m.parts.every((p) => p.type === "text"),
+        )
+        .map((m) => m.content);
     }
     // Matched on content, not the first character: the <system-reminder> tag is
     // asserted on its own below rather than by each of these.
@@ -1159,6 +1167,37 @@ describe("the investigation record", () => {
         expect(message.startsWith("<system-reminder>")).toBe(true);
         expect(message.endsWith("</system-reminder>")).toBe(true);
       }
+    });
+
+    /* The handle is stamped on the row and read off the same row, so a claim is
+       asked to cite what the model was actually shown. */
+    it("hands the model the handle its citations name", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          ...recordTurn("root_cause", "the disk filled up"),
+          { toolUses: [], text: "Done." },
+          submitTurn(),
+        ]),
+      );
+      const sessionId = randomUUID();
+      await seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("handed"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("handed")] });
+
+      const provider = mockCreateProvider.mock.results[0]!.value as {
+        chat: ReturnType<typeof vi.fn>;
+      };
+      const calls = provider.chat.mock.calls as Array<[ProviderMessage[]]>;
+      const handles = (calls.at(-1)?.[0] ?? []).flatMap((m) =>
+        m.parts.flatMap((p) =>
+          p.type === "tool_result" && p.evidenceId !== undefined
+            ? [p.evidenceId]
+            : [],
+        ),
+      );
+      expect(handles).toContain("e1");
     });
 
     it("asks a run that recorded nothing for the record, then writes up anyway", async () => {

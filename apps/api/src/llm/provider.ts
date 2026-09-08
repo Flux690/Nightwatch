@@ -7,7 +7,7 @@ import type {
   LanguageModelV4ToolResultOutput,
   SharedV4ProviderOptions,
 } from "@ai-sdk/provider";
-import { messagePartsToText } from "@nightwarden/shared";
+import { toolResultText } from "@nightwarden/shared";
 import type {
   MessagePart,
   PartProviderOptions,
@@ -20,7 +20,6 @@ import type {
   OnDelta,
   ProviderMessage,
   StopReason,
-  ToolResult,
   ToolSchema,
   ToolUse,
 } from "./types.js";
@@ -89,8 +88,8 @@ function assistantContent(parts: readonly MessagePart[]): AssistantContent {
   });
 }
 
-// The handle is prefixed here, where the part is already being converted, so
-// the model reads it where it reads the answer.
+// A failure goes back as the wire's own error shape, so a provider that words
+// failure differently still reads this result as one.
 function resultOutput(
   output: string,
   isError: boolean,
@@ -116,12 +115,7 @@ function userMessages(
         type: "tool-result" as const,
         toolCallId: part.toolCallId,
         toolName: toolNames.get(part.toolCallId) ?? "",
-        output: resultOutput(
-          part.evidenceId === undefined
-            ? part.output
-            : `[${part.evidenceId}] ${part.output}`,
-          part.isError === true,
-        ),
+        output: resultOutput(toolResultText(part), part.isError === true),
         // Rolling breakpoint on the tail, so a growing history caches forward.
         ...(i === results.length - 1 && { providerOptions: CACHE_BREAKPOINT }),
       })),
@@ -204,47 +198,24 @@ function mergeOptions(
   return merged;
 }
 
+// Configuration, never conversation: the caller owns the transcript and hands
+// over the whole of it, so a retry re-sends a value rather than growing one.
 export class SdkProvider implements LLMProvider {
-  private turns: ProviderMessage[] = [];
-
   constructor(
     private readonly model: LanguageModelV4,
     private readonly system: string,
     private readonly opts: SdkProviderOptions,
   ) {}
 
-  start(firstMessage: string): void {
-    this.turns = [];
-    this.appendUserMessage(firstMessage);
-  }
-
-  seed(history: ProviderMessage[]): void {
-    this.turns = [...history];
-  }
-
-  appendUserMessage(message: string): void {
-    this.stage([{ type: "text", text: message }]);
-  }
-
-  appendToolResults(results: ToolResult[]): void {
-    this.stage(
-      results.map((r) => ({
-        type: "tool_result",
-        toolCallId: r.toolCallId,
-        output: r.content,
-        ...(r.isError === true && { isError: true as const }),
-      })),
-    );
-  }
-
   async chat(
+    messages: readonly ProviderMessage[],
     tools: ToolSchema[],
     onDelta?: OnDelta,
     signal?: AbortSignal,
     forceTool?: ToolName,
   ): Promise<ChatResponse> {
     const call: LanguageModelV4CallOptions = {
-      prompt: promptFrom(this.system, this.turns),
+      prompt: promptFrom(this.system, messages),
       maxOutputTokens: this.opts.maxOutputTokens,
       tools: tools.map((t) => ({
         type: "function" as const,
@@ -265,28 +236,17 @@ export class SdkProvider implements LLMProvider {
     const { stream } = await this.model.doStream(call);
     const { parts, toolUses, stopReason } = await this.accumulate(
       stream,
+      messages.length,
       onDelta,
     );
-    this.turns.push({
-      role: "assistant",
-      content: messagePartsToText(parts),
-      parts,
-    });
     return { stopReason, toolUses, text: textOf(parts), parts };
-  }
-
-  private stage(parts: MessagePart[]): void {
-    this.turns.push({
-      role: "user",
-      content: messagePartsToText(parts),
-      parts,
-    });
   }
 
   /* Blocks arrive interleaved and each is held open by its id until its own end,
      so the parts come out in the order the model opened them. */
   private async accumulate(
     stream: ReadableStream<LanguageModelV4StreamPart>,
+    turns: number,
     onDelta?: OnDelta,
   ): Promise<{
     parts: MessagePart[];
@@ -353,7 +313,7 @@ export class SdkProvider implements LLMProvider {
           logger.info(
             {
               model: this.model.modelId,
-              turns: this.turns.length,
+              turns,
               // Kept for diagnosis alone: nothing branches on a provider's word.
               stopReason,
               ...(stopReason === "unknown" && {

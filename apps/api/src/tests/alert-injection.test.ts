@@ -212,7 +212,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const provider = await waitFor(
       () =>
         (mockCreateProvider.mock.results[0]?.value as
-          { appendUserMessage: ReturnType<typeof vi.fn> } | undefined) ?? null,
+          { chat: ReturnType<typeof vi.fn> } | undefined) ?? null,
     );
 
     // Inject while parked at turn 1's chat()
@@ -228,10 +228,15 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => gate.waiting() > 0);
     gate.releaseNext();
 
-    await waitFor(() => provider.appendUserMessage.mock.calls.length > 0);
-
-    const [injection] = provider.appendUserMessage.mock.calls[0] as [string];
-    expect(injection).toContain("injected-mr");
+    // The injected alert rides the next request as its own turn.
+    const injection = await waitFor(() =>
+      (
+        (provider.chat.mock.calls.at(-1)?.[0] ?? []) as Array<{
+          content: string;
+        }>
+      ).find((m) => m.content.includes("injected-mr")),
+    );
+    expect(injection.content).toContain("injected-mr");
 
     // Release turn 2 and every turn after it: the free-form finish is followed
     // by the report turn, which parks on this gate like any other.
@@ -295,7 +300,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const provider = await waitFor(
       () =>
         (mockCreateProvider.mock.results[0]?.value as
-          { appendUserMessage: ReturnType<typeof vi.fn> } | undefined) ?? null,
+          { chat: ReturnType<typeof vi.fn> } | undefined) ?? null,
     );
 
     const forged = alert("injected-marker");
@@ -309,9 +314,14 @@ describe("mid-run alert injection (loop seam)", () => {
 
     await waitFor(() => gate.waiting() > 0);
     gate.releaseNext();
-    await waitFor(() => provider.appendUserMessage.mock.calls.length > 0);
-
-    const [injection] = provider.appendUserMessage.mock.calls[0] as [string];
+    const sent = await waitFor(() =>
+      (
+        (provider.chat.mock.calls.at(-1)?.[0] ?? []) as Array<{
+          content: string;
+        }>
+      ).find((m) => m.content.includes("injected-marker")),
+    );
+    const injection = sent.content;
     // Exactly the wrapper, at the two ends, and nothing in between.
     expect(markerCount(injection)).toBe(2);
     expect(injection.startsWith("<system-reminder>\n")).toBe(true);

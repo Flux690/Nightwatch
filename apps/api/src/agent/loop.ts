@@ -41,6 +41,7 @@ import {
 import { loadConfig } from "../config/store.js";
 import { connectedKinds, getGitHubIntegration } from "../integrations/store.js";
 import { getSession } from "../session/store.js";
+import { toProviderMessage } from "../session/seed.js";
 import {
   appendErrorMessage,
   appendRowsAndPark,
@@ -393,6 +394,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // wait is streamed to the frontend as live status.
   const chatWithRetries = async (
     provider: LLMProvider,
+    messages: readonly ProviderMessage[],
     toolSchemas: ToolSchema[],
     turn: number,
     // The run's effective signal: the user's stop, or that combined with
@@ -403,6 +405,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     await withLLMRetries(
       async () =>
         await provider.chat(
+          messages,
           toolSchemas,
           (d) => publishTextMessageContent(sessionId, turn, d),
           chatSignal,
@@ -427,9 +430,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
     );
 
-  // Rows this run has produced and not yet written, built from what the turn
-  // did: a field no wire format carries never has to be put back.
-  const pending: TranscriptRow[] = [];
+  /* Every row this run produced, in order. The model reads all of them and the
+     database is sent the tail past `flushed`, so the two cannot disagree. */
+  const rows: TranscriptRow[] = [];
+  let flushed = 0;
   let nextSeq = await getNextSeq(sessionId);
   // Carried for the run rather than recounted, so a long investigation does not
   // re-read its whole transcript to number one call.
@@ -437,7 +441,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   let nextEvidence = highestEvidenceNumber(priorRows) + 1;
 
   const stage = (kind: TranscriptRow["kind"], parts: MessagePart[]): void => {
-    pending.push({
+    rows.push({
       sessionId,
       seq: nextSeq++,
       kind,
@@ -447,14 +451,22 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     });
   };
 
+  // Read-only prefix already on disk, ahead of what this run appends.
+  const seeded = input.seed ?? [];
+  const conversation = (): ProviderMessage[] => [
+    ...seeded,
+    ...rows.map(toProviderMessage),
+  ];
+
   const flush = async (interrupt?: PendingHumanInput): Promise<void> => {
-    if (pending.length === 0 && interrupt === undefined) return;
-    const rows = pending.splice(0);
-    if (interrupt) await appendRowsAndPark(rows, interrupt);
-    else await appendTranscriptRows(rows);
+    const unwritten = rows.slice(flushed);
+    if (unwritten.length === 0 && interrupt === undefined) return;
+    flushed = rows.length;
+    if (interrupt) await appendRowsAndPark(unwritten, interrupt);
+    else await appendTranscriptRows(unwritten);
     // A harness row draws nothing, so publishing it costs a refetch that
     // changes no pixel.
-    for (const row of rows) {
+    for (const row of unwritten) {
       if (row.kind !== "system_reminder") publishMessage(sessionId, row);
     }
   };
@@ -472,10 +484,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   // The one emitter of the marker, so also the door untrusted text arrives at:
   // an injected alert's labels are the sender's and must not close our tag.
-  const sendSystemReminder = (provider: LLMProvider, text: string): void => {
-    const marked = asSystemReminder(stripSystemReminder(text));
-    provider.appendUserMessage(marked);
-    stage("system_reminder", [{ type: "text", text: marked }]);
+  const sendSystemReminder = (text: string): void => {
+    stage("system_reminder", [
+      { type: "text", text: asSystemReminder(stripSystemReminder(text)) },
+    ]);
   };
 
   // User declined a continue-request: replay the transcript and run one free-form
@@ -488,10 +500,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     );
     const provider = createProvider(systemPrompt, llm, apiKey);
 
-    if (input.seed && input.seed.length > 0) provider.seed(input.seed);
     log.info("time budget ended: user chose to end, running closing turn");
     try {
-      const closing = await chatWithRetries(provider, [], nextSeq);
+      const closing = await chatWithRetries(
+        provider,
+        conversation(),
+        [],
+        nextSeq,
+      );
       stage("assistant", closing.parts);
     } catch (err) {
       if (!signal?.aborted) throw err;
@@ -544,17 +560,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       : buildChatContext(fleetView, promptOptions, opensInvestigation);
   const provider = createProvider(systemPrompt, llm, apiKey);
 
-  if (input.seed && input.seed.length > 0) {
-    provider.seed(input.seed);
+  if (seeded.length > 0) {
     // Written immediately so the frontend shows the turn the moment it is sent,
     // rather than waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
       const text = stripSystemReminder(input.userMessage);
-      provider.appendUserMessage(text);
       stage("user", [{ type: "text", text }]);
       await flush();
     } else if (input.systemReminder) {
-      sendSystemReminder(provider, input.systemReminder);
+      sendSystemReminder(input.systemReminder);
       await flush();
     }
   } else {
@@ -564,7 +578,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     const first = own
       ? asSystemReminder(openingTurn)
       : stripSystemReminder(input.userMessage ?? "");
-    provider.start(first);
     stage(own ? "system_reminder" : "user", [{ type: "text", text: first }]);
     await flush();
     // Brand-new session only: refine the title in the background. Chat uses the
@@ -617,7 +630,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     let problem: string | null = null;
     for (let attempt = 1; attempt <= MAX_REPORT_ATTEMPTS; attempt++) {
       sendSystemReminder(
-        provider,
         problem === null
           ? reportRequest(
               (await getRecord(sessionId))?.hypotheses ?? [],
@@ -635,6 +647,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       try {
         written = await chatWithRetries(
           provider,
+          conversation(),
           [SUBMIT_REPORT_TOOL.schema],
           nextSeq,
           runSignal,
@@ -688,7 +701,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         alreadyRefused: refusedNames,
       });
       if (toolResults.length > 0) {
-        provider.appendToolResults(toolResults);
         stageResults(written.toolUses, toolResults);
       }
       await flush();
@@ -716,7 +728,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     if (change !== null) {
       log.info({ turn, change }, "offered toolset changed mid-run");
       offered = nowOffered;
-      sendSystemReminder(provider, change);
+      sendSystemReminder(change);
       await flush();
     }
     const toolSchemas = offeredSchemas(offered);
@@ -726,6 +738,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     try {
       response = await chatWithRetries(
         provider,
+        conversation(),
         toolSchemas,
         nextSeq,
         runSignal,
@@ -803,7 +816,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             },
             "finish gate: record incomplete, pushing back",
           );
-          sendSystemReminder(provider, pushback.say);
+          sendSystemReminder(pushback.say);
           await flush();
           continue;
         }
@@ -862,7 +875,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         { turn, refused: [...refusedNames.keys()] },
         "run asked only for unavailable tools; ending it",
       );
-      provider.appendToolResults(toolResults);
       stageResults(response.toolUses, toolResults);
       await flush();
       await appendErrorMessage(sessionId, barren);
@@ -930,13 +942,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
     // Drained at the tool boundary, the earliest point the model can act on one,
     // as their own turn after the results.
-    provider.appendToolResults(toolResults);
     stageResults(response.toolUses, toolResults);
     // Already durable: the dispatcher wrote each one when it arrived. The inbox
     // exists to tell the model, which is a separate concern from keeping it.
     const injected = input.drainInbox?.(sessionId) ?? [];
     if (injected.length > 0) {
-      sendSystemReminder(provider, formatInjectedAlerts(injected));
+      sendSystemReminder(formatInjectedAlerts(injected));
     }
 
     const claims = ((await getRecord(sessionId))?.hypotheses ?? []).length;
@@ -949,7 +960,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         { turn, unaccounted: recordDebt.unaccounted() },
         "reads unaccounted for; asking",
       );
-      sendSystemReminder(provider, ask);
+      sendSystemReminder(ask);
     }
     await flush();
   }

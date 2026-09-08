@@ -12,6 +12,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
+  messagesSentTo,
   type ContractFakeProvider,
 } from "./contract-fake-provider.js";
 
@@ -159,20 +160,18 @@ describe("frontend SSE pipeline", () => {
     // createProvider was called once per run.
     expect(mockCreateProvider.mock.calls.length).toBe(2);
 
-    // The resume provider must be seeded with the first run's persisted messages,
-    // then have the follow-up appended as a user turn.
+    // The resume carries the first run's persisted turns, with the follow-up
+    // behind them as its own user turn.
     const resumeProvider = mockCreateProvider.mock.results[1]
       ?.value as ContractFakeProvider;
-    expect(resumeProvider.seed).toHaveBeenCalledOnce();
-    const [seededHistory] = resumeProvider.seed.mock.calls[0] as [
-      Array<{ role: string; content: string }>,
-    ];
-    expect(seededHistory).toHaveLength(2);
-    expect(seededHistory[0]).toMatchObject({ role: "user" });
-    expect(seededHistory[1]).toMatchObject({ role: "assistant" });
-    expect(resumeProvider.appendUserMessage).toHaveBeenCalledWith(
-      "Follow-up question.",
-    );
+    const resumed = messagesSentTo(resumeProvider);
+    expect(resumed).toHaveLength(3);
+    expect(resumed[0]).toMatchObject({ role: "user" });
+    expect(resumed[1]).toMatchObject({ role: "assistant" });
+    expect(resumed[2]).toMatchObject({
+      role: "user",
+      content: "Follow-up question.",
+    });
   });
 
   it("sends heartbeat comments on the configured interval", async () => {

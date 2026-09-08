@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { logger } from "../logger.js";
+import { CATALOG_TIMEOUT_MS } from "./config.js";
 
 /* What no provider's own endpoint publishes: which reasoning levels a model
    takes, what its two limits are, and whether it can call a tool at all. */
@@ -45,7 +46,9 @@ let inFlight: Promise<Snapshot | null> | null = null;
 
 async function download(): Promise<Snapshot | null> {
   try {
-    const res = await fetch(SNAPSHOT_URL);
+    const res = await fetch(SNAPSHOT_URL, {
+      signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return SnapshotSchema.parse(await res.json());
   } catch (err) {

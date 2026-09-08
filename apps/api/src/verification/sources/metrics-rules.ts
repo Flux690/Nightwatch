@@ -1,3 +1,4 @@
+import { probeSignal } from "../../integrations/reachability.js";
 import { getMetricsSource } from "../../integrations/metrics/sources.js";
 import { firingInstancesOf } from "../../integrations/metrics/client.js";
 import { logger } from "../../logger.js";
@@ -18,7 +19,11 @@ export const metricsRulesSource: VerificationSource = {
     const rules = (await getMetricsSource())?.rules;
     if (rules == null) return "unknown";
     try {
-      const instances = await firingInstancesOf(rules, alert.alertType);
+      const instances = await firingInstancesOf(
+        rules,
+        probeSignal(),
+        alert.alertType,
+      );
       // The source knows no rule by that name, so it cannot speak to this
       // alert. Silence is never a recovery.
       if (instances === null) return "unknown";

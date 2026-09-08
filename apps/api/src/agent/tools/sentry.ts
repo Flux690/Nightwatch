@@ -436,7 +436,7 @@ export const SENTRY_TOOLS: Tool[] = [
       );
 
       try {
-        const page = await searchIssues(conn, {
+        const page = await searchIssues(conn, ctx.signal, {
           projects,
           environments,
           query,
@@ -501,14 +501,19 @@ export const SENTRY_TOOLS: Tool[] = [
     citable: true,
     renderAs: "exception",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
       const { issueId } = input;
       const environments = input.environments ?? [];
 
       try {
-        const event = await latestEvent(conn, issueId, environments);
+        const event = await latestEvent(
+          conn,
+          ctx.signal,
+          issueId,
+          environments,
+        );
         const release = obj(event, "release");
         const formatted = str(event, "formatted");
         const notes: string[] = [];
@@ -575,14 +580,20 @@ export const SENTRY_TOOLS: Tool[] = [
     citable: true,
     renderAs: "text",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
       const { issueId, key } = input;
       const environments = input.environments ?? [];
 
       try {
-        const raw = await issueTagValues(conn, issueId, key, environments);
+        const raw = await issueTagValues(
+          conn,
+          ctx.signal,
+          issueId,
+          key,
+          environments,
+        );
         const { kept, dropped } = fitWithinBudget(
           raw.slice(0, MAX_TAG_VALUES).map((row) => ({
             value: str(row, "value"),
@@ -643,6 +654,7 @@ export const SENTRY_TOOLS: Tool[] = [
       try {
         const page = await listReleases(
           conn,
+          ctx.signal,
           projects,
           input.query ?? null,
           limit,
@@ -700,13 +712,18 @@ export const SENTRY_TOOLS: Tool[] = [
     citable: true,
     renderAs: "change",
     timeoutMs: 30_000,
-    execute: async (input): Promise<ToolExecuteResult> => {
+    execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
       if (conn === null) return notConfigured();
       const { version, cursor } = input;
 
       try {
-        const page = await releaseCommits(conn, version, cursor ?? null);
+        const page = await releaseCommits(
+          conn,
+          ctx.signal,
+          version,
+          cursor ?? null,
+        );
         const { kept, dropped } = fitWithinBudget(
           page.rows.map((row) => ({
             id: str(row, "id"),

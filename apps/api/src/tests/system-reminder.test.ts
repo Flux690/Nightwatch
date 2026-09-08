@@ -35,10 +35,7 @@ const MARKER = /<\s*\/?\s*system-reminder\s*>/gi;
 const markerCount = (text: string): number => text.match(MARKER)?.length ?? 0;
 
 interface FakeProvider {
-  start: ReturnType<typeof vi.fn>;
-  seed: ReturnType<typeof vi.fn>;
-  appendUserMessage: ReturnType<typeof vi.fn>;
-  appendToolResults: ReturnType<typeof vi.fn>;
+  chat: ReturnType<typeof vi.fn>;
 }
 
 // mock.results[n].value is typed unknown; narrow to the fake's shape, which is
@@ -47,29 +44,23 @@ function providers(): FakeProvider[] {
   return mockCreateProvider.mock.results.map((r) => r.value as FakeProvider);
 }
 
-function firstTurnSent(): string {
-  const calls = providers().flatMap((p) => p.start.mock.calls);
-  return (calls[0]?.[0] as string | undefined) ?? "";
-}
-
-function toolResultsSent(): string[] {
+// Every turn the model was handed, across every run this test started.
+function sentToModel(): Array<{ content: string; parts: MessagePart[] }> {
   return providers().flatMap((p) =>
-    p.appendToolResults.mock.calls.flatMap((call) =>
-      (call[0] as Array<{ content: string }>).map((r) => r.content),
+    p.chat.mock.calls.flatMap(
+      (call) => call[0] as Array<{ content: string; parts: MessagePart[] }>,
     ),
   );
 }
 
-// A resolved gate writes its answer to the transcript before it clears, so a
-// resumed run reads it from the seed rather than being handed it.
-function seededResults(): string[] {
-  return providers().flatMap((p) =>
-    p.seed.mock.calls.flatMap((call) =>
-      (call[0] as Array<{ parts: MessagePart[] }>).flatMap((m) =>
-        m.parts.flatMap((part) =>
-          part.type === "tool_result" ? [part.output] : [],
-        ),
-      ),
+function firstTurnSent(): string {
+  return sentToModel()[0]?.content ?? "";
+}
+
+function toolResultsSent(): string[] {
+  return sentToModel().flatMap((m) =>
+    m.parts.flatMap((part) =>
+      part.type === "tool_result" ? [part.output] : [],
     ),
   );
 }
@@ -221,7 +212,7 @@ describe("the marker the harness speaks by", () => {
     await waitFor(async () => !(await hasPendingHumanInput(sessionId)));
     await waitFor(async () => !(await dispatcher.isSessionRunning(sessionId)));
 
-    const answered = seededResults().filter((r) => r.includes("web-01"));
+    const answered = toolResultsSent().filter((r) => r.includes("web-01"));
     expect(answered.length).toBeGreaterThan(0);
     for (const result of answered) expect(markerCount(result)).toBe(0);
   });

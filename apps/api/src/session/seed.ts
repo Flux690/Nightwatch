@@ -25,8 +25,17 @@ function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
   return rows;
 }
 
-// Maps our four kinds onto the provider's two roles. An error row and the dead
-// exchange it terminates drop back to the last clean assistant turn.
+// Maps our four kinds onto the provider's two roles.
+export function toProviderMessage(row: TranscriptRow): ProviderMessage {
+  return {
+    role: row.kind === "assistant" ? "assistant" : "user",
+    content: row.content,
+    parts: row.parts,
+  };
+}
+
+// An error row and the dead exchange it terminates drop back to the last clean
+// assistant turn.
 export async function buildSeed(sessionId: string): Promise<ProviderMessage[]> {
   const rows: TranscriptRow[] = [];
   for (const message of await getTranscriptRows(sessionId)) {
@@ -42,9 +51,5 @@ export async function buildSeed(sessionId: string): Promise<ProviderMessage[]> {
       rows.pop();
     }
   }
-  return throughLastAnsweredExchange(rows).map((m) => ({
-    role: m.kind === "assistant" ? ("assistant" as const) : ("user" as const),
-    content: m.content,
-    parts: m.parts,
-  }));
+  return throughLastAnsweredExchange(rows).map(toProviderMessage);
 }

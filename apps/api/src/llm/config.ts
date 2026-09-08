@@ -30,12 +30,13 @@ export const DEFAULT_TOOL_CALL_CEILING_MS = 10 * 60_000;
 // preference, so it stays a constant rather than a setting.
 export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
 
+// Listing models and reading the capability snapshot: a run resolves its model
+// through both, and the settings form waits on them.
+export const CATALOG_TIMEOUT_MS = 10_000;
+
 // The ceiling on one tool result, counted in the characters the model reads.
 // Claude Code's Bash tool and OpenHands' runtime arrived at the same figure.
 export const MAX_TOOL_RESULT_CHARS = 30_000;
-
-// Circuit breaker default: 5 executed/failed writes to the same service+action
-// within 10 minutes before further writes are refused.
 
 export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 60 * 60_000;
 export const DEFAULT_SANDBOX_CPUS = 2;

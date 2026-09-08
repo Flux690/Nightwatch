@@ -1,4 +1,4 @@
-import { getDb, type Db } from "../db.js";
+import { getDb } from "../db.js";
 import { refreshSessionStatus } from "./status-store.js";
 import type { ToolResult } from "../llm/types.js";
 
@@ -52,24 +52,6 @@ function parseRow(row: RawRow): PendingHumanInput | undefined {
     completedResults,
     claimedAt: row.claimedAt,
   };
-}
-
-// Written in the same transaction as the turn that suspended, by
-// appendRowsAndPark, so a run is never reachable without its gate.
-export async function parkOnHumanInput(
-  pending: PendingHumanInput,
-  db: Db = getDb(),
-): Promise<void> {
-  await db
-    .updateTable("sessions")
-    .set({
-      awaiting_tool_use_id: pending.toolCallId,
-      awaiting_kind: pending.kind,
-      awaiting_results: JSON.stringify(pending.completedResults),
-      attempt_started_at: null,
-    })
-    .where("session_id", "=", pending.sessionId)
-    .execute();
 }
 
 // Claiming stamps when an attempt began, which is what a boot after a crash

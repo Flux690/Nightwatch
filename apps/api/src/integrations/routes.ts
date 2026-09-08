@@ -1,3 +1,4 @@
+import { probeSignal } from "./reachability.js";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireSession } from "../auth/session.js";
@@ -200,6 +201,7 @@ export async function registerIntegrationRoutes(
       try {
         const { repos, hasMore } = await listRepos(
           token,
+          probeSignal(),
           parsed.data.page ?? 1,
         );
         return { repos, hasMore };
@@ -223,7 +225,12 @@ export async function registerIntegrationRoutes(
       // non-empty, so the two-element destructure cannot miss.
       const [owner, name] = repo.split("/") as [string, string];
       try {
-        const validated = await validateRepoAccess(token, owner, name);
+        const validated = await validateRepoAccess(
+          token,
+          probeSignal(),
+          owner,
+          name,
+        );
         await saveGitHubIntegration({
           token,
           repoOwner: owner,
@@ -234,7 +241,10 @@ export async function registerIntegrationRoutes(
         return await reply.code(201).send(await statusPayload());
       } catch (err) {
         if (err instanceof GitHubApiError && err.code === "repo_not_found") {
-          const orgApprovalUrl = (await ownerIsOrganization(owner))
+          const orgApprovalUrl = (await ownerIsOrganization(
+            owner,
+            probeSignal(),
+          ))
             ? `https://github.com/organizations/${owner}/settings/personal-access-token-requests`
             : undefined;
           return reply.code(404).send({
@@ -265,7 +275,7 @@ export async function registerIntegrationRoutes(
       const [owner, name] = parsed.data.repo.split("/") as [string, string];
       try {
         const token = stored.token;
-        await validateRepoAccess(token, owner, name);
+        await validateRepoAccess(token, probeSignal(), owner, name);
         await updateGitHubIntegrationRepo(owner, name);
         logger.info(
           { repo: parsed.data.repo },
@@ -274,7 +284,10 @@ export async function registerIntegrationRoutes(
         return await reply.code(200).send(await statusPayload());
       } catch (err) {
         if (err instanceof GitHubApiError && err.code === "repo_not_found") {
-          const orgApprovalUrl = (await ownerIsOrganization(owner))
+          const orgApprovalUrl = (await ownerIsOrganization(
+            owner,
+            probeSignal(),
+          ))
             ? `https://github.com/organizations/${owner}/settings/personal-access-token-requests`
             : undefined;
           return reply.code(404).send({
@@ -319,7 +332,7 @@ export async function registerIntegrationRoutes(
       }
       const { url, authHeader, orgId } = parsed.data;
       try {
-        await probeLoki(url, authHeader ?? null, orgId ?? null);
+        await probeLoki(url, authHeader ?? null, orgId ?? null, probeSignal());
         await saveLokiIntegration({
           baseUrl: url,
           orgId: orgId ?? null,
@@ -361,7 +374,7 @@ export async function registerIntegrationRoutes(
       }
       const { url, orgSlug, token } = parsed.data;
       try {
-        await probeSentry({ baseUrl: url, orgSlug, token });
+        await probeSentry({ baseUrl: url, orgSlug, token }, probeSignal());
         await saveSentryIntegration({ baseUrl: url, orgSlug, token });
         logger.info({ url, orgSlug }, "sentry integration configured");
         return await reply.code(201).send(await sentryStatusPayload());

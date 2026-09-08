@@ -2,8 +2,6 @@ import { getLokiIntegration, saveLokiIntegration } from "./store.js";
 import { saveMetricsSource } from "./metrics/store.js";
 import { getMetricsSource } from "./metrics/sources.js";
 import { logger } from "../logger.js";
-import { instantQuery } from "./metrics/client.js";
-import { probeLoki } from "./loki.js";
 
 // Empty is absent: compose writes "" for any variable the user left unset,
 // and an empty credential would be sent as a header rather than omitted.
@@ -12,8 +10,8 @@ function optionalEnv(name: string): string | null {
   return value === undefined || value === "" ? null : value;
 }
 
-// A first-boot seed that never overwrites a connected integration. Probed with
-// the call Connect makes, so a bad URL fails at boot rather than at 3am.
+// A first-boot seed that never overwrites a connected integration. Written
+// without dialling out, so boot never waits on a host it does not control.
 export async function seedIntegrationsFromEnv(): Promise<void> {
   await seedPrometheus();
   await seedLoki();
@@ -24,22 +22,6 @@ async function seedPrometheus(): Promise<void> {
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
   const authHeader = optionalEnv("PROMETHEUS_AUTH_HEADER");
-  const endpoint = {
-    url,
-    authorization: authHeader,
-    orgId: null,
-    name: "Prometheus",
-  };
-
-  try {
-    await instantQuery(endpoint, "up");
-  } catch (err) {
-    logger.warn(
-      { url, err },
-      "PROMETHEUS_URL did not answer; leaving it unconfigured for the frontend",
-    );
-    return;
-  }
 
   /* Seeded as its own rules endpoint, true of Prometheus alone: every other
      source serves rules elsewhere, and no second variable names it. */
@@ -62,16 +44,6 @@ async function seedLoki(): Promise<void> {
   if (!url) return;
   const authHeader = optionalEnv("LOKI_AUTH_HEADER");
   const orgId = optionalEnv("LOKI_ORG_ID");
-
-  try {
-    await probeLoki(url, authHeader, orgId);
-  } catch (err) {
-    logger.warn(
-      { url, err },
-      "LOKI_URL did not answer; leaving it unconfigured for the frontend",
-    );
-    return;
-  }
 
   await saveLokiIntegration({
     baseUrl: url,

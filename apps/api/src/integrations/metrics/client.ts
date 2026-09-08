@@ -104,6 +104,7 @@ function joinUrl(baseUrl: string, path: string): string {
 // values stay out of access logs (same posture as tokens-never-in-URLs).
 async function metricsFetch(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   path: string,
   form?: Record<string, string>,
 ): Promise<Response> {
@@ -115,6 +116,7 @@ async function metricsFetch(
   // off, so sending it where one is configured is always safe.
   if (endpoint.orgId !== null) headers["X-Scope-OrgID"] = endpoint.orgId;
   const init: RequestInit = {
+    signal,
     headers:
       form === undefined
         ? headers
@@ -127,10 +129,14 @@ async function metricsFetch(
   const url = joinUrl(endpoint.url, path);
   let res: Response;
   try {
+    // Stated twice on the signed path: aws4fetch returns a Request it built
+    // itself, so the bound is given where fetch reads it.
     res =
       endpoint.sigv4 === undefined
         ? await fetch(url, init)
-        : await fetch(await signedRequest(endpoint.sigv4, url, init));
+        : await fetch(await signedRequest(endpoint.sigv4, url, init), {
+            signal,
+          });
   } catch (err) {
     throw new MetricsApiError(
       "network",
@@ -256,10 +262,11 @@ async function parseEnvelope(
 
 export async function instantQuery(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   query: string,
   timeIso?: string,
 ): Promise<MetricsQueryData> {
-  const res = await metricsFetch(endpoint, "/api/v1/query", {
+  const res = await metricsFetch(endpoint, signal, "/api/v1/query", {
     query,
     timeout: QUERY_TIMEOUT,
     ...(timeIso !== undefined && { time: timeIso }),
@@ -269,12 +276,13 @@ export async function instantQuery(
 
 export async function rangeQuery(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   query: string,
   startIso: string,
   endIso: string,
   stepSeconds: number,
 ): Promise<MetricsQueryData> {
-  const res = await metricsFetch(endpoint, "/api/v1/query_range", {
+  const res = await metricsFetch(endpoint, signal, "/api/v1/query_range", {
     query,
     start: startIso,
     end: endIso,
@@ -313,9 +321,10 @@ const RULES_ENVELOPE = z.looseObject({
 
 async function ruleGroups(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   path: string,
 ): Promise<z.infer<typeof RULE>[] | null> {
-  const res = await metricsFetch(endpoint, path);
+  const res = await metricsFetch(endpoint, signal, path);
   const body = await readJson(endpoint, res, "listing rules");
   const envelope = parse(
     RULES_ENVELOPE,
@@ -338,10 +347,12 @@ async function ruleGroups(
 // rule by that name, which is not the same as "it is not firing".
 export async function firingInstancesOf(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   ruleName: string,
 ): Promise<FiringInstance[] | null> {
   const rules = await ruleGroups(
     endpoint,
+    signal,
     `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
   );
   if (rules === null) return null;
@@ -370,8 +381,9 @@ export interface AlertingRule {
 
 export async function alertingRules(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
 ): Promise<AlertingRule[]> {
-  const rules = await ruleGroups(endpoint, "/api/v1/rules?type=alert");
+  const rules = await ruleGroups(endpoint, signal, "/api/v1/rules?type=alert");
   return (rules ?? []).map((rule) => ({
     name: rule.name,
     ...(rule.query !== undefined && { query: rule.query }),
@@ -389,6 +401,7 @@ const NAMES_ENVELOPE = z.looseObject({
    day so far, where Prometheus defaults to all time, and answers no differently. */
 export async function metricNames(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   contains: string | null,
   startIso: string,
   endIso: string,
@@ -396,6 +409,7 @@ export async function metricNames(
   const query = new URLSearchParams({ start: startIso, end: endIso });
   const res = await metricsFetch(
     endpoint,
+    signal,
     `/api/v1/label/__name__/values?${query.toString()}`,
   );
   const body = await readJson(endpoint, res, "listing metric names");
@@ -446,10 +460,12 @@ const METADATA_ENVELOPE = z.looseObject({
 
 export async function metricMetadata(
   endpoint: MetricsEndpoint,
+  signal: AbortSignal,
   metric: string,
 ): Promise<MetricMetadata | null> {
   const res = await metricsFetch(
     endpoint,
+    signal,
     `/api/v1/metadata?metric=${encodeURIComponent(metric)}`,
   );
   const body = await readJson(endpoint, res, "reading metric metadata");

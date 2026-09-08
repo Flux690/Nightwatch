@@ -73,6 +73,14 @@ export type MessagePart =
   | ElicitationAnswerPart
   | CompactionPart;
 
+// What the model reads for one result: the stored output stays clean, so the
+// transcript card and the report draw the answer without the handle on it.
+export function toolResultText(part: ToolResultPart): string {
+  return part.evidenceId === undefined
+    ? part.output
+    : `Evidence ID: ${part.evidenceId}\n${part.output}`;
+}
+
 // Human-readable rendering of a turn, for titles and list rows. Tool calls are
 // named rather than dumped: the transcript projection is what renders them.
 export function messagePartsToText(parts: MessagePart[]): string {

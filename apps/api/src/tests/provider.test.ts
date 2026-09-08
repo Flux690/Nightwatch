@@ -4,6 +4,7 @@ import type {
   LanguageModelV4Message,
   LanguageModelV4StreamPart,
 } from "@ai-sdk/provider";
+import { messagePartsToText } from "@nightwarden/shared";
 import type { MessagePart, ResolvedLLMConfig } from "@nightwarden/shared";
 import { requestOptions } from "../llm/factory.js";
 import { SdkProvider } from "../llm/provider.js";
@@ -68,13 +69,23 @@ function lastPrompt(model: MockLanguageModelV4): LanguageModelV4Message[] {
   return model.doStreamCalls[model.doStreamCalls.length - 1]!.prompt;
 }
 
+function msg(
+  role: ProviderMessage["role"],
+  parts: MessagePart[],
+): ProviderMessage {
+  return { role, content: messagePartsToText(parts), parts };
+}
+
+const opening = (text: string): ProviderMessage[] => [
+  msg("user", [{ type: "text", text }]),
+];
+
 describe("what the run sends a model, and what it makes of the answer", () => {
   it("marks the system prompt for caching, since a run repeats it every turn", async () => {
     const model = fakeModel([...text("t", "Hi"), finish("stop")]);
     const p = provider(model);
-    p.start("first");
 
-    await p.chat(NO_TOOLS);
+    await p.chat(opening("first"), NO_TOOLS);
 
     expect(lastPrompt(model)[0]).toEqual({
       role: "system",
@@ -83,7 +94,7 @@ describe("what the run sends a model, and what it makes of the answer", () => {
     });
   });
 
-  it("names the tool a result answers, which only the call that made it says", async () => {
+  it("names the tool a result answers, and carries the handle a claim cites it by", async () => {
     const model = fakeModel([
       {
         type: "tool-call",
@@ -94,11 +105,10 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       finish("tool-calls"),
     ]);
     const p = provider(model);
-    p.start("first");
-    const turn = await p.chat(NO_TOOLS);
+    const first = await p.chat(opening("first"), NO_TOOLS);
 
-    expect(turn.stopReason).toBe("tools");
-    expect(turn.toolUses).toEqual([
+    expect(first.stopReason).toBe("tools");
+    expect(first.toolUses).toEqual([
       {
         toolCallId: "tu-1",
         name: "GetDockerLogs",
@@ -106,8 +116,21 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       },
     ]);
 
-    p.appendToolResults([{ toolCallId: "tu-1", content: "lines" }]);
-    await p.chat(NO_TOOLS);
+    await p.chat(
+      [
+        ...opening("first"),
+        msg("assistant", first.parts),
+        msg("user", [
+          {
+            type: "tool_result",
+            toolCallId: "tu-1",
+            output: "lines",
+            evidenceId: "e1",
+          },
+        ]),
+      ],
+      NO_TOOLS,
+    );
 
     expect(lastPrompt(model).at(-1)).toEqual({
       role: "tool",
@@ -116,7 +139,7 @@ describe("what the run sends a model, and what it makes of the answer", () => {
           type: "tool-result",
           toolCallId: "tu-1",
           toolName: "GetDockerLogs",
-          output: { type: "text", value: "lines" },
+          output: { type: "text", value: "Evidence ID: e1\nlines" },
           providerOptions: {
             anthropic: { cacheControl: { type: "ephemeral" } },
           },
@@ -130,12 +153,20 @@ describe("what the run sends a model, and what it makes of the answer", () => {
   it("sends a failed result as an error rather than as prose", async () => {
     const model = fakeModel([...text("t", "ok"), finish("stop")]);
     const p = provider(model);
-    p.start("first");
-    p.appendToolResults([
-      { toolCallId: "tu-1", content: "it broke", isError: true },
-    ]);
 
-    await p.chat(NO_TOOLS);
+    await p.chat(
+      [
+        msg("user", [
+          {
+            type: "tool_result",
+            toolCallId: "tu-1",
+            output: "it broke",
+            isError: true,
+          },
+        ]),
+      ],
+      NO_TOOLS,
+    );
 
     const tool = lastPrompt(model).find((m) => m.role === "tool");
     expect(tool?.content[0]).toMatchObject({
@@ -148,18 +179,19 @@ describe("what the run sends a model, and what it makes of the answer", () => {
   it("splits results and text into the two messages they are", async () => {
     const model = fakeModel([...text("t", "ok"), finish("stop")]);
     const p = provider(model);
-    p.seed([
-      {
-        role: "user",
-        content: "",
-        parts: [
-          { type: "tool_result", toolCallId: "tu-1", output: "lines" },
-          { type: "text", text: "another alert fired" },
-        ],
-      },
-    ]);
-
-    await p.chat(NO_TOOLS);
+    await p.chat(
+      [
+        {
+          role: "user",
+          content: "",
+          parts: [
+            { type: "tool_result", toolCallId: "tu-1", output: "lines" },
+            { type: "text", text: "another alert fired" },
+          ],
+        },
+      ],
+      NO_TOOLS,
+    );
 
     expect(
       lastPrompt(model)
@@ -183,9 +215,7 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       finish("stop"),
     ]);
     const p = provider(model);
-    p.start("first");
-
-    const turn = await p.chat(NO_TOOLS);
+    const turn = await p.chat(opening("first"), NO_TOOLS);
 
     expect(turn.parts[0]).toEqual({
       type: "reasoning",
@@ -194,7 +224,7 @@ describe("what the run sends a model, and what it makes of the answer", () => {
     });
 
     // Replayed with the signature, without which the provider rejects the block.
-    await p.chat(NO_TOOLS);
+    await p.chat([...opening("first"), msg("assistant", turn.parts)], NO_TOOLS);
     const assistant = lastPrompt(model).find((m) => m.role === "assistant");
     expect(assistant?.content[0]).toEqual({
       type: "reasoning",
@@ -215,14 +245,12 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       finish("stop"),
     ]);
     const p = provider(model);
-    p.start("first");
-
-    const turn = await p.chat(NO_TOOLS);
+    const turn = await p.chat(opening("first"), NO_TOOLS);
     expect(turn.parts).toEqual([
       { type: "compaction", text: "what came before" },
     ]);
 
-    await p.chat(NO_TOOLS);
+    await p.chat([...opening("first"), msg("assistant", turn.parts)], NO_TOOLS);
     const assistant = lastPrompt(model).find((m) => m.role === "assistant");
     expect(assistant?.content[0]).toEqual({
       type: "text",
@@ -245,9 +273,8 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       finish("stop"),
     ]);
     const p = provider(model);
-    p.start("first");
 
-    expect((await p.chat(NO_TOOLS)).parts).toEqual([]);
+    expect((await p.chat(opening("first"), NO_TOOLS)).parts).toEqual([]);
   });
 
   it("streams reasoning and visible text as the two kinds they are", async () => {
@@ -259,9 +286,8 @@ describe("what the run sends a model, and what it makes of the answer", () => {
     ]);
     const seen: StreamDelta[] = [];
     const p = provider(model);
-    p.start("first");
 
-    await p.chat(NO_TOOLS, (d) => seen.push(d));
+    await p.chat(opening("first"), NO_TOOLS, (d) => seen.push(d));
 
     expect(seen).toEqual([
       { kind: "thinking", text: "thinking" },
@@ -279,9 +305,10 @@ describe("what the run sends a model, and what it makes of the answer", () => {
   ] as const)("reads a %s finish as %s", async (unified, expected) => {
     const model = fakeModel([...text("t", "x"), finish(unified)]);
     const p = provider(model);
-    p.start("first");
 
-    expect((await p.chat(NO_TOOLS)).stopReason).toBe(expected);
+    expect((await p.chat(opening("first"), NO_TOOLS)).stopReason).toBe(
+      expected,
+    );
   });
 
   /* Per-tool validation refuses empty arguments with a correction the model can
@@ -297,9 +324,10 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       finish("tool-calls"),
     ]);
     const p = provider(model);
-    p.start("first");
 
-    expect((await p.chat(NO_TOOLS)).toolUses[0]?.input).toEqual({});
+    expect(
+      (await p.chat(opening("first"), NO_TOOLS)).toolUses[0]?.input,
+    ).toEqual({});
   });
 
   // Returning what arrived would read as a turn the model finished.
@@ -309,18 +337,24 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       { type: "error", error: new Error("upstream died") },
     ]);
     const p = provider(model);
-    p.start("first");
 
-    await expect(p.chat(NO_TOOLS)).rejects.toThrow("upstream died");
+    await expect(p.chat(opening("first"), NO_TOOLS)).rejects.toThrow(
+      "upstream died",
+    );
   });
 
   // The report turn offers one tool and cannot come back as prose.
   it("forces the named tool when one is required", async () => {
     const model = fakeModel([...text("t", "x"), finish("stop")]);
     const p = provider(model);
-    p.start("first");
 
-    await p.chat(NO_TOOLS, undefined, undefined, "SubmitInvestigationReport");
+    await p.chat(
+      opening("first"),
+      NO_TOOLS,
+      undefined,
+      undefined,
+      "SubmitInvestigationReport",
+    );
 
     expect(model.doStreamCalls[0]?.toolChoice).toEqual({
       type: "tool",
@@ -351,9 +385,8 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       },
     ];
     const p = provider(model);
-    p.seed(history);
 
-    await p.chat(NO_TOOLS);
+    await p.chat(history, NO_TOOLS);
 
     expect(lastPrompt(model).map((m) => m.role)).toEqual([
       "system",

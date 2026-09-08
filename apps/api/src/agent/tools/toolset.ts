@@ -53,12 +53,14 @@ export async function executeTool(
   ctx: ToolDispatchContext,
 ): Promise<DispatchedToolResult> {
   const { toolCallCeilingMs, ...identity } = ctx;
+  const toolTimeoutMs = Math.min(
+    tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
+    toolCallCeilingMs,
+  );
   const effectiveCtx: ToolExecuteContext = {
     ...identity,
-    toolTimeoutMs: Math.min(
-      tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
-      toolCallCeilingMs,
-    ),
+    toolTimeoutMs,
+    signal: AbortSignal.timeout(toolTimeoutMs),
   };
   /* Parsed once here rather than in each handler, so a tool declares its shape
      and receives it: the arguments reaching a runner are checked too. */

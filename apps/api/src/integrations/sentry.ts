@@ -17,9 +17,6 @@ export class SentryApiError extends Error {
 // to project:read. A token holding one and not the other fails only half way.
 export type SentryScope = "event:read" | "project:read";
 
-// Kept under the tools' 30s budget so Sentry gives up before the tool call does.
-const FETCH_TIMEOUT_MS = 28_000;
-
 // Every path is organization-scoped, so the slug is part of the address rather
 // than a filter, and a wrong one is a 404 the probe has to name.
 function joinUrl(baseUrl: string, path: string): string {
@@ -54,6 +51,7 @@ export function parseNextCursor(link: string | null): string | null {
 
 async function sentryFetch(
   conn: SentryConnection,
+  signal: AbortSignal,
   path: string,
   params: URLSearchParams,
 ): Promise<Response> {
@@ -61,7 +59,7 @@ async function sentryFetch(
   const url = `${joinUrl(conn.baseUrl, path)}${qs === "" ? "" : `?${qs}`}`;
   try {
     return await fetch(url, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal,
       headers: {
         "User-Agent": "nightwarden",
         Authorization: `Bearer ${conn.token}`,
@@ -145,11 +143,12 @@ function rows(body: unknown, status: number): Array<Record<string, unknown>> {
 
 async function getList(
   conn: SentryConnection,
+  signal: AbortSignal,
   path: string,
   params: URLSearchParams,
   scope: SentryScope,
 ): Promise<SentryPage<Record<string, unknown>>> {
-  const res = await sentryFetch(conn, path, params);
+  const res = await sentryFetch(conn, signal, path, params);
   const { body, nextCursor } = await readJson(res, scope);
   return { rows: rows(body, res.status), nextCursor };
 }
@@ -169,6 +168,7 @@ export interface IssueSearch {
    overriding both, which would silently discard the alert anchor. */
 export async function searchIssues(
   conn: SentryConnection,
+  signal: AbortSignal,
   search: IssueSearch,
 ): Promise<SentryPage<Record<string, unknown>>> {
   const params = new URLSearchParams({
@@ -185,6 +185,7 @@ export async function searchIssues(
   if (search.cursor !== null) params.set("cursor", search.cursor);
   return await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/issues/`,
     params,
     "event:read",
@@ -195,6 +196,7 @@ export async function searchIssues(
    `oldest` and `recommended`; there is no separate endpoint for it. */
 export async function latestEvent(
   conn: SentryConnection,
+  signal: AbortSignal,
   issueId: string,
   environments: string[],
 ): Promise<Record<string, unknown>> {
@@ -205,6 +207,7 @@ export async function latestEvent(
   params.set("llmFormat", "markdown");
   const res = await sentryFetch(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/issues/${encodeURIComponent(issueId)}/events/latest/`,
     params,
   );
@@ -224,6 +227,7 @@ export async function latestEvent(
 // spans the issue's whole life and the tool has to say so.
 export async function issueTagValues(
   conn: SentryConnection,
+  signal: AbortSignal,
   issueId: string,
   key: string,
   environments: string[],
@@ -232,6 +236,7 @@ export async function issueTagValues(
   for (const env of environments) params.append("environment", env);
   const page = await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/issues/${encodeURIComponent(issueId)}/tags/${encodeURIComponent(key)}/values/`,
     params,
     "event:read",
@@ -243,6 +248,7 @@ export async function issueTagValues(
 // filtering: a release that broke something can predate the alert by days.
 export async function listReleases(
   conn: SentryConnection,
+  signal: AbortSignal,
   projects: string[],
   query: string | null,
   perPage: number,
@@ -254,6 +260,7 @@ export async function listReleases(
   if (cursor !== null) params.set("cursor", cursor);
   return await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/releases/`,
     params,
     "project:read",
@@ -262,6 +269,7 @@ export async function listReleases(
 
 export async function releaseCommits(
   conn: SentryConnection,
+  signal: AbortSignal,
   version: string,
   cursor: string | null,
 ): Promise<SentryPage<Record<string, unknown>>> {
@@ -269,6 +277,7 @@ export async function releaseCommits(
   if (cursor !== null) params.set("cursor", cursor);
   return await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/releases/${encodeURIComponent(version)}/commits/`,
     params,
     "project:read",
@@ -277,15 +286,20 @@ export async function releaseCommits(
 
 /* Two calls because the two scopes fail independently: a token with only
    event:read connects and then answers nothing about releases at 3am. */
-export async function probeSentry(conn: SentryConnection): Promise<void> {
+export async function probeSentry(
+  conn: SentryConnection,
+  signal: AbortSignal,
+): Promise<void> {
   await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/issues/`,
     new URLSearchParams({ limit: "1", query: "" }),
     "event:read",
   );
   await getList(
     conn,
+    signal,
     `/organizations/${encodeURIComponent(conn.orgSlug)}/releases/`,
     new URLSearchParams({ per_page: "1" }),
     "project:read",

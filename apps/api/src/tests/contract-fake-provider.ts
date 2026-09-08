@@ -4,7 +4,6 @@ import type {
   ChatResponse,
   LLMProvider,
   ProviderMessage,
-  ToolResult,
   ToolUse,
 } from "../llm/types.js";
 
@@ -161,6 +160,15 @@ export type ContractFakeProvider = {
   [K in keyof LLMProvider]: LLMProvider[K] & ReturnType<typeof vi.fn>;
 };
 
+// The whole conversation a run handed the model on one call, which is the only
+// thing a stateless adapter is given.
+export function messagesSentTo(
+  provider: ContractFakeProvider,
+  call = 0,
+): ProviderMessage[] {
+  return (provider.chat.mock.calls[call]?.[0] ?? []) as ProviderMessage[];
+}
+
 const DEFAULT_TURN: ScriptedTurn = { toolUses: [], text: "Done." };
 
 // `nextTurn` is called once per chat() to get the turn to emit - either an array-backed
@@ -169,30 +177,17 @@ function makeProvider(
   nextTurn: () => ScriptedTurn,
   opts?: { gate?: () => Promise<void> },
 ): ContractFakeProvider {
-  const messages: NativeMessage[] = [];
-
   return {
-    start: vi.fn((msg: string) => {
-      messages.push({ role: "user", content: msg });
-    }),
-
-    seed: vi.fn((history: ProviderMessage[]) => {
-      // Rebuilt from parts, which is all a real adapter is given.
-      const native = history.map(partsToNative);
-      validateTranscript(native);
-      messages.length = 0;
-      messages.push(...native);
-    }),
-
     chat: vi.fn(
       async (
+        history: readonly ProviderMessage[],
         _tools: unknown,
         onDelta?: (d: { kind: string; text: string }) => void,
         signal?: AbortSignal,
         forceTool?: string,
       ): Promise<ChatResponse> => {
-        /* Checked here as well as in seed(): seed sees what the caller handed
-           over, while this is the state a real request would be built from. */
+        // Rebuilt from parts, which is all a real adapter is given.
+        const messages = history.map(partsToNative);
         validateTranscript(messages);
         // Optional gate: park here until the test releases this turn, so timing tests
         // can act (e.g. inject an alert) mid-chat. No gate means immediate resolution.
@@ -238,8 +233,6 @@ function makeProvider(
           });
         }
 
-        messages.push({ role: "assistant", content });
-
         const stopReason: ChatResponse["stopReason"] =
           turn.stopReason ?? (turn.toolUses.length > 0 ? "tools" : "done");
 
@@ -252,20 +245,6 @@ function makeProvider(
         });
       },
     ),
-
-    appendToolResults: vi.fn((results: ToolResult[]) => {
-      const blocks: Array<ToolResultBlock | TextBlock> = results.map((r) => ({
-        type: "tool_result" as const,
-        tool_use_id: r.toolCallId,
-        content: r.content,
-        ...(r.isError && { is_error: true }),
-      }));
-      messages.push({ role: "user", content: blocks });
-    }),
-
-    appendUserMessage: vi.fn((msg: string) => {
-      messages.push({ role: "user", content: msg });
-    }),
   };
 }
 
