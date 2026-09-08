@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { EvidenceKind, ToolName } from "@nightwarden/shared";
+import type { ToolName } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
 import type {
+  Citability,
   Tool,
   ToolExecuteContext,
   ToolExecuteResult,
@@ -44,13 +45,12 @@ export function toolSchema(
   return { name, description, input_schema: generated as InputSchema };
 }
 
-interface ApiToolSpec<T extends z.ZodObject> {
+type ApiToolSpec<T extends z.ZodObject> = Citability & {
   name: ToolName;
   description: string;
   input: T;
   effect: "read" | "write";
   policy: ToolPolicy;
-  evidenceKind: EvidenceKind;
   idempotent?: true;
   timeoutMs?: number;
   // A property for the reason the registry's is: shorthand would not check it.
@@ -58,7 +58,7 @@ interface ApiToolSpec<T extends z.ZodObject> {
     input: z.infer<T>,
     ctx: ToolExecuteContext,
   ) => Promise<ToolExecuteResult>;
-}
+};
 
 /* Binds a handler to the Zod object its own schema was generated from, so a
    handler cannot declare a shape the tool does not carry. */

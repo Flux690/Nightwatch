@@ -1,14 +1,10 @@
 import { z } from "zod";
 import { declareTool } from "./schema.js";
+import { dockerServers as server } from "./server.js";
 import type { Tool } from "./types.js";
 
 // A Docker runner is 1:1 with its machine. A Kubernetes runner is one pod on
 // an arbitrary node, so GetK8sNodeStatus answers node health there.
-const server = z.string().optional().meta({
-  description:
-    "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
-});
-
 // Defaults are applied by the runner, so these stay optional here and say so in
 // their descriptions rather than declaring a default this schema never applies.
 const HOST_VITALS_INPUT = z.object({ server });
@@ -54,7 +50,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -68,7 +65,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -82,7 +80,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -96,7 +95,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -110,7 +110,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "logs",
+    citable: true,
+    renderAs: "logs",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -124,7 +125,8 @@ export const HOST_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     on: "runner",
     routeBy: "server",
     platform: "docker",

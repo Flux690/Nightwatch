@@ -164,7 +164,6 @@ export type {
 export { transcriptItemKey } from "./transcript.js";
 export type {
   Verdict,
-  Conviction,
   Hypothesis,
   GatedCall,
   TimelineEntry,
@@ -173,7 +172,6 @@ export type {
   InvestigationRecord,
   EvidenceKind,
   ResolvedEvidence,
-  ReportConviction,
   SessionReportResponse,
 } from "./reports.js";
 export { rankHypotheses, leadingHypothesis, supersededIds } from "./reports.js";

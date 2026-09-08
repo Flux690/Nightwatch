@@ -1,4 +1,4 @@
-import { executeRunnerTool } from "../executor.js";
+import { executeRunnerTool } from "../runner-dispatch.js";
 import { parseInput } from "./schema.js";
 import { stripSystemReminder } from "../system-reminder.js";
 import {
@@ -39,26 +39,6 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
-// A field rather than a text prefix: the frontend parses these results, so a
-// header line would break every tool card. A plain string takes the prefix.
-function withEvidenceId(
-  content: unknown,
-  evidenceId: string | undefined,
-): string {
-  if (evidenceId === undefined) {
-    return typeof content === "string" ? content : JSON.stringify(content);
-  }
-  if (typeof content === "string") return `[${evidenceId}] ${content}`;
-  if (
-    typeof content === "object" &&
-    content !== null &&
-    !Array.isArray(content)
-  ) {
-    return JSON.stringify({ evidenceId, ...content });
-  }
-  return JSON.stringify({ evidenceId, result: content });
-}
-
 // Refused whole rather than shortened: a sliced JSON result parses as a smaller
 // truth, which is how an agent reports no errors in logs it never saw.
 function tooLarge(name: string, chars: number): string {
@@ -91,7 +71,9 @@ export async function executeTool(
   // Stripped here rather than per tool: a log line or a file is the outside
   // world speaking, and this is the one door all of it comes through.
   const content = stripSystemReminder(
-    withEvidenceId(result.content, ctx.evidenceId),
+    typeof result.content === "string"
+      ? result.content
+      : JSON.stringify(result.content),
   );
   if (content.length > MAX_TOOL_RESULT_CHARS) {
     return {

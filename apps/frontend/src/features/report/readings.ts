@@ -4,7 +4,7 @@
 import { asRecord, numberAt, stringAt } from "@/shared/lib/toolResult";
 import { compact } from "./format.js";
 import { dayClock } from "@/shared/lib/time";
-import { formatBytes } from "@/features/session/transcript/toolFindings";
+import { formatBytes } from "@/shared/lib/format";
 
 // One server's answer inside a fan-out, or the result itself when there is no
 // envelope. A server-routed tool is enveloped even for a single server.

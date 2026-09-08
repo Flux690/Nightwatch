@@ -27,7 +27,8 @@ function toolReturning(content: unknown): Tool {
     input: z.object({}),
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     on: "api",
     execute: () => Promise.resolve({ content }),
   };

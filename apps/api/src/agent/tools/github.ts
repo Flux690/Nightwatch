@@ -155,7 +155,8 @@ export const GITHUB_TOOLS: Tool[] = [
     input: RECENT_CHANGES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "change",
+    citable: true,
+    renderAs: "change",
     timeoutMs: 60_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getGitHubIntegration();

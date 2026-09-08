@@ -2,6 +2,7 @@ import { z } from "zod";
 import { args, executable } from "./exec.js";
 import { reason } from "./reason.js";
 import { declareTool } from "./schema.js";
+import { dockerServers as server } from "./server.js";
 import type { Tool } from "./types.js";
 
 // The service's target key, copied verbatim from the <fleet-summary> block or a list
@@ -9,11 +10,6 @@ import type { Tool } from "./types.js";
 const target = z.string().meta({
   description:
     "The service's target key, copied exactly as it appears in the <fleet-summary> block or in a ListDockerServices result, for example web-01/shop/api. Copy the whole string; never assemble one yourself from parts.",
-});
-
-const server = z.string().optional().meta({
-  description:
-    "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
 });
 
 const LIST_SERVICES_INPUT = z.object({ server });
@@ -80,7 +76,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "server",
     platform: "docker",
@@ -93,7 +90,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "logs",
+    citable: true,
+    renderAs: "logs",
     on: "runner",
     routeBy: "service",
   },
@@ -105,7 +103,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -117,7 +116,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "service",
   },
@@ -129,7 +129,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -141,7 +142,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -153,7 +155,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "write",
     policy: "approve",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     on: "runner",
     routeBy: "service",
   },
@@ -165,7 +168,8 @@ export const DOCKER_TOOLS: Tool[] = [
     ),
     effect: "write",
     policy: "approve",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "terminal",
     on: "runner",
     routeBy: "service",
   },

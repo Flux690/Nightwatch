@@ -420,7 +420,8 @@ export const SENTRY_TOOLS: Tool[] = [
     input: SEARCH_ISSUES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "exception",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
@@ -484,7 +485,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { issuesOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0 ? { content: result } : { content: result };
+        return { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -497,7 +498,8 @@ export const SENTRY_TOOLS: Tool[] = [
     input: LATEST_EVENT_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "exception",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
@@ -570,7 +572,8 @@ export const SENTRY_TOOLS: Tool[] = [
     input: TAG_VALUES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
@@ -614,7 +617,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(omitted > 0 && { valuesOmitted: omitted }),
           note: notes.join(" "),
         };
-        return kept.length === 0 ? { content: result } : { content: result };
+        return { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -627,7 +630,8 @@ export const SENTRY_TOOLS: Tool[] = [
     input: RELEASES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "change",
+    citable: true,
+    renderAs: "change",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const conn = await connection();
@@ -680,7 +684,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { releasesOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0 ? { content: result } : { content: result };
+        return { content: result };
       } catch (err) {
         return corrective(err);
       }
@@ -693,7 +697,8 @@ export const SENTRY_TOOLS: Tool[] = [
     input: RELEASE_COMMITS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "change",
+    citable: true,
+    renderAs: "change",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const conn = await connection();
@@ -737,7 +742,7 @@ export const SENTRY_TOOLS: Tool[] = [
           ...(dropped > 0 && { commitsOmitted: dropped }),
           note: notes.join(" "),
         };
-        return kept.length === 0 ? { content: result } : { content: result };
+        return { content: result };
       } catch (err) {
         return corrective(err);
       }

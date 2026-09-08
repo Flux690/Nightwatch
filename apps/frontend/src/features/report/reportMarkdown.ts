@@ -4,7 +4,6 @@ import type {
   SessionReportResponse,
   Verdict,
 } from "@nightwarden/shared";
-import { findingFor } from "@/features/session/transcript/toolFindings";
 import { targetOf } from "@/features/session/transcript/toolPresentation";
 
 // The verdict as a sentence rather than the enum, since the export is read
@@ -27,10 +26,7 @@ function citedLines(
     const entry = evidence.get(id);
     if (entry === undefined) return [];
     const target = targetOf(entry.input);
-    const reading = findingFor(entry.toolName, entry.result)?.text;
-    return [
-      `- \`${entry.toolName}\`${target === null ? "" : ` ${target}`}${reading === undefined ? "" : ` - ${reading}`}`,
-    ];
+    return [`- \`${entry.toolName}\`${target === null ? "" : ` ${target}`}`];
   });
 }
 
@@ -93,8 +89,7 @@ export function reportToMarkdown(
       "",
       rows
         .map((h) => {
-          const conviction = report?.conviction[h.id];
-          const verdict = `${VERDICT_WORD[h.verdict]}${conviction === undefined ? "" : `, ${conviction}`}.`;
+          const verdict = `${VERDICT_WORD[h.verdict]}.`;
           const body = h.finding.trim();
           const cited = citedLines(h.evidenceIds, byId);
           return [

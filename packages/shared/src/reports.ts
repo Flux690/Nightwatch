@@ -6,10 +6,6 @@
 export type Verdict =
   "root_cause" | "trigger" | "symptom" | "contributing_factor" | "disproven";
 
-// How well the system can back a claim, computed from the trail at read time.
-// A claim with no resolvable citation earns none of these.
-export type Conviction = "cited" | "corroborated" | "verified";
-
 export interface Hypothesis {
   // Assigned by the system in recording order, so a later call cannot land on an
   // earlier row and rewrite it.
@@ -126,10 +122,17 @@ export interface InvestigationRecord {
   updatedAt: string;
 }
 
-// Declared on the tool so the frontend looks a renderer up rather than sniffing
-// the result: a declaration cannot drift from what the tool returns.
+// Declared on the tool so the frontend picks a renderer rather than guessing
+// from the result: a declaration cannot drift from what the tool returns.
 export type EvidenceKind =
-  "metric" | "logs" | "change" | "state" | "diff" | "text";
+  | "metric"
+  | "logs"
+  | "change"
+  | "state"
+  | "diff"
+  | "terminal"
+  | "exception"
+  | "text";
 
 // One cited tool call, resolved from the transcript at read time so the report
 // quotes what ran rather than storing a second copy of it.
@@ -141,16 +144,9 @@ export interface ResolvedEvidence {
   kind: EvidenceKind;
   input: Record<string, unknown>;
   result: string;
-  // A cited call that found nothing is often the evidence itself, while one
-  // that failed proves nothing: the report must not read the two the same way.
-  isError?: boolean;
   // Present only where a person was asked, since a declined call never ran.
   approved?: boolean;
 }
-
-// Computed from the trail on every read and never stored, so no tool input can
-// set it. Keyed by hypothesis id; a row absent from it earned no conviction.
-export type ReportConviction = Record<string, Conviction>;
 
 // Who decided is not recorded: there is one user, and a multi-tenant build
 // would get the name from the session that approved it.
@@ -169,11 +165,10 @@ export interface GatedCall {
   result: string | null;
 }
 
-// Three authors: the model writes `record`, the transcript answers `decisions`
-// and `evidence`, and the system computes `conviction`.
+// Two authors: the model writes `record`, and the transcript answers both
+// `decisions` and `evidence`.
 export interface SessionReportResponse {
   record: InvestigationRecord;
   decisions: GatedCall[];
   evidence: ResolvedEvidence[];
-  conviction: ReportConviction;
 }

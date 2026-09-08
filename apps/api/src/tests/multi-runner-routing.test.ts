@@ -357,7 +357,7 @@ describe("multi-runner routing", () => {
           {
             toolCallId: "tu-4",
             name: "GetHostMemory",
-            input: { server: "db-02" },
+            input: { server: ["db-02"] },
           },
         ],
       },
@@ -371,18 +371,23 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
   });
 
-  it("a host command with no runner reads every Docker host and names each answer", async () => {
+  it("a host command naming both hosts reads each and names each answer", async () => {
     setScript([
       {
         text: "Checking host memory.",
-        toolUses: [{ toolCallId: "tu-5", name: "GetHostMemory", input: {} }],
+        toolUses: [
+          {
+            toolCallId: "tu-5",
+            name: "GetHostMemory",
+            input: { server: ["web-01", "db-02"] },
+          },
+        ],
       },
       FINISH_TURN,
     ]);
 
     const sessionId = await runSession();
 
-    // Omitting the runner is a fan-out, not a mistake to correct.
     expect(commandsA).toHaveLength(1);
     expect(commandsB).toHaveLength(1);
 

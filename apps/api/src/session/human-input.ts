@@ -7,7 +7,10 @@ import {
   appendRowsAndResolve,
   findToolCall,
   getNextSeq,
+  getTranscriptRows,
 } from "./transcript-store.js";
+import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
+import { isCitable } from "../agent/report.js";
 import { stripSystemReminder } from "../agent/system-reminder.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";
@@ -99,20 +102,39 @@ async function ensureDeleted(sessionId: string): Promise<void> {
 
 // The whole turn's results as one row, since the wire needs one message. Written
 // here because the result of a command that already ran must survive a crash.
+// The calls are already on the transcript, so which of them a claim may rest on
+// is read from the names they were recorded under.
+function citableIds(
+  rows: readonly TranscriptRow[],
+  results: readonly ToolResult[],
+): Set<string> {
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    for (const part of row.parts) {
+      if (part.type === "tool_call") names.set(part.toolCallId, part.name);
+    }
+  }
+  return new Set(
+    results
+      .map((result) => result.toolCallId)
+      .filter((id) => isCitable(names.get(id) ?? "")),
+  );
+}
+
+/* These results are reaching the transcript for the first time, so their handles
+   are issued here, continuing the numbers the session already holds. */
 async function answeredTurn(
   sessionId: string,
   results: ToolResult[],
   decision: MessagePart,
 ): Promise<TranscriptRow> {
-  const parts: MessagePart[] = [
-    ...results.map((r): MessagePart => ({
-      type: "tool_result",
-      toolCallId: r.toolCallId,
-      output: r.content,
-      ...(r.isError === true && { isError: true }),
-    })),
-    decision,
-  ];
+  const rows = await getTranscriptRows(sessionId);
+  const stamped = resultParts(
+    results,
+    citableIds(rows, results),
+    highestEvidenceNumber(rows) + 1,
+  );
+  const parts: MessagePart[] = [...stamped.parts, decision];
   return {
     sessionId,
     seq: await getNextSeq(sessionId),

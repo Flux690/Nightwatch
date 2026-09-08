@@ -1,14 +1,19 @@
 // From the kind its tool declares, never from guessing at the result's shape.
-// Finding nothing to draw renders nothing, and the one-line reading stands.
+// Where there is nothing to draw, what the call did not find is said instead.
 
 import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
-import { findingFor } from "@/features/session/transcript/toolFindings";
 import {
   parseFileChange,
   type DiffLine,
 } from "@/features/session/transcript/DiffCard";
 import { parsePullRequestResult } from "@/features/session/transcript/PRCard";
+import {
+  parseCommandRun,
+  TerminalBody,
+} from "@/features/session/transcript/TerminalCard";
+import { commandLineOf } from "@/features/session/transcript/toolPresentation";
+import { Exception, exceptionRows } from "./Exception.js";
 import { ChangesList, commitsFrom, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
 import { plotCaption, plotFrom } from "./plot.js";
@@ -24,9 +29,10 @@ import {
   type ReadingGroup,
 } from "./readings.js";
 
-// Enough to see what the edit did. The whole change is one click away, and the
-// report is not where a file is reviewed.
+// Enough to see what the edit did, and what the command said. The whole of
+// either is one click away in the transcript.
 const MAX_DIFF_LINES = 12;
+const MAX_TERMINAL_LINES = 12;
 
 function Readings({ groups }: { groups: ReadingGroup[] }): React.JSX.Element {
   return (
@@ -217,22 +223,48 @@ function drawingFor(
         ? null
         : { body: <Readings groups={groups} />, of: "", scope: "" };
     }
+    case "terminal": {
+      const run = parseCommandRun(entry.result);
+      return run === null
+        ? null
+        : {
+            body: (
+              <TerminalBody
+                argv={commandLineOf(entry.input)}
+                run={run}
+                maxLines={MAX_TERMINAL_LINES}
+              />
+            ),
+            of: "",
+            scope: `exit ${run.exitCode}`,
+          };
+    }
+    case "exception": {
+      const rows = exceptionRows(entry.result);
+      return rows.length === 0
+        ? null
+        : { body: <Exception rows={rows} />, of: "", scope: "" };
+    }
     case "text":
       return null;
   }
 }
 
-// How a cited result reads in one line. The transcript row names its tool and
-// nothing else, so this is the only place a finding is drawn as prose.
-function resultSummary(
-  toolName: string,
-  result: unknown,
-): { text: string; tone: string } {
-  const finding = findingFor(toolName, result);
-  return {
-    text: finding?.text ?? "",
-    tone: finding?.tone === "bad" ? "text-fail" : "text-muted-foreground",
-  };
+/* A result that shows less than the tool searched has to say so: blank space
+   where a drawing would be reads as nothing having happened. */
+function absenceIn(entry: ResolvedEvidence): string | null {
+  switch (entry.kind) {
+    case "metric":
+      return carriesSeries(entry.result) ? "no series matched" : null;
+    case "logs": {
+      const scanned = scannedLines(entry.result);
+      return scanned === null ? null : `no matches in ${scanned} lines`;
+    }
+    case "change":
+      return "nothing shipped in the window";
+    default:
+      return null;
+  }
 }
 
 export function Evidence({
@@ -248,15 +280,13 @@ export function Evidence({
 }): React.JSX.Element | null {
   if (repeat) return null;
 
-  const summary = resultSummary(entry.toolName, entry.result);
-  // A call that failed has nothing to draw: that it failed is the whole
-  // reading, and it is what the line carries.
-  const drawing = entry.isError === true ? null : drawingFor(entry, alert);
+  const drawing = drawingFor(entry, alert);
 
   if (drawing === null) {
-    return summary.text === "" ? null : (
-      <p className={cn("m-0 mt-4 font-mono text-sm", summary.tone)}>
-        {summary.text}
+    const absence = absenceIn(entry);
+    return absence === null ? null : (
+      <p className="m-0 mt-4 font-mono text-sm text-muted-foreground">
+        {absence}
       </p>
     );
   }

@@ -264,7 +264,8 @@ export const LOKI_TOOLS: Tool[] = [
     input: QUERY_LOGS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "logs",
+    citable: true,
+    renderAs: "logs",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();
@@ -367,7 +368,8 @@ export const LOKI_TOOLS: Tool[] = [
     input: QUERY_LOG_METRICS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();
@@ -423,7 +425,8 @@ export const LOKI_TOOLS: Tool[] = [
     input: DISCOVER_LOG_LABELS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const integration = await getLokiIntegration();

@@ -327,7 +327,8 @@ export const REPO_TOOLS: Tool[] = [
     input: READ_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 60_000,
     execute: async (input: z.infer<typeof READ_INPUT>, ctx) => {
       const { path, offset, limit } = input;
@@ -349,7 +350,8 @@ export const REPO_TOOLS: Tool[] = [
     input: EDIT_INPUT,
     effect: "write",
     policy: "auto",
-    evidenceKind: "diff",
+    citable: true,
+    renderAs: "diff",
     timeoutMs: 60_000,
     execute: async (input: z.infer<typeof EDIT_INPUT>, ctx) => {
       const { path, old_string, new_string, replace_all } = input;
@@ -372,7 +374,8 @@ export const REPO_TOOLS: Tool[] = [
     input: WRITE_INPUT,
     effect: "write",
     policy: "auto",
-    evidenceKind: "diff",
+    citable: true,
+    renderAs: "diff",
     timeoutMs: 60_000,
     execute: async (input: z.infer<typeof WRITE_INPUT>, ctx) => {
       const { path, content } = input;
@@ -389,7 +392,8 @@ export const REPO_TOOLS: Tool[] = [
     input: BASH_INPUT,
     effect: "write",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "terminal",
     timeoutMs: 300_000,
     execute: async (input: z.infer<typeof BASH_INPUT>, ctx) => {
       const { command, cwd } = input;
@@ -417,7 +421,8 @@ export const REPO_TOOLS: Tool[] = [
     // gate, and gating creation would stall the 3am AFK flow this exists for.
     effect: "write",
     policy: "auto",
-    evidenceKind: "change",
+    citable: true,
+    renderAs: "change",
     // One PR per session branch, created or updated by branch identity, so a
     // second call after a crash refreshes the proposal rather than opening one.
     idempotent: true,

@@ -2,12 +2,10 @@
 // and colour says what a thing is rather than how loud.
 
 import type {
-  Conviction,
   GatedCall,
   Hypothesis,
   SessionAlert,
   InvestigationRecord,
-  ReportConviction,
   ResolvedEvidence,
   TimelineEntry,
   Verdict,
@@ -237,13 +235,11 @@ function TimelineRow({
 // out rather than printed empty.
 function Facts({
   record,
-  conviction,
   evidence,
   decisions,
   span,
 }: {
   record: InvestigationRecord;
-  conviction: ReportConviction;
   evidence: ResolvedEvidence[];
   decisions: GatedCall[];
   span: string | null;
@@ -254,18 +250,12 @@ function Facts({
 
   const clauses: React.ReactNode[] = [];
   if (leading !== null) {
-    const backing = conviction[leading.id];
     clauses.push(
       <>
         Leading verdict{" "}
         <b className="font-medium text-foreground">
           {VERDICT_VIEW[leading.verdict].label.toLowerCase()}
         </b>
-        {backing !== undefined && (
-          <>
-            , backed as <b className="font-medium text-foreground">{backing}</b>
-          </>
-        )}
       </>,
     );
   }
@@ -321,7 +311,6 @@ export function ReportPanel({
   record,
   decisions,
   evidence,
-  conviction,
   alerts,
   createdAt = null,
   lastActivityAt = null,
@@ -333,7 +322,6 @@ export function ReportPanel({
   decisions: GatedCall[];
   // The cited calls, resolved by the API against the transcript.
   evidence: ResolvedEvidence[];
-  conviction: ReportConviction;
   // In arrival order. The band shows them all; the evidence plots need just one
   // to draw the alert marker against.
   alerts: SessionAlert[];
@@ -431,13 +419,6 @@ export function ReportPanel({
         <span className={cn("text-sm", VERDICT_VIEW[h.verdict].className)}>
           {VERDICT_VIEW[h.verdict].label}
         </span>
-        {/* Absence is the signal: a claim nothing can back carries no
-            marker, and no warning badge either. */}
-        {conviction[h.id] !== undefined && (
-          <span className="text-sm text-ink-subtle">
-            {conviction[h.id] as Conviction}
-          </span>
-        )}
         {/* Demoted, never removed: where the run changed its mind is part of
             what happened, and a claim that vanished cannot be audited. */}
         {replaced.has(h.id) && (
@@ -494,7 +475,6 @@ export function ReportPanel({
 
       <Facts
         record={record}
-        conviction={conviction}
         evidence={evidence}
         decisions={decisions}
         span={span}
@@ -577,13 +557,6 @@ export function ReportPanel({
                 <span className="min-w-0 flex-[2] text-sm">{h.statement}</span>
                 {h.finding && (
                   <span className="min-w-0 flex-1 text-sm">{h.finding}</span>
-                )}
-                {/* Kept, where the evidence is not: the reader who doubts a
-                    ruling needs to know how well it was backed. */}
-                {conviction[h.id] !== undefined && (
-                  <span className="shrink-0 text-sm text-ink-subtle">
-                    {conviction[h.id] as Conviction}
-                  </span>
                 )}
               </li>
             ))}

@@ -4,7 +4,6 @@ import type {
   NormalizedAlert,
   SessionAlert,
   InvestigationRecord,
-  ReportConviction,
   ResolvedEvidence,
 } from "@nightwarden/shared";
 
@@ -82,8 +81,6 @@ const RECORD: InvestigationRecord = {
   updatedAt: RESOLVED,
 };
 
-const CONVICTION: ReportConviction = { h1: "corroborated", h2: "cited" };
-
 const EVIDENCE: ResolvedEvidence[] = [
   {
     evidenceId: "e-stats",
@@ -131,7 +128,6 @@ function panel(overrides: Partial<Parameters<typeof ReportPanel>[0]> = {}) {
       record={RECORD}
       decisions={[]}
       evidence={EVIDENCE}
-      conviction={CONVICTION}
       alerts={[]}
       {...overrides}
     />
@@ -281,17 +277,6 @@ describe("ReportPanel", () => {
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-  });
-
-  it("marks how well each claim is backed, and marks nothing when it is not", () => {
-    render(panel());
-
-    // Twice for the leading claim: once in the run's own summary line, once
-    // beside the claim itself, which are two different questions.
-    expect(screen.getAllByText("corroborated")).toHaveLength(2);
-    expect(screen.getByText("cited")).toBeInTheDocument();
-    // Nothing here earned it, and absence is the whole signal: no warning badge.
-    expect(screen.queryByText("verified")).not.toBeInTheDocument();
   });
 
   it("puts the released writes on the composed timeline, in one order", () => {
@@ -530,34 +515,6 @@ describe("ReportPanel", () => {
     expect(screen.getByText("500")).toBeInTheDocument();
   });
 
-  it("says a cited call missed rather than passing its failure off as a reading", () => {
-    render(
-      panel({
-        record: {
-          ...RECORD,
-          report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-miss"] }],
-        },
-        evidence: [
-          {
-            evidenceId: "e-miss",
-            toolCallId: "tu-miss",
-            toolName: "ReadHostFile",
-            kind: "text",
-            input: { path: "/etc/redis/redis.conf" },
-            result: "File not found: /etc/redis/redis.conf",
-            isError: true,
-          },
-        ],
-      }),
-    );
-
-    // The miss is the evidence here, so it reads as a plain statement; a crash
-    // would carry the failure word and the failure colour instead.
-    expect(screen.getByText(/File not found/)).toBeInTheDocument();
-    expect(screen.queryByText(/Failed/)).not.toBeInTheDocument();
-  });
-
   // A host tool declares a measurement but answers plain readings, so the
   // chart reader found nothing and the claim showed a bare tool name.
   it("draws the readings of a measurement that carries no series, per server", () => {
@@ -690,7 +647,6 @@ describe("ReportPanel", () => {
     render(
       panel({
         evidence: [],
-        conviction: {},
         record: {
           ...RECORD,
           hypotheses: [

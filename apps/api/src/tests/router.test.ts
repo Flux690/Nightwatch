@@ -198,11 +198,15 @@ describe("router", () => {
   });
 
   describe("server routes", () => {
-    it("fans out to every server of the platform when none is named", async () => {
+    it("reaches every server the call names", async () => {
       const a = connect("web-01", ["nginx"]);
       const b = connect("db-02", ["postgres"]);
 
-      const { envelope } = await sendFleetCommand("GetHostDisk", {}, "docker");
+      const { envelope } = await sendFleetCommand(
+        "GetHostDisk",
+        { server: ["web-01", "db-02"] },
+        "docker",
+      );
 
       expect(a.commands).toHaveLength(1);
       expect(b.commands).toHaveLength(1);
@@ -212,26 +216,37 @@ describe("router", () => {
       ]);
     });
 
+    /* Naming one and reaching another would be a reading of the wrong machine,
+       which nothing downstream could tell from the right one. */
+    it("leaves a connected server the call did not name alone", async () => {
+      const named = connect("web-01", ["nginx"]);
+      const other = connect("db-02", ["postgres"]);
+
+      await sendFleetCommand("GetHostDisk", { server: ["web-01"] }, "docker");
+
+      expect(named.commands).toHaveLength(1);
+      expect(other.commands).toHaveLength(0);
+    });
+
     it("envelopes a single server's result too, so there is one shape to read", async () => {
       connect("web-01", ["nginx"]);
 
       const { envelope } = await sendFleetCommand(
         "GetHostDisk",
-        { server: "web-01" },
+        { server: ["web-01"] },
         "docker",
       );
 
       expect(envelope.byServer).toEqual([
         { server: "web-01", result: { ok: true } },
       ]);
-      expect(envelope.serversOmitted).toBeUndefined();
     });
 
     it("reaches only servers of that platform", async () => {
       const dockerHost = connect("web-01", ["nginx"]);
       const cluster = connect("k8s-01", ["api"], { platform: "kubernetes" });
 
-      await sendFleetCommand("GetHostDisk", {}, "docker");
+      await sendFleetCommand("GetHostDisk", { server: ["web-01"] }, "docker");
 
       expect(dockerHost.commands).toHaveLength(1);
       expect(cluster.commands).toHaveLength(0);
@@ -241,19 +256,8 @@ describe("router", () => {
       connect("k8s-01", ["api"], { platform: "kubernetes" });
 
       await expect(
-        sendFleetCommand("GetHostDisk", {}, "docker"),
+        sendFleetCommand("GetHostDisk", { server: ["web-01"] }, "docker"),
       ).rejects.toThrow(/No connected server runs docker/);
-    });
-
-    // A reading that covers eight of ten servers is not a reading of the fleet,
-    // and the model cannot tell the difference unless the envelope says so.
-    it("caps a fan-out at eight servers and states how many it left out", async () => {
-      for (let i = 0; i < 10; i++) connect(`host-${i}`, ["nginx"]);
-
-      const { envelope } = await sendFleetCommand("GetHostDisk", {}, "docker");
-
-      expect(envelope.byServer).toHaveLength(8);
-      expect(envelope.serversOmitted).toBe(2);
     });
 
     it("strips the server parameter before dispatch", async () => {
@@ -261,7 +265,7 @@ describe("router", () => {
 
       await sendFleetCommand(
         "GetHostDmesg",
-        { server: "web-01", tailLines: 20 },
+        { server: ["web-01"], tailLines: 20 },
         "docker",
       );
 
@@ -272,7 +276,7 @@ describe("router", () => {
       connect("web-01", ["nginx"]);
 
       await expect(
-        sendFleetCommand("GetHostDisk", { server: "ghost-99" }, "docker"),
+        sendFleetCommand("GetHostDisk", { server: ["ghost-99"] }, "docker"),
       ).rejects.toThrow(/No docker server named 'ghost-99'/);
     });
 
@@ -280,13 +284,13 @@ describe("router", () => {
       // Two boxes could both self-report "ubuntu"; only assigned names are unique.
       const a = connect("prod-1", ["nginx"]);
 
-      await sendFleetCommand("GetHostDisk", { server: "prod-1" }, "docker");
+      await sendFleetCommand("GetHostDisk", { server: ["prod-1"] }, "docker");
       expect(a.commands).toHaveLength(1);
 
       await expect(
         sendFleetCommand(
           "GetHostDisk",
-          { server: hostnameOf("prod-1") },
+          { server: [hostnameOf("prod-1")] },
           "docker",
         ),
       ).rejects.toThrow(/No docker server named/);
@@ -301,7 +305,12 @@ describe("router", () => {
           envelope,
           succeeded,
           failed: failedCount,
-        } = await sendFleetCommand("GetHostDisk", {}, "docker", 20);
+        } = await sendFleetCommand(
+          "GetHostDisk",
+          { server: ["prod-1", "prod-2"] },
+          "docker",
+          20,
+        );
 
         expect(ok.commands).toHaveLength(1);
         expect(succeeded).toBe(1);
@@ -316,7 +325,7 @@ describe("router", () => {
 
         const { succeeded, envelope } = await sendFleetCommand(
           "GetHostDisk",
-          {},
+          { server: ["prod-1", "prod-2"] },
           "docker",
           20,
         );

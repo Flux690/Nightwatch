@@ -27,7 +27,6 @@ import { hasPendingHumanInput } from "../session/gate-store.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
-import { isCitable } from "../agent/evidence-source.js";
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
@@ -88,24 +87,26 @@ describe("policy-gate: the reason rides every gated call", () => {
   });
 });
 
-/* Asserted from the registry for the reason policy is: a library added to the
-   toolset and not to EVIDENCE_SOURCES is offered, answers, and cannot be cited. */
+/* The registry answers both directions now that each tool declares it, so what
+   this pins is the rule itself: observing is citable, recording is not. */
 describe("evidence: a tool that questions the system can back a claim", () => {
-  it("issues an evidence id to every registry tool but the record's own", () => {
-    const recording = new Set(REPORT_TOOLS.map((tool) => tool.schema.name));
+  it("declares every registry tool but the record's own citable", () => {
+    const recording = new Set(
+      [...REPORT_TOOLS, SUBMIT_REPORT_TOOL].map((tool) => tool.schema.name),
+    );
     const observing = TOOL_REGISTRY.filter(
       (tool) => !recording.has(tool.schema.name),
     );
     expect(observing.length).toBeGreaterThan(0);
     for (const tool of observing) {
-      expect(isCitable(tool.schema.name), tool.schema.name).toBe(true);
+      expect(tool.citable, tool.schema.name).toBe(true);
     }
   });
 
   // Recording a claim and writing it up observe nothing, so neither can support one.
-  it("withholds one from the tools that write the record", () => {
+  it("withholds it from the tools that write the record", () => {
     for (const tool of [...REPORT_TOOLS, SUBMIT_REPORT_TOOL]) {
-      expect(isCitable(tool.schema.name), tool.schema.name).toBe(false);
+      expect(tool.citable, tool.schema.name).toBe(false);
     }
   });
 });

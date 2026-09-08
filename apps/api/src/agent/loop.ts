@@ -12,12 +12,13 @@ import {
 import {
   approvedWriteCount,
   gatedCalls,
+  isCitable,
   recordGaps,
   reportIsBehind,
+  toolCallsIn,
   type RecordGap,
 } from "./report.js";
-import { highestEvidenceNumber, withEvidenceIds } from "./evidence-id.js";
-import { isCitable } from "./evidence-source.js";
+import { highestEvidenceNumber, resultParts } from "./evidence-id.js";
 import { asSystemReminder, stripSystemReminder } from "./system-reminder.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getRecord } from "../session/record-store.js";
@@ -259,15 +260,19 @@ function spentOn(rows: readonly TranscriptRow[], opening: string): number {
   ).length;
 }
 
-/* Calls that answered and could back a claim; a refused one taught nothing.
-   Counted from the turn because a harness turn orphans a tool_use from its result. */
+// Read from the turn, because a harness turn orphans a tool_use from its result.
+function citableIds(uses: readonly ToolUse[]): Set<string> {
+  return new Set(
+    uses.filter((t) => isCitable(t.name)).map((t) => t.toolCallId),
+  );
+}
+
+// Calls that answered and could back a claim; a refused one taught nothing.
 function citableAnswers(
   uses: readonly ToolUse[],
   results: readonly ToolResult[],
 ): number {
-  const citable = new Set(
-    uses.filter((t) => isCitable(t.name)).map((t) => t.toolCallId),
-  );
+  const citable = citableIds(uses);
   return results.filter((r) => r.isError !== true && citable.has(r.toolCallId))
     .length;
 }
@@ -444,24 +449,26 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   const flush = async (interrupt?: PendingHumanInput): Promise<void> => {
     if (pending.length === 0 && interrupt === undefined) return;
-    const stamped = withEvidenceIds(pending.splice(0), nextEvidence);
-    nextEvidence = stamped.next;
-    if (interrupt) await appendRowsAndPark(stamped.rows, interrupt);
-    else await appendTranscriptRows(stamped.rows);
+    const rows = pending.splice(0);
+    if (interrupt) await appendRowsAndPark(rows, interrupt);
+    else await appendTranscriptRows(rows);
     // A harness row draws nothing, so publishing it costs a refetch that
     // changes no pixel.
-    for (const row of stamped.rows) {
+    for (const row of rows) {
       if (row.kind !== "system_reminder") publishMessage(sessionId, row);
     }
   };
 
-  const resultParts = (results: readonly ToolResult[]): MessagePart[] =>
-    results.map((r) => ({
-      type: "tool_result",
-      toolCallId: r.toolCallId,
-      output: r.content,
-      ...(r.isError === true && { isError: true as const }),
-    }));
+  // The counter advances with the evidence rather than with the request, so a
+  // call made in this reply has no handle until its answer arrives.
+  const stageResults = (
+    uses: readonly ToolUse[],
+    results: readonly ToolResult[],
+  ): void => {
+    const stamped = resultParts(results, citableIds(uses), nextEvidence);
+    nextEvidence = stamped.next;
+    stage("user", stamped.parts);
+  };
 
   // The one emitter of the marker, so also the door untrusted text arrives at:
   // an injected alert's labels are the sender's and must not close our tag.
@@ -517,7 +524,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       integration === null
         ? null
         : `${integration.repoOwner}/${integration.repoName}`,
-    fleetTools: offered.tools.some((t) => t.on === "runner"),
+    fleetTools: connectedPlatforms().size > 0,
   };
   const { systemPrompt, openingTurn } =
     allAlerts.length > 0
@@ -682,7 +689,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       });
       if (toolResults.length > 0) {
         provider.appendToolResults(toolResults);
-        stage("user", resultParts(toolResults));
+        stageResults(written.toolUses, toolResults);
       }
       await flush();
 
@@ -807,7 +814,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       // Only a run that acted must recommend: ruling things out is a complete
       // ending, but releasing a write and going quiet leaves the user nothing.
-      const gated = await gatedCalls(sessionId);
+      const gated = gatedCalls(await toolCallsIn(sessionId));
       const approvedWrites = approvedWriteCount(gated);
       /* Rewriting is lossy, so a write-up that still covers the record is kept.
          Recovery is not a reason: a cleared alert already reads as Resolved. */
@@ -856,7 +863,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         "run asked only for unavailable tools; ending it",
       );
       provider.appendToolResults(toolResults);
-      stage("user", resultParts(toolResults));
+      stageResults(response.toolUses, toolResults);
       await flush();
       await appendErrorMessage(sessionId, barren);
       return "completed";
@@ -924,7 +931,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // Drained at the tool boundary, the earliest point the model can act on one,
     // as their own turn after the results.
     provider.appendToolResults(toolResults);
-    stage("user", resultParts(toolResults));
+    stageResults(response.toolUses, toolResults);
     // Already durable: the dispatcher wrote each one when it arrived. The inbox
     // exists to tell the model, which is a separate concern from keeping it.
     const injected = input.drainInbox?.(sessionId) ?? [];

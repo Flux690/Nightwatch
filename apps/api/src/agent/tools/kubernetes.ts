@@ -2,6 +2,7 @@ import { z } from "zod";
 import { args, executable } from "./exec.js";
 import { reason } from "./reason.js";
 import { declareTool } from "./schema.js";
+import { kubernetesServers as server } from "./server.js";
 import type { Tool } from "./types.js";
 
 // The workload's target key, copied verbatim from the <fleet-summary> block or a list
@@ -14,11 +15,6 @@ const target = z.string().meta({
 const container = z.string().optional().meta({
   description:
     "Which container to read, when the workload's pod runs more than one, for example an application container alongside a sidecar. Omit it for a single-container pod. If you omit it for a pod that has several, the result lists the containers you can choose from.",
-});
-
-const server = z.string().optional().meta({
-  description:
-    "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
 });
 
 const WORKLOAD_INPUT = z.object({ target });
@@ -89,7 +85,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "server",
     platform: "kubernetes",
@@ -102,7 +99,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "logs",
+    citable: true,
+    renderAs: "logs",
     on: "runner",
     routeBy: "service",
   },
@@ -114,7 +112,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -126,7 +125,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     on: "runner",
     routeBy: "service",
   },
@@ -138,7 +138,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -150,7 +151,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -162,7 +164,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "service",
   },
@@ -174,7 +177,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "read",
     policy: "auto",
-    evidenceKind: "state",
+    citable: true,
+    renderAs: "state",
     on: "runner",
     routeBy: "server",
     platform: "kubernetes",
@@ -187,7 +191,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "write",
     policy: "approve",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     on: "runner",
     routeBy: "service",
   },
@@ -199,7 +204,8 @@ export const K8S_TOOLS: Tool[] = [
     ),
     effect: "write",
     policy: "approve",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "terminal",
     on: "runner",
     routeBy: "service",
   },

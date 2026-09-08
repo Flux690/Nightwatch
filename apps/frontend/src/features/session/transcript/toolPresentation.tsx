@@ -1,5 +1,5 @@
-// The row carries the answer, so the common case needs no click. Expansion is
-// a thread line: at rail width a box per tool buries the conversation.
+// The row names the call and the body is one click inside it. Expansion is a
+// thread line: at rail width a box per tool buries the conversation.
 
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
@@ -12,14 +12,13 @@ import {
 } from "@/shared/ui/collapsible";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/shared/lib/utils";
-import { clock, dayClock, zoneName } from "@/shared/lib/time";
 import { isTool, parseTargetKey } from "@nightwarden/shared";
 import type { ToolName } from "@nightwarden/shared";
-import { asRecord, stringAt as inputString } from "@/shared/lib/toolResult";
+import { stringAt as inputString } from "@/shared/lib/toolResult";
 import type { ToolCallItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
-import { formatBytes } from "./toolFindings.js";
+import { parseCommandRun } from "./TerminalCard.js";
 
 // Beyond this the body scrolls behind an explicit opt-in. The runner's own 64KB
 // cap is for safety; this much tighter one is for reading.
@@ -51,26 +50,6 @@ export function commandLineOf(input: Record<string, unknown>): string | null {
     return [executable, ...args].join(" ");
   }
   return inputString(input, "command");
-}
-
-function stringList(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((v): v is string => typeof v === "string")
-    : [];
-}
-
-/* A runner's log line and the time the engine stamped on it. A stored
-   transcript still holds bare strings from before they were stamped. */
-function logList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry): string[] => {
-    if (typeof entry === "string") return [entry];
-    const record = asRecord(entry);
-    const line = record === null ? null : record["line"];
-    if (typeof line !== "string") return [];
-    const ts = record?.["ts"];
-    return [typeof ts === "string" && ts !== "" ? `${ts} ${line}` : line];
-  });
 }
 
 const MONO = "font-mono text-sm leading-relaxed";
@@ -107,62 +86,8 @@ function CappedText({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-function LogLines({ lines }: { lines: string[] }): React.JSX.Element {
-  return <CappedText text={lines.join("\n")} />;
-}
-
-function KeyValues({
-  rows,
-}: {
-  rows: [string, string][];
-}): React.JSX.Element | null {
-  if (rows.length === 0) return null;
-  return (
-    <dl className="m-0 flex flex-col gap-1">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex gap-3">
-          <dt className="w-32 shrink-0 text-sm text-ink-subtle">{label}</dt>
-          <dd className={cn(MONO, "m-0 min-w-0 break-words tabular-nums")}>
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function EventList({
-  events,
-}: {
-  events: Record<string, unknown>[];
-}): React.JSX.Element {
-  return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">
-      {events.slice(0, BODY_MAX_LINES).map((event, i) => {
-        const at =
-          typeof event["timestamp"] === "string" ? event["timestamp"] : "";
-        const label =
-          typeof event["eventType"] === "string" ? event["eventType"] : "";
-        return (
-          <li key={`${at}-${i}`} className={cn(MONO, "flex gap-3")}>
-            <time
-              className="shrink-0 text-ink-subtle"
-              title={at ? `${dayClock(at)} ${zoneName()}` : undefined}
-            >
-              {at ? clock(at) : ""}
-            </time>
-            <span className="min-w-0 break-words text-muted-foreground">
-              {label}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-// A tool with no entry falls back to its raw result: better a JSON block than
-// a shape we pretended to understand. The report quotes through this too.
+/* Only the two a raw block cannot serve: a question needs the question beside
+   the answer, and a command needs its own line above its output. */
 function ToolBody({
   toolName,
   input,
@@ -193,92 +118,23 @@ function ToolBody({
     );
   }
 
-  const record = asRecord(result);
-
-  if (record !== null) {
-    if (isTool(toolName, "GetDockerLogs", "GetK8sLogs")) {
-      return <LogLines lines={logList(record["lines"])} />;
-    }
-
-    if (isTool(toolName, "GetDockerEvents", "GetK8sEvents")) {
-      const events = Array.isArray(record["events"])
-        ? (record["events"] as Record<string, unknown>[])
-        : [];
-      return <EventList events={events} />;
-    }
-
-    if (isTool(toolName, "GetDockerStats", "GetK8sStats")) {
-      const rows: [string, string][] = [];
-      const cpu = record["cpuPercent"];
-      const used = record["memoryUsedBytes"];
-      const limit = record["memoryLimitBytes"];
-      const pids = record["pids"];
-      if (typeof cpu === "number") rows.push(["cpu", `${cpu.toFixed(2)}%`]);
-      if (typeof used === "number") rows.push(["memory", formatBytes(used)]);
-      if (typeof limit === "number") rows.push(["limit", formatBytes(limit)]);
-      if (typeof pids === "number") rows.push(["processes", String(pids)]);
-      return <KeyValues rows={rows} />;
-    }
-
-    if (isTool(toolName, "GetHostMemory")) {
-      const rows: [string, string][] = [];
-      const total = record["totalBytes"];
-      const available = record["availableBytes"];
-      const swap = record["swapUsedBytes"];
-      if (typeof available === "number")
-        rows.push(["available", formatBytes(available)]);
-      if (typeof total === "number") rows.push(["total", formatBytes(total)]);
-      if (typeof swap === "number") rows.push(["swap used", formatBytes(swap)]);
-      rows.push([
-        "oom killer",
-        record["oomKillerFired"] === true ? "fired" : "quiet",
-      ]);
-      return <KeyValues rows={rows} />;
-    }
-
-    if (isTool(toolName, "GetDockerConfig", "GetK8sConfig")) {
-      const rows: [string, string][] = [];
-      for (const key of ["name", "image", "restartPolicy"]) {
-        const value = record[key];
-        if (typeof value === "string") rows.push([key, value]);
-      }
-      const ports = stringList(record["ports"]);
-      if (ports.length > 0) rows.push(["ports", ports.join(", ")]);
-      return <KeyValues rows={rows} />;
-    }
-
-    // Keyed on the tool name, not on an exitCode: plenty of results carry one
-    // without running a command and deserve their own shape.
-    if (isTool(toolName, ...COMMAND_TOOLS)) {
-      const argv = commandLineOf(input) ?? "";
-      // Split streams from the runner, one combined `output` from the sandbox.
-      const stdout =
-        typeof record["stdout"] === "string"
-          ? record["stdout"]
-          : typeof record["output"] === "string"
-            ? record["output"]
-            : "";
-      const stderr =
-        typeof record["stderr"] === "string" ? record["stderr"] : "";
-      const body = [stdout, stderr]
-        .filter((s) => s.trim().length > 0)
-        .join("\n");
-      return (
-        <div className="flex flex-col gap-2">
-          {argv && (
-            <pre className={cn(MONO, "m-0 whitespace-pre-wrap break-words")}>
-              <span className="text-ink-subtle select-none">$ </span>
-              {argv}
-            </pre>
-          )}
-          {body ? (
-            <CappedText text={body} />
-          ) : (
-            <p className={cn(MONO, "m-0 text-ink-subtle")}>(no output)</p>
-          )}
-        </div>
-      );
-    }
+  const run = isTool(toolName, ...COMMAND_TOOLS)
+    ? parseCommandRun(result)
+    : null;
+  if (run !== null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <pre className={cn(MONO, "m-0 whitespace-pre-wrap break-words")}>
+          <span className="text-ink-subtle select-none">$ </span>
+          {commandLineOf(input) ?? ""}
+        </pre>
+        {run.output.trim() === "" ? (
+          <p className={cn(MONO, "m-0 text-ink-subtle")}>(no output)</p>
+        ) : (
+          <CappedText text={run.output} />
+        )}
+      </div>
+    );
   }
 
   const text =

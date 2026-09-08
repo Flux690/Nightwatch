@@ -2,11 +2,10 @@
 // citation is the id of the call that produced it, and nothing is unrecorded.
 
 import type {
-  Conviction,
+  EvidenceKind,
   GatedCall,
   Hypothesis,
   InvestigationRecord,
-  ReportConviction,
   ResolvedEvidence,
   TimelineEntry,
   TranscriptRow,
@@ -20,8 +19,46 @@ import {
 import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput } from "../session/transcript.js";
-import { evidenceKind, evidenceSource } from "./evidence-source.js";
 import { evidenceNumber } from "./evidence-id.js";
+import { DOCKER_TOOLS } from "./tools/docker.js";
+import { GITHUB_TOOLS } from "./tools/github.js";
+import { HOST_TOOLS } from "./tools/host.js";
+import { K8S_TOOLS } from "./tools/kubernetes.js";
+import { LOKI_TOOLS } from "./tools/loki.js";
+import { METRICS_TOOLS } from "./tools/metrics.js";
+import { REPO_TOOLS } from "./tools/repo.js";
+import { SENTRY_TOOLS } from "./tools/sentry.js";
+
+/* Held apart from the registry, which reaches the record's own tools and would
+   cycle back through here. Each entry is read off the tool, never listed. */
+const RENDERER = new Map<string, EvidenceKind>(
+  [
+    DOCKER_TOOLS,
+    HOST_TOOLS,
+    K8S_TOOLS,
+    REPO_TOOLS,
+    GITHUB_TOOLS,
+    METRICS_TOOLS,
+    LOKI_TOOLS,
+    SENTRY_TOOLS,
+  ]
+    .flat()
+    .flatMap((tool) =>
+      tool.citable ? [[tool.schema.name, tool.renderAs] as const] : [],
+    ),
+);
+
+/* Recording a claim, writing the report and asking a person observe nothing, so
+   none of them earns an evidence id and none can back a claim. */
+export function isCitable(toolName: string): boolean {
+  return RENDERER.has(toolName);
+}
+
+// A cited call whose tool this build no longer offers reads as plain text: its
+// result is still quotable, just no longer typed.
+function evidenceKind(toolName: string): EvidenceKind {
+  return RENDERER.get(toolName) ?? "text";
+}
 
 // What a recording tool tells the model. A refusal is a correction, not a fault:
 // the act was rejected and the message says what to do instead.
@@ -32,7 +69,8 @@ export interface RecordOutcome {
 
 interface ToolCall {
   toolCallId: string;
-  // Absent on a tool no claim may rest on, which is never issued one.
+  // Absent until the call answers, and absent for good on a tool no claim may
+  // rest on: the handle rides the result rather than the request.
   evidenceId?: string;
   toolName: string;
   input: Record<string, unknown>;
@@ -56,9 +94,6 @@ function toolCallsFrom(messages: readonly TranscriptRow[]): ToolCall[] {
       if (part.type === "tool_call") {
         const entry: ToolCall = {
           toolCallId: part.toolCallId,
-          ...(part.evidenceId !== undefined && {
-            evidenceId: part.evidenceId,
-          }),
           toolName: part.name,
           input: part.input,
           result: null,
@@ -70,6 +105,7 @@ function toolCallsFrom(messages: readonly TranscriptRow[]): ToolCall[] {
         const entry = byToolCallId.get(part.toolCallId);
         if (entry) {
           entry.result = part.output;
+          if (part.evidenceId !== undefined) entry.evidenceId = part.evidenceId;
           if (part.isError === true) entry.isError = true;
         }
       } else if (part.type === "tool_approval") {
@@ -83,33 +119,30 @@ function toolCallsFrom(messages: readonly TranscriptRow[]): ToolCall[] {
   return entries;
 }
 
-async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
+// The one read a report request makes: every join below is a pure function over
+// what it returns, so the same transcript is not fetched three times.
+export async function toolCallsIn(sessionId: string): Promise<ToolCall[]> {
   return toolCallsFrom(await getTranscriptRows(sessionId));
 }
 
-/* Both halves matter: the provider's own id is never accepted, and a call still
-   running shows nothing anyone can have read. */
+/* One split, because a handle exists only once its result does: an id naming no
+   answered call is unknown whether the model invented it or jumped ahead. */
 function knownCitations(
   entries: readonly ToolCall[],
   ids: string[],
-): { kept: string[]; pending: string[]; invented: string[] } {
-  const byEvidenceId = new Map(
-    entries.flatMap((e) =>
-      e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
-    ),
+): { kept: string[]; unknown: string[] } {
+  const issued = new Set(
+    entries.flatMap((e) => (e.evidenceId === undefined ? [] : [e.evidenceId])),
   );
   const kept: string[] = [];
-  const pending: string[] = [];
-  const invented: string[] = [];
+  const unknown: string[] = [];
   for (const id of new Set(ids)) {
-    const trimmed = id.trim();
-    const entry = byEvidenceId.get(trimmed);
-    if (entry === undefined) invented.push(id);
-    else if (entry.result === null) pending.push(id);
     // The key it resolved under, which is the form the record keeps.
-    else kept.push(trimmed);
+    const trimmed = id.trim();
+    if (issued.has(trimmed)) kept.push(trimmed);
+    else unknown.push(id);
   }
-  return { kept, pending, invented };
+  return { kept, unknown };
 }
 
 function issuedRange(entries: readonly ToolCall[]): string {
@@ -123,27 +156,14 @@ function issuedRange(entries: readonly ToolCall[]): string {
     : `This investigation has e1 through e${highest}.`;
 }
 
-/* Both kinds in one message: waiting for a result and picking a different id are
-   different corrections, and one claim can get both wrong at once. */
+// One correction, because the model needs the same move either way: cite a
+// result it has read.
 function citationRefusal(
   entries: readonly ToolCall[],
-  pending: string[],
-  invented: string[],
+  unknown: string[],
 ): string {
-  const said = ["Not recorded."];
-  if (pending.length > 0) {
-    const one = pending.length === 1;
-    said.push(
-      `${pending.join(", ")} ${one ? "has" : "have"} not answered yet, so ${one ? "it shows" : "they show"} nothing you can have read. Every tool call in one message is made before any of them returns.`,
-    );
-  }
-  if (invented.length > 0) {
-    said.push(
-      `${invented.join(", ")} ${invented.length === 1 ? "names" : "name"} no call you can cite. ${issuedRange(entries)} A result that can back a claim opens with its own "evidenceId"; a tool that reads nothing about your system carries none.`,
-    );
-  }
-  said.push("Record this again citing only calls you have already read.");
-  return said.join(" ");
+  const one = unknown.length === 1;
+  return `Not recorded. ${unknown.join(", ")} ${one ? "names" : "name"} no result you have read. ${issuedRange(entries)} A handle arrives inside the result itself, so a tool you asked for in this same reply does not have one yet and its result reaches you in your next message. Record this again citing only results you have already read.`;
 }
 
 // Everything the record points at, from either author: the hypotheses' own
@@ -160,14 +180,14 @@ function citedIds(record: InvestigationRecord): Set<string> {
 
 // Every cited call answered - a citation naming one that had not is refused when
 // the claim is made. The outcome rides along: a cited miss and a cited crash differ.
-export async function resolveEvidence(
-  sessionId: string,
+export function resolveEvidence(
+  entries: readonly ToolCall[],
   record: InvestigationRecord,
-): Promise<ResolvedEvidence[]> {
+): ResolvedEvidence[] {
   const cited = citedIds(record);
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
-  for (const entry of await toolCallsIn(sessionId)) {
+  for (const entry of entries) {
     const { toolCallId, evidenceId, toolName, input, result } = entry;
     if (evidenceId === undefined || !cited.has(evidenceId)) continue;
     if (result === null) continue;
@@ -178,33 +198,15 @@ export async function resolveEvidence(
       kind: evidenceKind(toolName),
       input,
       result,
-      ...(entry.isError === true && { isError: true }),
       ...(entry.approved !== undefined && { approved: entry.approved }),
     });
   }
   return resolved;
 }
 
-// Arithmetic over the trail and the action log, so no tool input can set it.
-function convictionOf(
-  ids: string[],
-  calls: Map<string, ToolCall>,
-  executedAt: string | null,
-): Conviction | null {
-  const entries = [...new Set(ids)]
-    .flatMap((id) => calls.get(id) ?? [])
-    .filter((entry) => entry.result !== null);
-  if (entries.length === 0) return null;
-  if (executedAt !== null && entries.some((e) => e.timestamp > executedAt)) {
-    return "verified";
-  }
-  const sources = new Set(entries.map((e) => evidenceSource(e.toolName)));
-  return sources.size >= 2 ? "corroborated" : "cited";
-}
-
 // A name cannot answer this: a refused call carries the name of a gated tool
 // and reached no gate. An answered question is not a write.
-function gatedCallsFrom(entries: readonly ToolCall[]): GatedCall[] {
+export function gatedCalls(entries: readonly ToolCall[]): GatedCall[] {
   return entries.flatMap((entry) => {
     const { approved, isError } = entry;
     if (entry.result === null || approved === undefined) return [];
@@ -220,10 +222,6 @@ function gatedCallsFrom(entries: readonly ToolCall[]): GatedCall[] {
       },
     ];
   });
-}
-
-export async function gatedCalls(sessionId: string): Promise<GatedCall[]> {
-  return gatedCallsFrom(await toolCallsIn(sessionId));
 }
 
 // Only the released ones: a declined write changed nothing, so it cannot put the
@@ -245,36 +243,6 @@ export function reportIsBehind(
     (record.hypotheses.at(-1)?.id ?? "") !== report.hypothesesCoveredUpTo ||
     approvedWrites !== report.writesCoveredUpTo
   );
-}
-
-/* Only a call a person released starts the clock that makes a later read a
-   confirmation: a declined one changed nothing and a refused one never ran. */
-function lastExecutedAt(calls: Map<string, ToolCall>): string | null {
-  let latest: string | null = null;
-  for (const entry of calls.values()) {
-    if (entry.result === null || entry.approved !== true) continue;
-    if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
-  }
-  return latest;
-}
-
-export async function computeConviction(
-  sessionId: string,
-  record: InvestigationRecord,
-): Promise<ReportConviction> {
-  // Keyed the way a claim cites, so a lookup needs no second vocabulary.
-  const calls = new Map(
-    (await toolCallsIn(sessionId)).flatMap((e) =>
-      e.evidenceId === undefined ? [] : [[e.evidenceId, e] as const],
-    ),
-  );
-  const executedAt = lastExecutedAt(calls);
-  const graded: ReportConviction = {};
-  for (const row of record.hypotheses) {
-    const conviction = convictionOf(row.evidenceIds, calls, executedAt);
-    if (conviction !== null) graded[row.id] = conviction;
-  }
-  return graded;
 }
 
 // A list rather than a boolean, so the record-gaps message can name only what
@@ -325,16 +293,13 @@ export async function recordHypothesis(
   input: RecordHypothesisInput,
 ): Promise<RecordOutcome> {
   const entries = await toolCallsIn(sessionId);
-  const { kept, pending, invented } = knownCitations(
-    entries,
-    input.evidenceIds,
-  );
-  /* All of them or none: recording what survives changes the claim the model made
-     and drops its conviction from corroborated to cited, silently. */
-  if (pending.length > 0 || invented.length > 0 || kept.length === 0) {
+  const { kept, unknown } = knownCitations(entries, input.evidenceIds);
+  /* All of them or none: recording what survives changes the claim the model
+     made, on a record that says nothing about what it dropped. */
+  if (unknown.length > 0 || kept.length === 0) {
     return {
       recorded: false,
-      message: await citationRefusal(entries, pending, invented),
+      message: citationRefusal(entries, unknown),
     };
   }
   const evidenceIds = kept;
@@ -400,7 +365,7 @@ export async function submitReport(
           ...(entry.lane !== undefined && { lane: entry.lane }),
         };
   });
-  const approvedWrites = approvedWriteCount(gatedCallsFrom(entries));
+  const approvedWrites = approvedWriteCount(gatedCalls(entries));
   // Stamped inside the transaction, from the record being written against:
   // counted anywhere else it could name claims this report never saw.
   await amendRecord(sessionId, (record) => ({

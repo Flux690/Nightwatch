@@ -8,11 +8,7 @@ import {
   respondRequestSchema,
 } from "@nightwarden/shared/schemas";
 import { parseRequest } from "../request-body.js";
-import {
-  computeConviction,
-  gatedCalls,
-  resolveEvidence,
-} from "../agent/report.js";
+import { gatedCalls, resolveEvidence, toolCallsIn } from "../agent/report.js";
 import { hasPendingHumanInput } from "./gate-store.js";
 import { getRecord } from "./record-store.js";
 import {
@@ -103,12 +99,12 @@ export async function registerSessionRoutes(
         return reply.code(404).send({ error: "no report for session" });
       }
       // Everything beside `record` is joined rather than stored, so what the
-      // model wrote cannot disagree with what ran or how well a claim is backed.
+      // model wrote cannot disagree with what ran. One walk serves both joins.
+      const calls = await toolCallsIn(request.params.id);
       const response: SessionReportResponse = {
         record,
-        decisions: await gatedCalls(request.params.id),
-        evidence: await resolveEvidence(request.params.id, record),
-        conviction: await computeConviction(request.params.id, record),
+        decisions: gatedCalls(calls),
+        evidence: resolveEvidence(calls, record),
       };
       return response;
     },

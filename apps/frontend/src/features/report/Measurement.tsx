@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatBytes } from "@/features/session/transcript/toolFindings";
+import { formatBytes } from "@/shared/lib/format";
 import type { Line, Plot, PlotUnit } from "./plot.js";
 import { clock } from "@/shared/lib/time";
 import { compact } from "./format.js";

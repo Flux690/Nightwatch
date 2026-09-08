@@ -24,6 +24,12 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
+- **A server-level tool now names the servers it reads.** `GetHostMemory`, `GetHostCPU`, `GetHostDisk`, `GetHostNetwork`, `GetHostDmesg`, `ListDockerServices` and `ListK8sWorkloads` take a list of server names instead of one name or none. Omitting it used to mean "every server of that platform", which read as a whole-fleet answer while silently stopping at eight; a call naming more than eight is now refused with the limit stated, and the agent asks again for the rest. — `0.5.9`
+
+- **A claim can no longer rest on a call that failed.** A call that could not answer - a runner it could not reach, a token it was refused, a query the source rejected, or a path or target key naming something that does not exist - is issued no evidence id, so a finding citing one is refused rather than recorded on it. A call that answered is unaffected however empty its answer is: no matching log lines, no series, nothing shipped in the window. Those are readings, and they are what a `disproven` finding rests on. — `0.5.9`
+
+- **A cited call that draws nothing now says what it looked at.** Where the report has no chart, log excerpt or diff to draw, it writes the scope instead - "no matches in 200 lines", "nothing shipped in the window" - rather than leaving the space under a claim blank. Shell commands and Sentry issues gained drawings of their own. In the transcript, an opened tool call shows what the tool returned; the file diffs, pull requests and shell output that are artifacts rather than data keep their own cards. — `0.5.9`
+
 - **Every model now shows the reasoning levels and the two limits it actually publishes.** What a model supports is read from models.dev alongside the list your provider returns, so the settings form describes an OpenAI or OpenRouter model as precisely as an Anthropic one - OpenAI's own endpoint publishes no capabilities at all, so before this its models offered no reasoning control and no context window. A model that cannot call tools is no longer listed, because it cannot run an investigation. A model too new for models.dev is still listed and still selectable; it just describes itself with blanks until the snapshot catches up. The reasoning row is labelled "Reasoning" for every provider. — `0.5.7` (`37cc598`)
 
 - **The Anthropic Base URL default now ends in `/v1`,** matching OpenAI and OpenRouter, so all three name the endpoint they actually call. Only the placeholder changed; a Base URL you saved yourself is untouched. — `0.5.7` (`37cc598`)
@@ -64,6 +70,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Removed
 
+- **The conviction badge is gone from the report.** Every finding carried one of `cited`, `corroborated` or `verified` under its verdict. `cited` was unreachable-below, since a finding without a citation cannot be recorded at all; `verified` needed an approved write, so a read-only investigation could never earn it; which left it measuring whether two citations came from one integration or two. That is citation variety, not how well a claim is backed. The verdicts, the citations and the evidence drawn under each finding are unchanged. — `0.5.9`
+
 - **Starting an investigation by hand.** The mode picker beside the message box is gone and `POST /api/chat` refuses `kind: "investigation"`; typing opens a chat, and an alert opens an investigation. An investigation is a session with a falsifiable condition attached, and only an alert carries one - so a manually started investigation could never have its recovery confirmed, and produced a report nothing could ever verify. The investigations list, the record and the report are unchanged, and stopping or resuming a session works exactly as before. — `0.4.0` (`e0f52ba`)
 
 - The **container** field on `GetK8sConfig`, `GetK8sStats`, `GetK8sEvents` and `RestartK8sWorkload`. All four report on the whole workload and none ever read it; it stays on the three tools that do. — `0.3.171` (`f49f9c8`)
@@ -74,6 +82,8 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - An alert label can no longer close the harness tag and speak as NightWarden. Anything the harness sends the model is stripped of the marker first, so text arriving from a monitored host reaches the model as data rather than as an instruction wearing the system's voice. — `0.3.157` (`bea9083`)
 
 ### Fixed
+
+- **A refused citation no longer names a handle the agent was never given.** Citing a call that had not answered was refused with "e7 has not answered yet", which told the agent `e7` was legitimately its own - so it cited `e7` again next turn, when the number it actually received may have been `e8`. An evidence id is now issued with the result rather than with the request, so a call made in the same reply has no handle at all and the refusal says so plainly. — `0.5.9`
 
 - **"Add an API key" and "that key was rejected" are no longer decided by which provider you picked.** The endpoint's own answer settles it: a rejection carrying no key asks for one, and the same rejection carrying a key says that key is wrong. An endpoint that lists models without a key still does. — `0.5.7` (`37cc598`)
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -17,11 +18,12 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
-  computeConviction,
   gatedCalls,
+  isCitable,
   recordGaps,
   reportIsBehind,
   resolveEvidence,
+  toolCallsIn,
 } from "../agent/report.js";
 import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
 import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
@@ -34,10 +36,7 @@ import {
   getNextSeq,
   getTranscriptRows,
 } from "../session/transcript-store.js";
-import {
-  highestEvidenceNumber,
-  withEvidenceIds,
-} from "../agent/evidence-id.js";
+import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import {
@@ -64,6 +63,28 @@ function alert(sourceAlertId: string): NormalizedAlert {
 }
 
 describe("the investigation record", () => {
+  // A read only answers if a runner is there to answer it, and a call that
+  // failed is issued no handle, so a fixture without one cites nothing.
+  async function connectRunner() {
+    const runnerId = (await generateRunnerToken("docker", "rc-host")).id;
+    const conn = registerRunner({
+      runnerId,
+      platform: "docker",
+      serverName: "rc-host",
+      send: (raw: string) => {
+        const msg = JSON.parse(raw) as { payload: { correlationId: string } };
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      close: () => {},
+    });
+    setRunnerManifest(runnerId, manifest("rc-host"));
+    return conn;
+  }
+
   let cleanupDb: () => void;
 
   beforeAll(async () => {
@@ -110,13 +131,46 @@ describe("the investigation record", () => {
     commits: [],
   });
 
+  // Stamped as the loop stamps it, on the answer rather than the request.
   async function appendCitableRows(rows: TranscriptRow[]): Promise<void> {
     const sessionId = rows[0]!.sessionId;
-    const stamped = withEvidenceIds(
-      rows,
-      highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1,
+    const stored = await getTranscriptRows(sessionId);
+    let next = highestEvidenceNumber(stored) + 1;
+    const citable = new Set(
+      [...stored, ...rows]
+        .flatMap((row) => row.parts)
+        .flatMap((part) =>
+          part.type === "tool_call" && isCitable(part.name)
+            ? [part.toolCallId]
+            : [],
+        ),
     );
-    await appendTranscriptRows(stamped.rows);
+    const stamped = rows.map((row) => {
+      const answers = row.parts.flatMap((part) =>
+        part.type === "tool_result" ? [part] : [],
+      );
+      if (answers.length === 0) return row;
+      const issued = resultParts(
+        answers.map((part) => ({
+          toolCallId: part.toolCallId,
+          content: part.output,
+          ...(part.isError === true && { isError: true as const }),
+        })),
+        citable,
+        next,
+      );
+      next = issued.next;
+      const byId = new Map(issued.parts.map((part) => [part.toolCallId, part]));
+      return {
+        ...row,
+        parts: row.parts.map((part) =>
+          part.type === "tool_result"
+            ? (byId.get(part.toolCallId) ?? part)
+            : part,
+        ),
+      };
+    });
+    await appendTranscriptRows(stamped);
   }
 
   // One record entry at a chosen instant, so a read after a remediation is
@@ -564,7 +618,7 @@ describe("the investigation record", () => {
     });
   });
 
-  describe("evidence and conviction", () => {
+  describe("evidence", () => {
     it("resolves a citation to the call that produced it, quoting the result verbatim", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
@@ -582,8 +636,8 @@ describe("the investigation record", () => {
         recommendation: "revert PR #482",
       });
 
-      const evidence = await resolveEvidence(
-        sessionId,
+      const evidence = resolveEvidence(
+        await toolCallsIn(sessionId),
         (await getRecord(sessionId))!,
       );
       expect(evidence.map((e) => e.toolCallId)).toEqual(["tu-1", "tu-2"]);
@@ -599,23 +653,6 @@ describe("the investigation record", () => {
       expect(JSON.parse(evidence[1]!.result)).toMatchObject({
         pullRequests: [{ number: 482 }],
       });
-    });
-
-    it("grades a claim by what backs it, not by what the model said", async () => {
-      const sessionId = randomUUID();
-      await seedTranscript(sessionId);
-
-      const one = await record(sessionId, "one source", "trigger", ["e1"]);
-      const two = await record(sessionId, "two sources", "root_cause", [
-        "e1",
-        "e2",
-      ]);
-      const conviction = await computeConviction(
-        sessionId,
-        (await getRecord(sessionId))!,
-      );
-      expect(conviction[one]).toBe("cited");
-      expect(conviction[two]).toBe("corroborated");
     });
 
     // The provider's own call id never appears as content, which is why one run
@@ -639,8 +676,8 @@ describe("the investigation record", () => {
       expect(hypothesis?.evidenceIds).toEqual(["e1"]);
 
       // And it resolves to real evidence rather than a dangling reference.
-      const resolved = await resolveEvidence(
-        sessionId,
+      const resolved = resolveEvidence(
+        await toolCallsIn(sessionId),
         (await getRecord(sessionId))!,
       );
       expect(resolved.map((e) => e.toolCallId)).toEqual(["tu-1"]);
@@ -760,92 +797,6 @@ describe("the investigation record", () => {
       expect(answer).toContain("e9");
       // Told what it could have cited, in the vocabulary it was given.
       expect(answer).toMatch(/e1 through e\d+/);
-    });
-
-    it("does not corroborate one source read twice", async () => {
-      const sessionId = randomUUID();
-      await seedTranscript(sessionId);
-      await appendCall(
-        sessionId,
-        4,
-        { toolCallId: "tu-3", name: "QueryMetrics", input: { query: "rss" } },
-        "{}",
-        "2026-07-03T02:02:00.000Z",
-      );
-      const id = await record(sessionId, "two metric queries", "root_cause", [
-        "e1",
-        "e3",
-      ]);
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("cited");
-    });
-
-    // Which way the user went is recorded on the result, because nothing else
-    // can say it: a refused call carries the same tool name as a released one.
-    async function appendRestart(
-      sessionId: string,
-      seq: number,
-      at: string,
-      approved = true,
-    ): Promise<void> {
-      await appendCall(
-        sessionId,
-        seq,
-        {
-          toolCallId: "tu-restart",
-          name: "RestartDockerService",
-          input: { target: "prod-1/app/web" },
-        },
-        "restarted",
-        at,
-        undefined,
-        approved,
-      );
-    }
-
-    it("verifies a claim cited by a read taken after the write it released", async () => {
-      const sessionId = randomUUID();
-      await seedTranscript(sessionId);
-      await appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
-      // Dated after the write answered, which is what makes it a confirmation.
-      await appendCall(
-        sessionId,
-        6,
-        {
-          toolCallId: "tu-after",
-          name: "QueryMetricsRange",
-          input: { query: "rss" },
-        },
-        METRICS,
-        "2026-07-03T02:06:00.000Z",
-      );
-
-      const id = await record(
-        sessionId,
-        "the container needed a restart",
-        "trigger",
-        ["e4"],
-      );
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("verified");
-    });
-
-    it("does not verify a claim cited only by reads taken before the write", async () => {
-      const sessionId = randomUUID();
-      await seedTranscript(sessionId);
-      await appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
-
-      const id = await record(
-        sessionId,
-        "the container needed a restart",
-        "trigger",
-        ["e1", "e2"],
-      );
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("corroborated");
     });
 
     /* A model that cannot see it is looping would spend the whole budget asking
@@ -984,34 +935,6 @@ describe("the investigation record", () => {
       expect(answering).toMatchObject({ isError: true });
     });
 
-    it("never counts a declined call as the write a later read confirms", async () => {
-      const sessionId = randomUUID();
-      await seedTranscript(sessionId);
-      await appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z", false);
-      await appendCall(
-        sessionId,
-        6,
-        {
-          toolCallId: "tu-after",
-          name: "QueryMetricsRange",
-          input: { query: "rss" },
-        },
-        METRICS,
-        "2026-07-03T02:06:00.000Z",
-      );
-
-      const id = await record(
-        sessionId,
-        "the container needed a restart",
-        "trigger",
-        ["e4"],
-      );
-      // The user said no, so nothing changed and the read confirms nothing.
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("cited");
-    });
-
     it("never counts an answered question as the write a later read confirms", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
@@ -1040,17 +963,8 @@ describe("the investigation record", () => {
         "2026-07-03T02:06:00.000Z",
       );
 
-      const id = await record(
-        sessionId,
-        "the deploy regressed memory",
-        "trigger",
-        ["e3"],
-      );
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("cited");
-      // Nor is it a decision the user made about a write.
-      expect(await gatedCalls(sessionId)).toHaveLength(0);
+      // It is not a decision the user made about a write.
+      expect(gatedCalls(await toolCallsIn(sessionId))).toHaveLength(0);
     });
 
     // A refused call still carries the name of a gated tool, which is all the
@@ -1083,31 +997,20 @@ describe("the investigation record", () => {
       );
 
       // Nobody was asked, so there is nothing to report either way.
-      expect(await gatedCalls(sessionId)).toHaveLength(0);
-
-      // A refusal counted as a released write made every later reading a
-      // confirmation of it, grading a claim `verified` when nothing ran.
-      const id = await record(
-        sessionId,
-        "the container is out of disk",
-        "root_cause",
-        ["e3"],
-      );
-      expect(
-        (await computeConviction(sessionId, (await getRecord(sessionId))!))[id],
-      ).toBe("cited");
+      expect(gatedCalls(await toolCallsIn(sessionId))).toHaveLength(0);
     });
   });
 
   /* The counter is carried for the length of a run rather than recounted on
      every write, so a resume has to pick it up from the transcript. */
   it("numbers a resumed run's reads on from where the last run stopped", async () => {
+    const runner = await connectRunner();
     const read = (toolCallId: string) => ({
       toolUses: [
         {
           toolCallId,
-          name: "GetDockerLogs",
-          input: { target: "host/app/web" },
+          name: "ListDockerServices",
+          input: { server: ["rc-host"] },
         },
       ],
       text: "",
@@ -1135,11 +1038,12 @@ describe("the investigation record", () => {
     const issued = (await getTranscriptRows(sessionId))
       .flatMap((row) => row.parts)
       .flatMap((part) =>
-        part.type === "tool_call" && part.evidenceId !== undefined
+        part.type === "tool_result" && part.evidenceId !== undefined
           ? [[part.toolCallId, part.evidenceId] as const]
           : [],
       );
 
+    unregisterRunner(runner);
     // A second e1 would leave two different calls answering to one citation.
     expect(issued).toEqual([
       ["tu-a", "e1"],
@@ -1148,6 +1052,14 @@ describe("the investigation record", () => {
   });
 
   describe("the finish gate", () => {
+    let runner: ReturnType<typeof registerRunner>;
+    beforeEach(async () => {
+      runner = await connectRunner();
+    });
+    afterEach(() => {
+      unregisterRunner(runner);
+    });
+
     // Only the harness's own turns: on a resume the opening turn is an
     // appendUserMessage too, and these assertions are about what it said.
     function harnessMessages(index = 0): string[] {
@@ -1169,8 +1081,8 @@ describe("the investigation record", () => {
       );
     }
 
-    /* Two turns, because a call is only read on the turn after the one that made
-       it. The read fails with no runner connected, which still answers. */
+    /* Two turns, because a call is only read on the turn after the one that
+       made it. */
     function recordTurn(verdict: string, statement: string) {
       const n = randomUUID();
       return [
@@ -1178,8 +1090,8 @@ describe("the investigation record", () => {
           toolUses: [
             {
               toolCallId: `tu-read-${n}`,
-              name: "GetDockerLogs",
-              input: { target: "host/app/web" },
+              name: "ListDockerServices",
+              input: { server: ["rc-host"] },
             },
           ],
           text: "",
@@ -1317,10 +1229,12 @@ describe("the investigation record", () => {
         evidenceIds: ["e1"],
       });
 
-      // Named as not-yet rather than as invented: the fix is to wait for it,
-      // not to go and find a different id.
-      expect(String(refused.content)).toContain("has not answered yet");
-      expect(String(refused.content)).not.toContain("no call you made");
+      /* One correction either way: the handle rides the result, so a call still
+         running has none to cite and waiting is the only move. */
+      expect(String(refused.content)).toContain(
+        "names no result you have read",
+      );
+      expect(String(refused.content)).toContain("in your next message");
       expect(await getRecord(sessionId)).toBeUndefined();
 
       // Once the call answers, the same claim records against it.
@@ -1565,34 +1479,20 @@ describe("the investigation record", () => {
     /* Asked over calls that answered and questioned the system: a refused call
        taught the run nothing, and recording is not reading. */
     describe("the record check", () => {
-      async function connectRunner() {
-        const runnerId = (await generateRunnerToken("docker", "rc-host")).id;
-        const conn = registerRunner({
-          runnerId,
-          platform: "docker",
-          serverName: "rc-host",
-          send: (raw: string) => {
-            const msg = JSON.parse(raw) as {
-              payload: { correlationId: string };
-            };
-            resolveCommand({
-              correlationId: msg.payload.correlationId,
-              success: true,
-              result: [],
-            });
-          },
-          close: () => {},
-        });
-        setRunnerManifest(runnerId, manifest("rc-host"));
-        return conn;
-      }
-
       // Two answering calls a turn, so the count crosses 8 on the fourth.
       function readTurn() {
         return {
           toolUses: [
-            { toolCallId: randomUUID(), name: "ListDockerServices", input: {} },
-            { toolCallId: randomUUID(), name: "ListDockerServices", input: {} },
+            {
+              toolCallId: randomUUID(),
+              name: "ListDockerServices",
+              input: { server: ["rc-host"] },
+            },
+            {
+              toolCallId: randomUUID(),
+              name: "ListDockerServices",
+              input: { server: ["rc-host"] },
+            },
           ],
           text: "",
         };
@@ -1605,7 +1505,6 @@ describe("the investigation record", () => {
       }
 
       it("asks when reads pile up with nothing recorded over them", async () => {
-        const conn = await connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
             readTurn(),
@@ -1626,13 +1525,11 @@ describe("the investigation record", () => {
 
         expect(checks()).toHaveLength(1);
         expect(checks()[0]).toContain("answered 8 tool calls");
-        unregisterRunner(conn);
       });
 
       /* Below the check's threshold, so nothing asks mid-run - but the reads
          still stand unaccounted for when the model says it is done. */
       it("asks at the finish gate for reads the check never reached", async () => {
-        const conn = await connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
             ...recordTurn("root_cause", "the worker leaks"),
@@ -1659,13 +1556,11 @@ describe("the investigation record", () => {
         expect(asked[0]).toContain("the 2 tool calls you answered");
         // Answering it with a claim is what lets the run finish.
         expect((await getRecord(sessionId))!.hypotheses).toHaveLength(2);
-        unregisterRunner(conn);
       });
 
       // Recording once buys no exemption: the debt is what has been read since
       // the last claim, so a run that settles early and reads on is asked again.
       it("asks a run that recorded early and then kept reading", async () => {
-        const conn = await connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
             ...recordTurn("disproven", "the disk filled"),
@@ -1685,12 +1580,10 @@ describe("the investigation record", () => {
         await runSession({ sessionId, alerts: [alert("record-check-quiet")] });
 
         expect(checks()).toHaveLength(1);
-        unregisterRunner(conn);
       });
 
       // Asking clears the question, never the debt the gate reads.
       it("holds the debt the check asked about against the finish gate", async () => {
-        const conn = await connectRunner();
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
             ...recordTurn("disproven", "the disk filled"),
@@ -1721,7 +1614,6 @@ describe("the investigation record", () => {
         // The claim that answered the gate is what let the run write up.
         expect((await getRecord(sessionId))!.hypotheses).toHaveLength(2);
         expect((await getRecord(sessionId))!.report).not.toBeNull();
-        unregisterRunner(conn);
       });
     });
 

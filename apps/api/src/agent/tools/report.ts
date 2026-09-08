@@ -118,7 +118,7 @@ export const REPORT_TOOLS: Tool[] = [
     input: RECORD_HYPOTHESIS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: false,
     execute: async (input, ctx): Promise<ToolExecuteResult> =>
       toResult(await recordHypothesis(ctx.sessionId, input)),
   }),
@@ -133,7 +133,7 @@ export const SUBMIT_REPORT_TOOL: Tool = apiTool({
   input: SUBMIT_REPORT_INPUT,
   effect: "read",
   policy: "auto",
-  evidenceKind: "text",
+  citable: false,
   execute: async (input, ctx): Promise<ToolExecuteResult> => {
     const { headline, affected, summary, timeline, impact, recommendation } =
       input;

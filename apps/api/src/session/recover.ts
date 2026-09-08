@@ -1,5 +1,6 @@
-import type { MessagePart, TranscriptRow } from "@nightwarden/shared";
-import { evidenceIdsIn } from "../agent/evidence-id.js";
+import type { TranscriptRow } from "@nightwarden/shared";
+import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
+import type { ToolResult } from "../llm/types.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { loadConfig } from "../config/store.js";
 import { hasPendingHumanInput } from "./gate-store.js";
@@ -72,28 +73,33 @@ async function answerPendingCalls(
 ): Promise<boolean> {
   if (!calls.every((call) => replayable(call.name))) return false;
 
-  // A replay answers calls the transcript already holds, so it adds no numbers.
-  const evidenceIds = evidenceIdsIn(await getTranscriptRows(sessionId));
-  const parts: MessagePart[] = [];
+  // A replayed call is answered for the first time, so its handle is issued
+  // here and continues the numbers the transcript already holds.
+  const rows = await getTranscriptRows(sessionId);
+  const results: ToolResult[] = [];
+  const citable = new Set<string>();
   const texts: string[] = [];
   for (const call of calls) {
     const tool = findTool(call.name);
     if (tool === undefined) return false;
-    const evidenceId = evidenceIds.get(call.toolCallId);
+    if (tool.citable) citable.add(call.toolCallId);
     const { content, isError } = await executeTool(tool, call.input, {
       sessionId,
       toolCallId: call.toolCallId,
       toolCallCeilingMs: (await loadConfig()).toolCallCeilingMs,
-      ...(evidenceId !== undefined && { evidenceId }),
     });
-    parts.push({
-      type: "tool_result",
+    results.push({
       toolCallId: call.toolCallId,
-      output: content,
+      content,
       ...(isError === true && { isError: true }),
     });
     texts.push(content);
   }
+  const { parts } = resultParts(
+    results,
+    citable,
+    highestEvidenceNumber(rows) + 1,
+  );
 
   await appendTranscriptRows([
     {

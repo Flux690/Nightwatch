@@ -26,14 +26,15 @@ export interface ToolCallPart {
   toolCallId: string;
   name: string;
   input: Record<string, unknown>;
-  // Optional because a tool no claim may rest on is never issued one.
-  evidenceId?: string;
 }
 
 export interface ToolResultPart {
   type: "tool_result";
   toolCallId: string;
   output: string;
+  // Carried by the answer rather than the request, because a call that has not
+  // returned shows nothing anyone can cite. Absent on a tool no claim may rest on.
+  evidenceId?: string;
   // Whether the tool failed. What it found is the output's own business: a
   // query that matched nothing answers with an empty result and no error.
   isError?: boolean;

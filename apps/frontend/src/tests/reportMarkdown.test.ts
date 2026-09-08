@@ -76,7 +76,6 @@ const RESPONSE: SessionReportResponse = {
       }),
     },
   ],
-  conviction: { h1: "corroborated" },
 };
 
 /* The export is read where the frontend is not - in a postmortem doc, in a
@@ -86,12 +85,10 @@ describe("reportToMarkdown", () => {
     const md = reportToMarkdown("encodr-worker memory", [ON_SESSION], RESPONSE);
 
     expect(md).toContain("### The worker buffers each source file into memory");
-    expect(md).toContain("Root cause, corroborated.");
-    // The call and the reading computed from its recorded result. A finding
-    // exported without its backing is only the model's word for it.
-    expect(md).toContain(
-      "- `GetDockerStats` payments-worker - cpu 3.1% · mem 511 MB of 512 MB",
-    );
+    expect(md).toContain("Root cause.");
+    // The call it rests on. A finding exported without its backing is only the
+    // model's word for it.
+    expect(md).toContain("- `GetDockerStats` payments-worker");
     // Cited twice by one claim, carried once: a repeat is the model's slip and
     // must not read as two measurements.
     expect(md.match(/GetDockerStats/g)).toHaveLength(2);

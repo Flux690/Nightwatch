@@ -25,7 +25,4 @@ export interface ServerScopedResult<T> {
 // the model and the frontend each have exactly one shape to read.
 export interface FleetResult<T> {
   byServer: Array<ServerScopedResult<T>>;
-  // Set only when the fan-out cap dropped servers, because a reading that covers
-  // less than the fleet has to say so rather than read as the whole of it.
-  serversOmitted?: number;
 }

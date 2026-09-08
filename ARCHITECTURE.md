@@ -53,7 +53,7 @@ The frontend (`@nightwarden/frontend`) is not a deployable. Vite bundles it and 
 | `session/`      | Sessions, transcript, alerts, record, status, gates     |
 | `verification/` | Recovery re-checking                                    |
 
-The `src/` root holds two kinds of file and nothing else: infrastructure the process stands on (`db.ts`, `logger.ts`, `secrets.ts`, `paths.ts`, `public-url.ts`, `frontend.ts`), which may not import a module, and the composition root (`index.ts`, `dispatcher.ts`, `run-pool.ts`), whose job is to wire modules together. `architecture.test.ts` asserts both directions and that nothing cycles.
+The `src/` root holds two kinds of file and nothing else: infrastructure the process stands on (`db.ts`, `migrations.ts`, `schema.ts`, `logger.ts`, `secrets.ts`, `paths.ts`, `public-url.ts`, `frontend.ts`, `request-body.ts`), which may not import a module, and the composition root (`index.ts`, `dispatcher.ts`, `run-pool.ts`), whose job is to wire modules together. `architecture.test.ts` asserts both directions and that nothing cycles.
 
 ---
 
@@ -126,8 +126,6 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Supersession.** The link a later claim carries to the earlier one it replaces. A link, never an edit: the replaced claim stays on the record and stays rendered, demoted.
 
-**Conviction.** How well the system can back a claim, computed from the trail and never claimed by the agent: `cited` (one entry), `corroborated` (two or more independent evidence families), `verified` (an action ran and a later read confirmed it).
-
 **Report.** The user-facing write-up, composed in one call at the end over hypotheses that are already complete. It holds only what they have no field for, so it never restates a verdict or a citation. Null until that call happens, which several endings never reach.
 
 **Recommendation.** One field of the report: what the user should do. Prose about the future, never a claim that something was done.
@@ -138,17 +136,15 @@ One word per concept, used identically in the code, the frontend and this docume
 
 **Evidence trail.** The durable transcript, walked for its tool calls. Nothing writes a second copy; the agent cites entries and cannot add, remove or renumber them.
 
-**Evidence id.** The handle a claim cites a call by, written `e1`, `e2`, `e3` in the order citable calls were made. Stamped once by `withEvidenceIds` in `agent/evidence-id.ts` on the way to disk, and stored on the call. Rendered into the call's own result so the model reads its handle where it reads the answer. A citation naming the provider's own call id is refused.
+**Evidence id.** The handle a claim cites a call by, written `e1`, `e2`, `e3` in the order results returned. Stamped by `resultParts` in `agent/evidence-id.ts` as the answer is built and stored on the result, because a call that has not returned shows nothing anyone can cite. Rendered into that result's own text so the model reads its handle where it reads the answer. A citation naming the provider's own call id is refused, and so is one naming a call made in the same reply.
 
-**Citable.** Whether a claim may rest on a call, and so whether it is issued an evidence id at all. `agent/evidence-source.ts` answers it from one list of tool libraries. Recording a claim, writing the report and asking a person are not observations, so they carry no id and nothing can cite them - which is what stops a run grading its own assertion as evidence for itself.
+**Citable.** Whether a claim may rest on a call. Declared on the tool as `citable`, which carries the renderer with it, so a tool that observes nothing has neither. Recording a claim, writing the report and asking a person are not observations, so they carry no id and nothing can cite them - which is what stops a run grading its own assertion as evidence for itself. A call that established nothing is issued no id either, whatever tool it named.
 
-**Evidence family.** Which system a call questioned: `docker`, `host`, `kubernetes`, `repo`, `github`, `metrics`, `loki`, `sentry`. Two calls from one family cannot corroborate each other.
-
-**Tool failure.** Whether a call did the job it was asked to do, carried as `isError` on the result part. A query that matched nothing did its job and says so in its own output; a read with no file to read, a runner it could not reach or a token it was refused did not. What a call found is the output's business, so nothing beside it restates that.
+**Tool failure.** Whether a call answered at all, carried as `isError` on the result part. A call that returned its own shape answered, however empty that shape is: no matching log lines, no series, no issues in the window. A call that could not return its shape did not - a runner it could not reach, a token it was refused, a query the source rejected, a reply nothing could parse, and a subject that does not exist, which is a path or a target key the agent named without listing first. A failed call is issued no evidence id, so nothing can cite it. What a call found is the output's business, so nothing beside it restates that.
 
 **Tool approval.** Whether a person released a write, carried as its own `tool_approval` part beside the result. Written only where someone was asked, so a call the harness refused - which names a gated tool and reached no gate - can never read as approval. An answer to a question is a separate `elicitation_answer` part, because being asked something and permitting a write are different acts.
 
-**Evidence kind.** What a citation is worth drawing as: `metric`, `logs`, `change`, `state`, `diff`, `text`. Declared on the tool, so the frontend looks up a renderer instead of sniffing the result.
+**Evidence kind.** What a citation is worth drawing as: `metric`, `logs`, `change`, `state`, `diff`, `terminal`, `exception`, `text`. Declared on the tool beside `citable`, so the frontend picks a renderer rather than guessing from the result. The renderer still parses what it was handed, and where it can draw nothing the report says what the call looked at instead.
 
 **Compaction.** Where the provider summarised earlier turns to fit its context window, marked in the transcript as an item of its own. What the model can see narrows; what the run can prove does not. Every tool result stays in full, still cited and still resolvable.
 
@@ -262,7 +258,7 @@ Other tags are section labels, not voices, and stay out of this namespace: `<ale
 - `effect` is `read` or `write`, a property of the call.
 - `policy` is `auto` or `approve`, resolved per call by `resolvePolicy`.
 
-Of 45 tools, 37 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
+Of 44 tools, 36 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
 
 | Tool                                 | Effect | Policy    | Why                                                           |
 | ------------------------------------ | ------ | --------- | ------------------------------------------------------------- |
@@ -307,7 +303,7 @@ Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool whe
 
 The agent records each hypothesis as it settles it, one call per claim, append-only. They exist during the run so the queue can say what the agent currently believes, so the finish gate has something to inspect, so a citation is copied while its call is still in recent context, and so a run that dies before its write-up still renders something.
 
-`record_hypothesis` refuses a claim citing an id that was never issued, or one naming a call that has not answered. A citation cannot be partially honoured: a claim citing three ids where one is invented is refused whole, rather than recorded on the two that survived and silently earning a lower conviction than the model was told it had.
+`record_hypothesis` refuses a claim citing an id that was never issued, which is one message rather than several: a handle exists only once its result does, so an id naming no answered call reads the same whether the model invented it or asked for the call in this same reply. A citation cannot be partially honoured either - a claim citing three ids where one is unknown is refused whole, rather than recorded on the two that survived and reading as a claim the model never made.
 
 ### The finish gate
 

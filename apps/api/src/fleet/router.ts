@@ -6,10 +6,6 @@ import type {
 import { manifestedConnections } from "../fleet/connections.js";
 import type { RunnerConnection } from "../fleet/connections.js";
 
-// A fan-out wider than this is noise, not evidence: the model cannot read ten
-// servers' filesystems in one turn and the token cost is real.
-const MAX_FANOUT = 8;
-
 // Lets the transport expand a flat key back into its structured payload. The
 // identity only ever returns to the server that advertised it.
 interface ResolvedService {
@@ -58,37 +54,37 @@ export function resolveByService(
   );
 }
 
-// A fan-out reaches only servers of that platform, so a Kubernetes cluster is
-// never asked for a Docker host's filesystems.
+/* Every named server or none: a reading that quietly covers fewer machines than
+   it was asked for reads as the whole fleet answering. */
 export function resolveByRunner(
   commandInput: Record<string, unknown>,
   platform: Platform,
-): { conns: RunnerConnection[]; omitted: number } {
+): RunnerConnection[] {
   const capable = manifestedConnections().filter(
     (c) => c.platform === platform,
   );
   if (capable.length === 0) throw new NoPlatformRunnerError(platform);
 
-  const requested = requestedServer(commandInput);
-  if (requested === null) {
-    return {
-      conns: capable.slice(0, MAX_FANOUT),
-      omitted: Math.max(0, capable.length - MAX_FANOUT),
-    };
-  }
+  const requested = requestedServers(commandInput);
+  const conns = requested.flatMap(
+    (name) => capable.find((c) => c.serverName === name) ?? [],
+  );
+  if (conns.length === requested.length) return conns;
 
-  const match = capable.find((c) => c.serverName === requested);
-  if (match) return { conns: [match], omitted: 0 };
-
+  const missing = requested.filter(
+    (name) => !capable.some((c) => c.serverName === name),
+  );
   const available = capable.map((c) => c.serverName).join(", ");
   throw new Error(
-    `No ${platform} server named '${requested}'. Available: ${available}`,
+    `No ${platform} server named ${missing.map((n) => `'${n}'`).join(", ")}. Available: ${available}`,
   );
 }
 
-// The address the model supplies for a fan-out tool, which the transport strips
-// before dispatch. Never stored, and never part of a target key.
-function requestedServer(commandInput: Record<string, unknown>): string | null {
+// The addresses the model supplies for a server-routed tool, which the transport
+// strips before dispatch. Never stored, and never part of a target key.
+function requestedServers(commandInput: Record<string, unknown>): string[] {
   const server = commandInput["server"];
-  return typeof server === "string" && server !== "" ? server : null;
+  return Array.isArray(server)
+    ? server.filter((name): name is string => typeof name === "string")
+    : [];
 }

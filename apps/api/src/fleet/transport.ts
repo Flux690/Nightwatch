@@ -126,7 +126,7 @@ export async function sendFleetCommand(
   succeeded: number;
   failed: number;
 }> {
-  const { conns, omitted } = resolveByRunner(commandInput, platform);
+  const conns = resolveByRunner(commandInput, platform);
   const { server: _server, ...payloadInput } = commandInput;
 
   const settled = await Promise.allSettled(
@@ -151,7 +151,7 @@ export async function sendFleetCommand(
   });
 
   return {
-    envelope: { byServer, ...(omitted > 0 && { serversOmitted: omitted }) },
+    envelope: { byServer },
     succeeded,
     failed: byServer.length - succeeded,
   };

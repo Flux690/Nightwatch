@@ -208,7 +208,8 @@ export const METRICS_TOOLS: Tool[] = [
     input: QUERY_METRICS_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
@@ -244,7 +245,8 @@ export const METRICS_TOOLS: Tool[] = [
     input: QUERY_METRICS_RANGE_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "metric",
+    citable: true,
+    renderAs: "metric",
     timeoutMs: 30_000,
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
@@ -310,7 +312,8 @@ export const METRICS_TOOLS: Tool[] = [
     input: LIST_METRIC_NAMES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
@@ -352,7 +355,8 @@ export const METRICS_TOOLS: Tool[] = [
     input: GET_METRIC_METADATA_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();
@@ -386,7 +390,8 @@ export const METRICS_TOOLS: Tool[] = [
     input: LIST_ALERT_RULES_INPUT,
     effect: "read",
     policy: "auto",
-    evidenceKind: "text",
+    citable: true,
+    renderAs: "text",
     timeoutMs: 30_000,
     execute: async (input): Promise<ToolExecuteResult> => {
       const source = await resolveMetricsSource();

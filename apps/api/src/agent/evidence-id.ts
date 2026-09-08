@@ -1,5 +1,5 @@
-import type { TranscriptRow } from "@nightwarden/shared";
-import { isCitable } from "./evidence-source.js";
+import type { ToolResultPart, TranscriptRow } from "@nightwarden/shared";
+import type { ToolResult } from "../llm/types.js";
 
 // The provider's own id appears nowhere the model reads. Stored rather than
 // counted, so two readers cannot derive a different number for one call.
@@ -16,41 +16,30 @@ export function highestEvidenceNumber(rows: readonly TranscriptRow[]): number {
   let highest = 0;
   for (const row of rows) {
     for (const part of row.parts) {
-      if (part.type !== "tool_call") continue;
+      if (part.type !== "tool_result") continue;
       highest = Math.max(highest, evidenceNumber(part.evidenceId));
     }
   }
   return highest;
 }
 
-// Stamped on the way to disk, so one walk owns the numbering and a handle
-// survives a later change to which tools a claim may rest on.
-export function withEvidenceIds(
-  rows: TranscriptRow[],
+/* Stamped as the answer is built, which is the moment the evidence exists, so a
+   call made in this same reply and one that never answered both carry none. */
+export function resultParts(
+  results: readonly ToolResult[],
+  citable: ReadonlySet<string>,
   from: number,
-): { rows: TranscriptRow[]; next: number } {
+): { parts: ToolResultPart[]; next: number } {
   let next = from;
-  const stamped = rows.map((row) => ({
-    ...row,
-    parts: row.parts.map((part) =>
-      part.type === "tool_call" && isCitable(part.name)
-        ? { ...part, evidenceId: `${PREFIX}${next++}` }
-        : part,
-    ),
-  }));
-  return { rows: stamped, next };
-}
-
-export function evidenceIdsIn(
-  rows: readonly TranscriptRow[],
-): Map<string, string> {
-  const byToolCallId = new Map<string, string>();
-  for (const row of rows) {
-    for (const part of row.parts) {
-      if (part.type === "tool_call" && part.evidenceId !== undefined) {
-        byToolCallId.set(part.toolCallId, part.evidenceId);
-      }
-    }
-  }
-  return byToolCallId;
+  const parts = results.map((result): ToolResultPart => {
+    const cited = citable.has(result.toolCallId) && result.isError !== true;
+    return {
+      type: "tool_result",
+      toolCallId: result.toolCallId,
+      output: result.content,
+      ...(cited && { evidenceId: `${PREFIX}${next++}` }),
+      ...(result.isError === true && { isError: true }),
+    };
+  });
+  return { parts, next };
 }

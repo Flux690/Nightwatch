@@ -205,8 +205,8 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       await toolContext(ALERT),
     );
-    // No series is a miss rather than a reading of zero: a metric that does not
-    // exist answers identically, so the window is still echoed.
+    // The query answered with its own shape, so the window is still echoed and
+    // the empty series is a reading a dismissal can rest on.
     expect(result.isError).toBeUndefined();
 
     const params = mock.requests[0]!.params;

@@ -29,9 +29,6 @@ interface ToolCallIdentity {
 // being the user's ceiling already clamped by what remains of the run.
 export interface ToolDispatchContext extends ToolCallIdentity {
   toolCallCeilingMs: number;
-  /* The handle this call is cited by, rendered into its own result so the model
-     can copy it. Stamped once on the way to disk and stored on the call. */
-  evidenceId?: string;
 }
 
 // What a tool is handed: the limit resolved for this one call. Distinct from
@@ -51,9 +48,6 @@ interface ToolCommon {
   input: z.ZodObject;
   effect: "read" | "write";
   policy: ToolPolicy;
-  // Declared here for the reason `policy` is: a separate list is one that gets
-  // forgotten when a tool is added.
-  evidenceKind: EvidenceKind;
   // A write safe to run twice, which is what lets a call caught by a crash be
   // replayed instead of unwound. Only ever true where the tool says why.
   idempotent?: true;
@@ -62,9 +56,15 @@ interface ToolCommon {
   timeoutMs?: number;
 }
 
+/* Whether a claim may rest on this call, and how its result draws. One decision
+   rather than two: a call that observes nothing has no renderer to declare. */
+export type Citability =
+  { citable: false } | { citable: true; renderAs: EvidenceKind };
+
 // Where a tool executes is declared, never inferred. A service-routed command
 // finds its owner from the target key; a server-routed one names its platform.
 export type Tool = ToolCommon &
+  Citability &
   (
     | {
         on: "api";

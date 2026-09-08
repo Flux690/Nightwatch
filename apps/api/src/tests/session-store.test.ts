@@ -34,10 +34,7 @@ import {
   getTranscriptRows,
 } from "../session/transcript-store.js";
 import { listSessionPage } from "../session/list.js";
-import {
-  highestEvidenceNumber,
-  withEvidenceIds,
-} from "../agent/evidence-id.js";
+import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
 import { recordHypothesis } from "../agent/report.js";
 import { hasPendingHumanInput } from "../session/gate-store.js";
 import { getRecord } from "../session/record-store.js";
@@ -775,19 +772,20 @@ describe("API-local session store", () => {
     ): Promise<string> {
       const from =
         highestEvidenceNumber(await getTranscriptRows(sessionId)) + 1;
-      const { rows } = withEvidenceIds(
-        [
-          {
-            ...msg(sessionId, seq, { kind: "assistant" }),
-            parts: [
-              { type: "tool_call", toolCallId, name: "Read", input: {} },
-              { type: "tool_result", toolCallId, output: "ok" },
-            ],
-          },
-        ],
+      const { parts } = resultParts(
+        [{ toolCallId, content: "ok" }],
+        new Set([toolCallId]),
         from,
       );
-      await appendTranscriptRows(rows);
+      await appendTranscriptRows([
+        {
+          ...msg(sessionId, seq, { kind: "assistant" }),
+          parts: [
+            { type: "tool_call", toolCallId, name: "Read", input: {} },
+            ...parts,
+          ],
+        },
+      ]);
       return `e${from}`;
     }
 

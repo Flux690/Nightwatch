@@ -89,6 +89,8 @@ function assistantContent(parts: readonly MessagePart[]): AssistantContent {
   });
 }
 
+// The handle is prefixed here, where the part is already being converted, so
+// the model reads it where it reads the answer.
 function resultOutput(
   output: string,
   isError: boolean,
@@ -114,7 +116,12 @@ function userMessages(
         type: "tool-result" as const,
         toolCallId: part.toolCallId,
         toolName: toolNames.get(part.toolCallId) ?? "",
-        output: resultOutput(part.output, part.isError === true),
+        output: resultOutput(
+          part.evidenceId === undefined
+            ? part.output
+            : `[${part.evidenceId}] ${part.output}`,
+          part.isError === true,
+        ),
         // Rolling breakpoint on the tail, so a growing history caches forward.
         ...(i === results.length - 1 && { providerOptions: CACHE_BREAKPOINT }),
       })),
