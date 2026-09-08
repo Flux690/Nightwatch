@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type {
+  CatalogError,
   LLMProviderName,
-  ModelCatalog,
   ModelOption,
   ProviderOption,
+  ReasoningDescriptor,
   ReasoningLevel,
 } from "@nightwarden/shared";
 import {
@@ -44,9 +45,46 @@ const ListSchema = z.object({
   data: z.array(z.object({ id: z.string() }).loose()),
 });
 
-/* Strongest first, because a ladder has holes and the weakest rung offered is
-   what a cheap one-shot call asks for. "none" never appears: thinking stays on. */
-const LADDER: readonly ReasoningLevel[] = [
+/* What a provider states about its own model, in the shape each one publishes.
+   Every field catches its own miss, so one surprise costs that field alone. */
+const PublishedSchema = z.object({
+  max_input_tokens: z.number().nullish().catch(undefined),
+  max_tokens: z.number().nullish().catch(undefined),
+  capabilities: z
+    .object({
+      context_management: z
+        .object({
+          compact_20260112: z
+            .object({ supported: z.boolean() })
+            .nullish()
+            .catch(undefined),
+        })
+        .nullish()
+        .catch(undefined),
+      effort: z.record(z.string(), z.unknown()).nullish().catch(undefined),
+    })
+    .nullish()
+    .catch(undefined),
+  context_length: z.number().nullish().catch(undefined),
+  top_provider: z
+    .object({
+      max_completion_tokens: z.number().nullish().catch(undefined),
+    })
+    .nullish()
+    .catch(undefined),
+  supported_parameters: z.array(z.string()).nullish().catch(undefined),
+  reasoning: z
+    .object({
+      supported_efforts: z.array(z.string()).nullish(),
+      default_effort: z.string().nullish(),
+    })
+    .nullish()
+    .catch(undefined),
+});
+
+/* Every level any provider names, strongest first, because a ladder has holes
+   and the weakest one offered is what a cheap call asks for. */
+const LEVELS: readonly ReasoningLevel[] = [
   { value: "max", label: "Max" },
   { value: "xhigh", label: "Extra high" },
   { value: "high", label: "High" },
@@ -59,80 +97,116 @@ const LADDER: readonly ReasoningLevel[] = [
 // middle of every ladder published. The strongest rung stands in without it.
 const PREFERRED_DEFAULT = "high";
 
-/* Only an effort ladder is read. A toggle is an off switch, and a token budget
-   is a second way to say the same thing in a unit the settings form cannot show. */
-function reasoningOf(model: ModelCapabilities): ModelOption["reasoning"] {
-  const values = model.reasoning_options?.find(
-    (o) => o.type === "effort",
-  )?.values;
-  if (values === undefined) return null;
-  const levels = LADDER.filter((l) => values.includes(l.value));
+/* Anthropic calls it effort and the chat-completions providers call it
+   reasoning; both name the same levels, so one order describes either. */
+function ladderOf(
+  values: readonly string[],
+  stated?: string | null,
+): ReasoningDescriptor | null {
+  const levels = LEVELS.filter((l) => values.includes(l.value));
   if (levels.length === 0) return null;
   const defaultLevel =
+    levels.find((l) => l.value === stated)?.value ??
     levels.find((l) => l.value === PREFERRED_DEFAULT)?.value ??
     levels[0]?.value ??
     PREFERRED_DEFAULT;
   return { levels: [...levels], defaultLevel };
 }
 
-/* Anthropic states it per model; OpenAI offers it on its reasoning models and
-   publishes no flag; OpenRouter drops turns from the middle instead. */
-function compactionOf(
-  provider: LLMProviderName,
-  entry: Record<string, unknown>,
-  known: ModelCapabilities | undefined,
-): boolean {
-  if (provider === "anthropic") return statesCompaction(entry);
-  return provider === "openai" && known?.reasoning === true;
-}
-
-// Nested three deep and nullable at every hop, so absence anywhere reads as
-// "cannot compact" rather than as a shape to assume.
-function statesCompaction(entry: Record<string, unknown>): boolean {
-  const capabilities = entry["capabilities"];
-  if (typeof capabilities !== "object" || capabilities === null) return false;
-  const management = (capabilities as Record<string, unknown>)[
-    "context_management"
-  ];
-  if (typeof management !== "object" || management === null) return false;
-  const compact = (management as Record<string, unknown>)["compact_20260112"];
+/* Only named levels are read. A toggle is an off switch, and thinking stays on;
+   a token budget says the same thing in a unit the settings form cannot show. */
+function snapshotLevels(model: ModelCapabilities): string[] {
   return (
-    typeof compact === "object" &&
-    compact !== null &&
-    (compact as Record<string, unknown>)["supported"] === true
+    model.reasoning_options?.find((o) => o.type === "effort")?.values ?? []
   );
 }
 
-/* The live list says which ids exist and that the key was accepted; the snapshot
-   says what each one can do. An id the snapshot has not met is still offered. */
+// Anthropic names each level as its own object, and `supported` is the group's
+// own flag rather than a level.
+function statedLevels(
+  effort: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!effort) return [];
+  return Object.entries(effort).flatMap(([level, value]) =>
+    level !== "supported" &&
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<string, unknown>)["supported"] === true
+      ? [level]
+      : [],
+  );
+}
+
+// Everything a run needs about one model; the wire form carries a subset.
+export interface CatalogModel extends ModelOption {
+  maxInputTokens: number | null;
+  maxOutputTokens: number | null;
+  compaction: boolean;
+}
+
+// Keeps the limits the wire form drops, so a run resolves from the same answer
+// the settings form was drawn from.
+export type ProviderCatalog =
+  { ok: true; models: CatalogModel[] } | { ok: false; error: CatalogError };
+
+/* The provider is the source for every field it publishes and the models.dev
+   snapshot answers the rest, merged field by field rather than all or nothing. */
 async function describe(
   provider: LLMProviderName,
   entries: Array<Record<string, unknown> & { id: string }>,
-): Promise<ModelOption[]> {
+): Promise<CatalogModel[]> {
   const capabilities = await capabilitiesFor(provider);
-  return entries.flatMap((entry): ModelOption[] => {
+  return entries.flatMap((entry): CatalogModel[] => {
     const known = capabilities.get(entry.id);
+    const said = PublishedSchema.safeParse(entry);
+    const own = said.success ? said.data : null;
+    const params = own?.supported_parameters;
     // A model that cannot call a tool cannot run the loop.
-    if (known?.tool_call === false) return [];
+    if ((params ? params.includes("tools") : known?.tool_call) === false) {
+      return [];
+    }
+    // Whichever word the provider uses for the same ladder.
+    const stated =
+      own?.reasoning?.supported_efforts ??
+      statedLevels(own?.capabilities?.effort);
+    const levels =
+      stated.length > 0
+        ? stated
+        : known === undefined
+          ? []
+          : snapshotLevels(known);
     return [
       {
         id: entry.id,
-        reasoning: known === undefined ? null : reasoningOf(known),
-        maxOutputTokens: known?.limit?.output ?? null,
-        maxInputTokens: known?.limit?.context ?? null,
-        compaction: compactionOf(provider, entry, known),
+        reasoning: ladderOf(levels, own?.reasoning?.default_effort),
+        maxInputTokens:
+          own?.max_input_tokens ??
+          own?.context_length ??
+          known?.limit?.context ??
+          null,
+        maxOutputTokens:
+          own?.max_tokens ??
+          own?.top_provider?.max_completion_tokens ??
+          known?.limit?.output ??
+          null,
+        // OpenAI publishes no flag and offers it on its reasoning models;
+        // OpenRouter drops turns from the middle instead of summarising.
+        compaction:
+          own?.capabilities?.context_management?.compact_20260112?.supported ===
+            true ||
+          (provider === "openai" && known?.reasoning === true),
       },
     ];
   });
 }
 
-/* Reading the catalogue is also how a provider block is verified: a list coming
-   back proves the endpoint answered and that the key was accepted. */
+/* A list coming back proves the endpoint answered, and on a provider that
+   requires a key to list, that the key was accepted. OpenRouter's list is public. */
 export async function fetchCatalog(
   provider: LLMProviderName,
   baseUrl: string | undefined,
   apiKey: string,
-): Promise<ModelCatalog> {
+): Promise<ProviderCatalog> {
   const url = `${baseUrl ?? PROVIDER_OPTIONS.find((p) => p.name === provider)?.defaultBaseUrl ?? ""}${MODELS_PATH}`;
   try {
     const res = await fetch(url, { headers: authHeaders(provider, apiKey) });
@@ -150,12 +224,45 @@ export async function fetchCatalog(
   }
 }
 
-// For callers that only want the list and treat any failure as "nothing known".
-export async function fetchModels(
+// The settings form draws controls, so it is sent what it draws.
+export function offeredModels(models: readonly CatalogModel[]): ModelOption[] {
+  return models.map(({ id, reasoning }) => ({ id, reasoning }));
+}
+
+const CATALOG_TTL_MS = 60 * 60_000;
+
+const held = new Map<
+  LLMProviderName,
+  { models: CatalogModel[]; until: number }
+>();
+
+// Test seams: the cache is process-wide, so a suite has to be able to clear it
+// and to fill it rather than reach a provider from every run it starts.
+export function forgetCatalog(): void {
+  held.clear();
+}
+
+export function seedCatalog(
+  provider: LLMProviderName,
+  models: CatalogModel[],
+): void {
+  held.set(provider, { models, until: Date.now() + CATALOG_TTL_MS });
+}
+
+/* What a run reads. A provider it cannot reach leaves the last answer standing,
+   since a model's limits do not change because the network did. */
+export async function catalogFor(
   provider: LLMProviderName,
   baseUrl: string | undefined,
   apiKey: string,
-): Promise<ModelOption[]> {
+): Promise<CatalogModel[]> {
+  const cached = held.get(provider);
+  if (cached && Date.now() < cached.until) return cached.models;
   const catalog = await fetchCatalog(provider, baseUrl, apiKey);
-  return catalog.ok ? catalog.models : [];
+  if (!catalog.ok) return cached?.models ?? [];
+  held.set(provider, {
+    models: catalog.models,
+    until: Date.now() + CATALOG_TTL_MS,
+  });
+  return catalog.models;
 }

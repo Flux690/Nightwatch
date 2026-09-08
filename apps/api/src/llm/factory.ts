@@ -14,14 +14,6 @@ import {
 import { SdkProvider } from "./provider.js";
 import type { LLMProvider, ProviderCallOptions } from "./types.js";
 
-// A ratio rather than a count, so it cannot drift per model: on a 200k window it
-// reproduces Anthropic's own documented default of 150,000 exactly.
-const COMPACTION_TRIGGER_RATIO = 0.75;
-
-// Anthropic refuses a lower trigger, so a window too small for the ratio to
-// clear it compacts at the floor instead of sending a value that would 400.
-const MIN_COMPACTION_TRIGGER = 50_000;
-
 function languageModel(
   config: ResolvedLLMConfig,
   apiKey?: string,
@@ -65,36 +57,32 @@ export function requestOptions(
   opts?: ProviderCallOptions,
 ): SharedV4ProviderOptions {
   const level = effort(config, opts);
-  const trigger = compactionTrigger(config);
   switch (config.provider) {
     case "anthropic":
       return {
         anthropic: {
           thinking: { type: "adaptive", display: "summarized" },
           ...(level !== null && { effort: level }),
-          ...(trigger !== null && {
-            contextManagement: {
-              edits: [
-                {
-                  type: "compact_20260112",
-                  trigger: { type: "input_tokens", value: trigger },
-                },
-              ],
-            },
+          // No trigger: Anthropic's own default decides when, and a number of
+          // ours would be a guess dressed as a setting.
+          ...(config.compaction && {
+            contextManagement: { edits: [{ type: "compact_20260112" }] },
           }),
         },
       };
-    case "openai":
+    case "openai": {
+      const threshold = compactThreshold(config);
       return {
         openai: {
           ...(level !== null && { reasoningEffort: level }),
-          ...(trigger !== null && {
+          ...(threshold !== null && {
             contextManagement: [
-              { type: "compaction", compactThreshold: trigger },
+              { type: "compaction", compactThreshold: threshold },
             ],
           }),
         },
       };
+    }
     case "openrouter":
       return level === null
         ? {}
@@ -102,15 +90,13 @@ export function requestOptions(
   }
 }
 
-/* Both facts come from the catalogue, so a model that stated neither is sent
-   nothing and the run ends on the provider's own refusal instead. */
-function compactionTrigger(config: ResolvedLLMConfig): number | null {
+/* OpenAI requires a threshold, so it gets the highest one that can ever fire:
+   the reply is reserved out of the window, so input can never reach the whole of it. */
+function compactThreshold(config: ResolvedLLMConfig): number | null {
   const window = config.maxInputTokens;
   if (!config.compaction || window === null) return null;
-  return Math.max(
-    MIN_COMPACTION_TRIGGER,
-    Math.round(window * COMPACTION_TRIGGER_RATIO),
-  );
+  const reachable = window - config.maxOutputTokens;
+  return reachable > 0 ? reachable : null;
 }
 
 // Taking a ResolvedLLMConfig means an unconfigured install cannot reach here:

@@ -9,9 +9,8 @@ import { requestOptions } from "../llm/factory.js";
 import { SdkProvider } from "../llm/provider.js";
 import type { ProviderMessage, StreamDelta, ToolSchema } from "../llm/types.js";
 
-/* The vendor's own double, so what the adapter is tested against cannot drift
-   from the interface a provider package implements. Turns are consumed in
-   order and the last one repeats. */
+/* The vendor's own double, so the adapter is tested against the interface a
+   provider package implements. Turns are consumed in order, the last repeating. */
 function fakeModel(
   ...turns: LanguageModelV4StreamPart[][]
 ): MockLanguageModelV4 {
@@ -420,43 +419,63 @@ describe("what each provider is asked for", () => {
     });
   });
 
-  it("derives the compaction trigger from the model's own window", () => {
+  // Anthropic's own default decides when, so no trigger of ours is sent.
+  it("enables Anthropic compaction without naming a trigger", () => {
     const options = requestOptions(
       config({ compaction: true, maxInputTokens: 200_000 }),
     );
 
     expect(options["anthropic"]?.["contextManagement"]).toEqual({
-      edits: [
-        {
-          type: "compact_20260112",
-          trigger: { type: "input_tokens", value: 150_000 },
-        },
-      ],
+      edits: [{ type: "compact_20260112" }],
     });
   });
 
-  // The API refuses a lower trigger, so a small window compacts at the floor.
-  it("floors the trigger rather than sending a value the API refuses", () => {
+  /* OpenAI requires a threshold, so it gets the highest one that can fire: the
+     reply is reserved out of the window, so input never reaches the whole of it. */
+  it("gives OpenAI the window less the reply it has to leave room for", () => {
     const options = requestOptions(
-      config({ compaction: true, maxInputTokens: 32_000 }),
+      config({
+        provider: "openai",
+        compaction: true,
+        maxInputTokens: 400_000,
+        maxOutputTokens: 128_000,
+      }),
     );
 
-    expect(options["anthropic"]?.["contextManagement"]).toMatchObject({
-      edits: [{ trigger: { value: 50_000 } }],
-    });
+    expect(options["openai"]?.["contextManagement"]).toEqual([
+      { type: "compaction", compactThreshold: 272_000 },
+    ]);
   });
 
-  /* Both facts come from the catalogue, so a model that stated neither is sent
-     nothing and the run ends on the provider's own refusal instead. */
-  it.each([
-    [
-      "a model that cannot compact",
-      { compaction: false, maxInputTokens: 200_000 },
-    ],
-    ["a window nobody published", { compaction: true, maxInputTokens: null }],
-  ] as const)("asks for no compaction for %s", (_name, over) => {
+  /* The window is the trigger's input and Anthropic is sent no trigger, so a
+     model that cannot compact is the only one asking for none. */
+  it("asks for no compaction for a model that cannot compact", () => {
     expect(
-      requestOptions(config(over))["anthropic"]?.["contextManagement"],
+      requestOptions(config({ compaction: false, maxInputTokens: 200_000 }))[
+        "anthropic"
+      ]?.["contextManagement"],
+    ).toBeUndefined();
+  });
+
+  it("enables it for a model that can compact but published no window", () => {
+    expect(
+      requestOptions(config({ compaction: true, maxInputTokens: null }))[
+        "anthropic"
+      ]?.["contextManagement"],
+    ).toEqual({ edits: [{ type: "compact_20260112" }] });
+  });
+
+  // A model whose reply fills its own window leaves no threshold that can fire.
+  it("asks OpenAI for no compaction when the reply fills the window", () => {
+    expect(
+      requestOptions(
+        config({
+          provider: "openai",
+          compaction: true,
+          maxInputTokens: 128_000,
+          maxOutputTokens: 128_000,
+        }),
+      )["openai"]?.["contextManagement"],
     ).toBeUndefined();
   });
 });

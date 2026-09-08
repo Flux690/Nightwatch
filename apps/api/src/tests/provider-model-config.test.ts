@@ -13,7 +13,17 @@ import { harness, type Harness } from "./harness.js";
 import { registerConfigRoutes } from "../config/routes.js";
 import { clearTestLLM, configureTestLLM } from "./temp-db.js";
 import { forgetCapabilities } from "../llm/model-capabilities.js";
-import { updateConfig, updateProvider } from "../config/store.js";
+import {
+  fetchCatalog,
+  forgetCatalog,
+  type CatalogModel,
+} from "../llm/catalog.js";
+import {
+  loadApiKey,
+  loadConfig,
+  updateConfig,
+  updateProvider,
+} from "../config/store.js";
 import type {
   AgentConfig,
   ModelCatalog,
@@ -76,6 +86,7 @@ function stubCatalog(
   snapshot: Record<string, Record<string, unknown>> = {},
 ): void {
   forgetCapabilities();
+  forgetCatalog();
   const models = { models: snapshot };
   stubFetch((url) =>
     url.startsWith("https://models.dev")
@@ -121,6 +132,17 @@ describe("provider/model config seam", () => {
     const body = JSON.parse(res.body) as ModelCatalog;
     if (!body.ok) throw new Error(`catalog failed: ${body.error}`);
     return body.models;
+  }
+
+  async function describedModels(): Promise<CatalogModel[]> {
+    const { provider } = await loadConfig();
+    const catalog = await fetchCatalog(
+      provider ?? "anthropic",
+      undefined,
+      (await loadApiKey(provider ?? "anthropic")) ?? "",
+    );
+    if (!catalog.ok) throw new Error(`catalog failed: ${catalog.error}`);
+    return catalog.models;
   }
 
   async function storedMask(): Promise<string | null> {
@@ -290,16 +312,18 @@ describe("provider/model config seam", () => {
     expect(await storedMask()).not.toContain("persist");
   });
 
-  it("GET /config/providers: serves the picker so the frontend keeps no provider list of its own", async () => {
+  it("GET /config: carries the picker, so the frontend keeps no provider list and makes no second request", async () => {
     const res = await nw.server.inject({
       method: "GET",
-      url: "/api/config/providers",
+      url: "/api/config",
       headers: { cookie: `${SESSION}` },
     });
 
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { providers: ProviderOption[] };
-    expect(body.providers.map((p) => p.name)).toEqual([
+    const body = JSON.parse(res.body) as {
+      providerOptions: ProviderOption[];
+    };
+    expect(body.providerOptions.map((p) => p.name)).toEqual([
       "anthropic",
       "openai",
       "openrouter",
@@ -307,17 +331,8 @@ describe("provider/model config seam", () => {
     // The endpoint each adapter falls back to, so the form can show it as a
     // placeholder without knowing either provider's address.
     expect(
-      body.providers.find((p) => p.name === "openrouter")?.defaultBaseUrl,
+      body.providerOptions.find((p) => p.name === "openrouter")?.defaultBaseUrl,
     ).toBe("https://openrouter.ai/api/v1");
-  });
-
-  it("GET /config/providers: returns 401 without a valid session cookie", async () => {
-    const res = await nw.server.inject({
-      method: "GET",
-      url: "/api/config/providers",
-    });
-
-    expect(res.statusCode).toBe(401);
   });
 
   it("POST /config/models: returns 401 without a valid session cookie", async () => {
@@ -371,47 +386,6 @@ describe("provider/model config seam", () => {
       return JSON.parse(res.body) as AgentConfig;
     }
 
-    it("captures the model's own ceiling, so starting a run never has to reach the network", async () => {
-      stubCatalog([listed("claude-opus-5")], {
-        "claude-opus-5": published({
-          limit: { context: 200_000, output: 128_000 },
-        }),
-      });
-
-      const config = await patchModel("claude-opus-5");
-
-      expect(config.providers.anthropic.maxOutputTokens).toBe(128_000);
-      // The whole ladder is captured with the model, so the settings form draws
-      // its control from the config instead of asking the catalog again.
-      expect(config.providers.anthropic.reasoning).toEqual({
-        levels: [
-          { value: "max", label: "Max" },
-          { value: "high", label: "High" },
-          { value: "medium", label: "Medium" },
-          { value: "low", label: "Low" },
-        ],
-        defaultLevel: "high",
-      });
-    });
-
-    it("captures the context window and compaction support, so nothing reaches the network to start a run", async () => {
-      stubCatalog([listed("claude-opus-5", true)], {
-        "claude-opus-5": published(),
-      });
-
-      const first = await patchModel("claude-opus-5");
-      expect(first.providers.anthropic.maxInputTokens).toBe(200_000);
-      expect(first.providers.anthropic.compaction).toBe(true);
-
-      // A model that cannot compact must clear both, or the next run compacts
-      // against a window belonging to the model before it.
-      stubCatalog([listed("claude-small", false)], {});
-      const second = await patchModel("claude-small");
-
-      expect(second.providers.anthropic.compaction).toBe(false);
-      expect(second.providers.anthropic.maxInputTokens).toBeNull();
-    });
-
     it("re-resolves a level the new model does not support, rather than storing something unsendable", async () => {
       // max is legal on the first model and absent from the second.
       stubCatalog([listed("claude-opus-5")], { "claude-opus-5": published() });
@@ -443,7 +417,6 @@ describe("provider/model config seam", () => {
     });
 
     it("stores the model anyway when the catalog cannot be reached, rather than refusing the save", async () => {
-      await updateProvider("anthropic", { maxOutputTokens: null });
       vi.stubGlobal(
         "fetch",
         vi.fn().mockRejectedValue(new TypeError("fetch failed")),
@@ -452,7 +425,6 @@ describe("provider/model config seam", () => {
       const config = await patchModel("claude-opus-5");
 
       expect(config.providers.anthropic.model).toBe("claude-opus-5");
-      expect(config.providers.anthropic.maxOutputTokens).toBeNull();
     });
   });
 
@@ -480,8 +452,6 @@ describe("provider/model config seam", () => {
         ],
         defaultLevel: "high",
       });
-      expect(models[0]?.maxInputTokens).toBe(200_000);
-      expect(models[0]?.maxOutputTokens).toBe(64_000);
     });
 
     // A model shipped today is selectable before the snapshot describes it.
@@ -492,8 +462,6 @@ describe("provider/model config seam", () => {
 
       expect(models.map((m) => m.id)).toEqual(["claude-brand-new"]);
       expect(models[0]?.reasoning).toBeNull();
-      expect(models[0]?.maxInputTokens).toBeNull();
-      expect(models[0]?.maxOutputTokens).toBeNull();
     });
 
     it("drops a model that cannot call a tool, which cannot run the loop", async () => {
@@ -545,7 +513,7 @@ describe("provider/model config seam", () => {
         cannot: published(),
       });
 
-      const models = await getModels();
+      const models = await describedModels();
 
       expect(models[0]?.compaction).toBe(true);
       // Stated and unsupported is a no, and so is saying nothing at all.
@@ -559,7 +527,7 @@ describe("provider/model config seam", () => {
         "gpt-4o": published({ reasoning: false, reasoning_options: [] }),
       });
 
-      const models = await getModels();
+      const models = await describedModels();
 
       expect(models[0]?.compaction).toBe(true);
       expect(models[1]?.compaction).toBe(false);
@@ -573,7 +541,7 @@ describe("provider/model config seam", () => {
         "anthropic/claude-opus-5": published(),
       });
 
-      expect((await getModels())[0]?.compaction).toBe(false);
+      expect((await describedModels())[0]?.compaction).toBe(false);
     });
 
     /* The snapshot is two hundred vendors in one document, and any of them can
@@ -589,9 +557,7 @@ describe("provider/model config seam", () => {
       const models = await getModels();
 
       expect(models[0]?.reasoning?.defaultLevel).toBe("high");
-      expect(models[0]?.maxInputTokens).toBe(200_000);
       expect(models[1]?.reasoning).toBeNull();
-      expect(models[1]?.maxInputTokens).toBeNull();
     });
 
     /* Capabilities change slowly, so a catalogue with no ladder is worse than a

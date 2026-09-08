@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { getDb } from "../db.js";
 import {
   DEFAULT_CHECK_IN_AFTER_MS,
@@ -21,7 +20,6 @@ import type {
   LLMProviderName,
   ProviderSettings,
   ProviderSettingsMap,
-  ReasoningDescriptor,
   SandboxNetwork,
 } from "@nightwarden/shared";
 
@@ -55,10 +53,6 @@ type ProviderRow = {
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   reasoningLevel: string | null;
-  maxOutputTokens: number | null;
-  maxInputTokens: number | null;
-  compaction: number;
-  reasoning: string | null;
 };
 
 function readConfigRow(): Promise<ConfigRow | undefined> {
@@ -93,10 +87,6 @@ function readProviderRow(
       "base_url as baseUrl",
       "api_key_encrypted as apiKeyEncrypted",
       "reasoning_level as reasoningLevel",
-      "max_output_tokens as maxOutputTokens",
-      "max_input_tokens as maxInputTokens",
-      "compaction",
-      "reasoning",
     ])
     .where("provider", "=", provider)
     .executeTakeFirst();
@@ -120,35 +110,12 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
   }
 }
 
-// Stored as JSON because the ladder is the catalog's shape, not ours: its length
-// and vocabulary differ per model, so columns could only ever hold one provider's.
-const ReasoningDescriptorSchema = z.object({
-  levels: z.array(z.object({ value: z.string(), label: z.string() })),
-  defaultLevel: z.string(),
-});
-
-// A row written by an older shape, or hand-edited, reads as no ladder rather
-// than crashing the whole config read.
-function parseReasoning(json: string | null): ReasoningDescriptor | null {
-  if (json === null) return null;
-  try {
-    const parsed = ReasoningDescriptorSchema.safeParse(JSON.parse(json));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
 function toSettings(row: ProviderRow | undefined): ProviderSettings {
   return {
     model: row?.model ?? null,
     baseUrl: row?.baseUrl ?? undefined,
     apiKeyMasked: maskStored(row?.apiKeyEncrypted ?? null),
     reasoningLevel: row?.reasoningLevel ?? null,
-    maxOutputTokens: row?.maxOutputTokens ?? null,
-    maxInputTokens: row?.maxInputTokens ?? null,
-    compaction: row?.compaction === 1,
-    reasoning: parseReasoning(row?.reasoning ?? null),
   };
 }
 
@@ -169,6 +136,7 @@ export async function loadConfig(): Promise<AgentConfig> {
     return {
       provider: null,
       providers,
+      providerOptions: [...PROVIDER_OPTIONS],
       maxRetries: MAX_RETRIES,
       requestTimeoutMs: REQUEST_TIMEOUT_MS,
       maxConcurrentInvestigations: DEFAULT_MAX_CONCURRENT_INVESTIGATIONS,
@@ -186,6 +154,7 @@ export async function loadConfig(): Promise<AgentConfig> {
   return {
     provider: row.activeProvider as LLMProviderName | null,
     providers,
+    providerOptions: [...PROVIDER_OPTIONS],
     maxRetries: row.maxRetries,
     requestTimeoutMs: row.requestTimeoutMs,
     maxConcurrentInvestigations: row.maxConcurrentInvestigations,
@@ -248,10 +217,6 @@ export interface ProviderPatch {
   model?: string | null;
   baseUrl?: string | null;
   reasoningLevel?: string | null;
-  maxOutputTokens?: number | null;
-  maxInputTokens?: number | null;
-  compaction?: boolean;
-  reasoning?: ReasoningDescriptor | null;
   // Plaintext; encrypted here so no caller has to remember to.
   apiKey?: string;
 }
@@ -278,24 +243,6 @@ export async function updateProvider(
       patch.reasoningLevel !== undefined
         ? patch.reasoningLevel
         : (existing?.reasoningLevel ?? null),
-    max_output_tokens:
-      patch.maxOutputTokens !== undefined
-        ? patch.maxOutputTokens
-        : (existing?.maxOutputTokens ?? null),
-    max_input_tokens:
-      patch.maxInputTokens !== undefined
-        ? patch.maxInputTokens
-        : (existing?.maxInputTokens ?? null),
-    compaction:
-      patch.compaction !== undefined
-        ? patch.compaction
-          ? 1
-          : 0
-        : (existing?.compaction ?? 0),
-    reasoning:
-      patch.reasoning !== undefined
-        ? patch.reasoning && JSON.stringify(patch.reasoning)
-        : (existing?.reasoning ?? null),
     updated_at: new Date().toISOString(),
   };
   await getDb()

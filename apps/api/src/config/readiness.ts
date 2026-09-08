@@ -1,5 +1,6 @@
 import { loadApiKey, loadConfig } from "./store.js";
 import { MAX_OUTPUT_TOKENS } from "../llm/config.js";
+import { catalogFor } from "../llm/catalog.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
 // Every entry point that starts a run asks here, so a half-configured install
@@ -29,8 +30,12 @@ export async function checkLLMReadiness(): Promise<LLMReadiness> {
     return { ready: false, missing };
   }
 
-  // The output ceiling is the chosen model's own, captured when it was saved.
-  // The constant stands in only where the catalog published none.
+  // Read rather than stored, so a model that gains a window or a capability is
+  // described as it is published today.
+  const described = (await catalogFor(provider, settings.baseUrl, apiKey)).find(
+    (entry) => entry.id === model,
+  );
+
   return {
     ready: true,
     apiKey,
@@ -38,15 +43,16 @@ export async function checkLLMReadiness(): Promise<LLMReadiness> {
       provider,
       model,
       baseUrl: settings.baseUrl,
-      maxOutputTokens: settings.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
+      // The constant stands in only where the catalog publishes no ceiling.
+      maxOutputTokens: described?.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
       // No constant stands in for these two: a window we guessed would set a
       // compaction threshold the model never published.
-      maxInputTokens: settings.maxInputTokens,
-      compaction: settings.compaction,
+      maxInputTokens: described?.maxInputTokens ?? null,
+      compaction: described?.compaction ?? false,
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs,
       reasoningLevel: settings.reasoningLevel,
-      reasoning: settings.reasoning,
+      reasoning: described?.reasoning ?? null,
     },
   };
 }

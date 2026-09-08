@@ -52,10 +52,6 @@ interface ProviderConfigTable {
   base_url: string | null;
   api_key_encrypted: string | null;
   reasoning_level: string | null;
-  max_output_tokens: number | null;
-  max_input_tokens: number | null;
-  compaction: Generated<number>;
-  reasoning: string | null;
   updated_at: string;
 }
 

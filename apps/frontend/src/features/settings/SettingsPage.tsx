@@ -6,7 +6,6 @@ import type {
   CatalogError,
   LLMProviderName,
   ModelCatalog,
-  ProviderOption,
   ProviderSettings,
 } from "@nightwarden/shared";
 
@@ -96,15 +95,7 @@ export function SettingsPage(): React.JSX.Element {
     setForm((prev) => prev ?? config ?? null);
   }, [config]);
 
-  const { data: providersData } = useQuery<{ providers: ProviderOption[] }>({
-    queryKey: ["config/providers"],
-    queryFn: () =>
-      apiFetch<{ providers: ProviderOption[] }>("/api/config/providers").catch(
-        () => ({ providers: [] }),
-      ),
-    staleTime: Infinity,
-  });
-  const availableProviders = providersData?.providers ?? [];
+  const availableProviders = config?.providerOptions ?? [];
 
   const editedProvider = form?.provider ?? null;
   const editedBaseUrl = editedProvider
@@ -210,13 +201,11 @@ export function SettingsPage(): React.JSX.Element {
   function setModel(id: string | null): void {
     if (!form?.provider) return;
     if (id === null) {
-      patchProvider(form.provider, {
-        model: null,
-        reasoning: null,
-        reasoningLevel: null,
-      });
+      patchProvider(form.provider, { model: null, reasoningLevel: null });
       return;
     }
+    // Ladders differ per model, so a level the new one does not offer becomes
+    // its default.
     const reasoning =
       availableModels.find((m) => m.id === id)?.reasoning ?? null;
     const keeps = reasoning?.levels.some(
@@ -224,7 +213,6 @@ export function SettingsPage(): React.JSX.Element {
     );
     patchProvider(form.provider, {
       model: id,
-      reasoning,
       reasoningLevel: reasoning
         ? keeps
           ? block?.reasoningLevel

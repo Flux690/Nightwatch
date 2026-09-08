@@ -9,6 +9,7 @@ import {
   type MetricsSourceInput,
 } from "../integrations/metrics/store.js";
 import { updateConfig, updateProvider } from "../config/store.js";
+import { seedCatalog } from "../llm/catalog.js";
 
 // Call at the top of beforeAll before anything opens the lazy db; pair the
 // teardown with vi.unstubAllEnvs().
@@ -32,6 +33,17 @@ export async function configureTestLLM(): Promise<void> {
     apiKey: "test-api-key",
   });
   await updateConfig({ provider: "anthropic" });
+  // A run resolves its model from the catalogue, which is seeded rather than
+  // fetched so no test reaches a provider to start one.
+  seedCatalog("anthropic", [
+    {
+      id: "test-model",
+      reasoning: null,
+      maxInputTokens: 200_000,
+      maxOutputTokens: 32_000,
+      compaction: false,
+    },
+  ]);
 }
 
 export async function clearTestLLM(): Promise<void> {

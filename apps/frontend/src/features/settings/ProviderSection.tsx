@@ -84,8 +84,11 @@ export function ProviderSection({
   const [replacingKey, setReplacingKey] = useState(false);
   const [typed, setTyped] = useState<string | null>(null);
   const keyInputOpen = savedApiKeyMasked === null || replacingKey;
-  const reasoning = block?.model ? (block.reasoning ?? null) : null;
   const models = catalog.kind === "ready" ? catalog.models : [];
+  // From the list the picker is drawn from, so the control always fits the
+  // model actually selected.
+  const reasoning =
+    models.find((m) => m.id === block?.model)?.reasoning ?? null;
   const providerItems: Record<string, string> = {
     "": "Select a provider",
     ...Object.fromEntries(

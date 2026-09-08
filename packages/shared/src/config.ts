@@ -38,20 +38,12 @@ export interface ReasoningDescriptor {
   defaultLevel: string;
 }
 
-// One entry of a provider's model catalog, with everything the settings form
-// needs to render controls that fit that exact model.
+// One entry of a provider's model catalog, carrying what the settings form
+// draws. A run reads a model's limits server-side, where it resolves them.
 export interface ModelOption {
   id: string;
   // null when the model exposes no reasoning control at all.
   reasoning: ReasoningDescriptor | null;
-  // The model's own output ceiling, null when its catalog does not publish one.
-  maxOutputTokens: number | null;
-  // The model's context window, null when its catalog does not publish one.
-  // Read rather than assumed: it is what a compaction trigger is derived from.
-  maxInputTokens: number | null;
-  // Whether the provider summarises a conversation that outgrows the window.
-  // Stated by the catalog or false: one that truncates instead is not this.
-  compaction: boolean;
 }
 
 // How to reach one provider. Each keeps its own credentials, so switching the
@@ -66,19 +58,9 @@ export interface ProviderSettings {
   // Validated against the model's descriptor rather than a fixed union: the
   // levels differ per model, so an enum here could only be a guess.
   reasoningLevel: string | null;
-  // Captured from the catalog when the model is saved, so nothing has to reach
-  // the network to start a run. Null means the catalog published no ceiling.
-  maxOutputTokens: number | null;
-  // Captured with it, on the same terms.
-  maxInputTokens: number | null;
-  compaction: boolean;
-  // Captured with the model rather than looked up again, so the settings form
-  // draws its reasoning control from the config it already has. Null when none.
-  reasoning: ReasoningDescriptor | null;
 }
 
-// Both providers hold the same shape: the user's choice plus the facts
-// captured about the model they chose.
+// One shape per provider, holding the choices that provider was configured with.
 export type ProviderSettingsMap = Record<LLMProviderName, ProviderSettings>;
 
 export interface AgentConfig {
@@ -86,6 +68,9 @@ export interface AgentConfig {
   // default: a fresh install must not look configured when it can reach no LLM.
   provider: LLMProviderName | null;
   providers: ProviderSettingsMap;
+  // The adapters this build offers, carried here so the picker is data the
+  // frontend renders rather than a list it maintains.
+  providerOptions: ProviderOption[];
   maxRetries: number;
   requestTimeoutMs: number;
   // Counts the suspended ones too: starting another only queues a second write

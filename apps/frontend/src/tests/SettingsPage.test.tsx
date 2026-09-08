@@ -30,50 +30,41 @@ const AUTH_STATUS_RESPONSE = {
   name: "Admin",
 };
 
-// The chosen model's ladder is stored with the model, so the settings form has
-// it the moment the config lands and never waits on a request to draw a control.
-const EFFORT_LADDER: ReasoningDescriptor = {
-  levels: [
-    { value: "max", label: "Max" },
-    { value: "high", label: "High" },
-    { value: "medium", label: "Medium" },
-    { value: "low", label: "Low" },
-  ],
-  defaultLevel: "high",
-};
+// The picker is served with the config, so a new adapter reaches the form as data.
+const PROVIDER_OPTIONS: ProviderOption[] = [
+  {
+    name: "anthropic",
+    label: "Anthropic",
+    defaultBaseUrl: "https://api.anthropic.com",
+  },
+  {
+    name: "openrouter",
+    label: "OpenRouter",
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+  },
+];
 
 const CONFIG: AgentConfig = {
   provider: "anthropic",
+  providerOptions: PROVIDER_OPTIONS,
   providers: {
     anthropic: {
       model: "claude-sonnet-4-6",
       baseUrl: undefined,
       apiKeyMasked: null,
       reasoningLevel: "high",
-      maxOutputTokens: 64_000,
-      maxInputTokens: null,
-      compaction: false,
-      reasoning: EFFORT_LADDER,
     },
     openai: {
       model: null,
       baseUrl: undefined,
       apiKeyMasked: null,
       reasoningLevel: null,
-      maxOutputTokens: null,
-      maxInputTokens: null,
-      compaction: false,
-      reasoning: null,
     },
     openrouter: {
       model: null,
       baseUrl: undefined,
       apiKeyMasked: null,
       reasoningLevel: null,
-      maxOutputTokens: null,
-      maxInputTokens: null,
-      compaction: false,
-      reasoning: null,
     },
   },
   maxRetries: 2,
@@ -105,39 +96,14 @@ const MODELS_RESPONSE: ModelCatalog = {
         ],
         defaultLevel: "high",
       },
-      maxOutputTokens: 64_000,
-      maxInputTokens: null,
-      compaction: false,
     },
     {
       id: "claude-opus-4-8",
       reasoning: null,
-      maxOutputTokens: null,
-      maxInputTokens: null,
-      compaction: false,
     },
     {
       id: "claude-haiku-4-5-20251001",
       reasoning: null,
-      maxOutputTokens: null,
-      maxInputTokens: null,
-      compaction: false,
-    },
-  ],
-};
-
-// The picker is served, not hardcoded, so a new adapter needs no frontend change.
-const PROVIDERS_RESPONSE: { providers: ProviderOption[] } = {
-  providers: [
-    {
-      name: "anthropic",
-      label: "Anthropic",
-      defaultBaseUrl: "https://api.anthropic.com",
-    },
-    {
-      name: "openrouter",
-      label: "OpenRouter",
-      defaultBaseUrl: "https://openrouter.ai/api/v1",
     },
   ],
 };
@@ -153,12 +119,6 @@ function makeFetchMock(
         ok: true,
         status: 200,
         json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
-      });
-    }
-    if (url.includes("/config/providers")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(PROVIDERS_RESPONSE),
       });
     }
     if (url.includes("/config/models")) {
@@ -333,13 +293,6 @@ describe("SettingsPage", () => {
               json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
             });
           }
-          if (url.includes("/config/providers")) {
-            return Promise.resolve({
-              ok: true,
-              json: () => Promise.resolve(PROVIDERS_RESPONSE),
-            });
-          }
-
           if (url.includes("/config/models")) {
             return Promise.resolve({
               ok: true,
@@ -469,23 +422,14 @@ describe("SettingsPage", () => {
           {
             id: "openai/gpt-oss-20b:free",
             reasoning: null,
-            maxOutputTokens: null,
-            maxInputTokens: null,
-            compaction: false,
           },
           {
             id: "anthropic/claude-opus-5",
             reasoning: null,
-            maxOutputTokens: null,
-            maxInputTokens: null,
-            compaction: false,
           },
           {
             id: "meta/llama-4:free",
             reasoning: null,
-            maxOutputTokens: null,
-            maxInputTokens: null,
-            compaction: false,
           },
         ],
       });
@@ -603,15 +547,16 @@ describe("SettingsPage", () => {
       ]);
     });
 
-    // The control describes a model that is already chosen, so making it wait
-    // on the catalog would move the form under the user for no reason.
-    it("is on screen before the catalog has answered", async () => {
+    /* The ladder is the catalogue's to state, so the control waits for it rather
+       than drawing rungs from a copy that may no longer be what the model offers. */
+    it("waits for the catalog rather than drawing a remembered ladder", async () => {
       const user = userEvent.setup();
-      // A catalog that never resolves: the control must not depend on it.
+      // A catalog that never resolves: the rest of the form still stands.
       setup(undefined, new Promise<ModelCatalog>(() => {}));
       await openSection(user, /provider/i);
 
-      expect(await screen.findByLabelText(/^reasoning$/i)).toBeInTheDocument();
+      expect(await screen.findByLabelText(/^base url$/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
       await openModelList(user);
       expect(await screen.findByText(/loading models/i)).toBeInTheDocument();
     });
@@ -659,9 +604,6 @@ describe("SettingsPage", () => {
               ],
               defaultLevel: "low",
             },
-            maxOutputTokens: null,
-            maxInputTokens: null,
-            compaction: false,
           },
         ],
       });
@@ -693,9 +635,6 @@ describe("SettingsPage", () => {
               ],
               defaultLevel: "low",
             },
-            maxOutputTokens: null,
-            maxInputTokens: null,
-            compaction: false,
           },
         ],
       });

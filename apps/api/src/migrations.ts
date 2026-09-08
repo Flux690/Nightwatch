@@ -43,10 +43,6 @@ CREATE TABLE IF NOT EXISTS provider_config (
   base_url            TEXT,
   api_key_encrypted   TEXT,
   reasoning_level     TEXT,
-  max_output_tokens   INTEGER,
-  max_input_tokens    INTEGER,
-  compaction          INTEGER  NOT NULL DEFAULT 0,
-  reasoning           TEXT,
   updated_at          TEXT     NOT NULL
 );
 

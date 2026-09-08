@@ -108,7 +108,7 @@ docker compose up -d
 
 `NIGHTWARDEN_PUBLIC_URL` is the only variable you must set. It is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else has a default and is listed in [Configuration](ARCHITECTURE.md#configuration).
 
-Open that address, create the owner account, then go to **Settings → Provider**: choose Anthropic, OpenAI or OpenRouter, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert.
+Open that address, create the owner account, then go to **Settings → Provider**: choose Anthropic, OpenAI or OpenRouter, paste a key, and pick a model from the list that fills in. On Anthropic and OpenAI that list only loads once the key is accepted, so it doubles as the check; OpenRouter publishes its models to anyone, so there a full list says the endpoint answered and nothing about the key. Until a provider, a key and a model are set NightWarden refuses to start investigations rather than failing at the first alert.
 
 ## Connect your stack
 

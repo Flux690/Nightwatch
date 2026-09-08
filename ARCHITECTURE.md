@@ -289,11 +289,21 @@ A result still over the line is refused **whole**, and the agent is told to narr
 
 Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool where the work justifies it - repo tools run clones, installs and test suites. A caller supplies a ceiling and a tool's own limit can only narrow it.
 
+### What a model can do
+
+`provider_config` holds the choices: the model, the base URL, the encrypted key and the reasoning level. A model's context window, output ceiling, effort ladder and compaction support come from the catalogue, resolved when a run reaches `checkLLMReadiness`, so each run describes the model as it is published that day.
+
+**Each field comes from the provider that publishes it, and the models.dev snapshot answers the rest.** Anthropic's `/v1/models` carries the window, the output cap, the effort ladder and the compaction flag. OpenRouter's carries the window, the completion cap, the effort ladder and the parameters it accepts, which is where tool support is stated. OpenAI's carries the model ids alone, so its capabilities come from the snapshot. Tool calling comes from the snapshot wherever a provider is silent about it, and a model that cannot call one stays off the list, because it cannot run the loop.
+
+Two caches sit behind that, both in the API: the snapshot for a day, each provider's merged list for an hour. A run resolves from them without a request, and a provider that cannot be reached leaves the previous answer in place. The settings form receives an id and a reasoning ladder, which is what it draws; the limits are read where the run needs them.
+
+**Listing models checks the key on the providers that require one to list.** Anthropic and OpenAI both do, so a populated model dropdown means the credential was accepted. OpenRouter publishes its list openly, so there the dropdown says the endpoint answered and nothing about the key, which is first used when a run starts.
+
 ### Running out of room
 
 **Time.** After its budget (Settings → Agent, 30 minutes by default) a run finishes the step it is on and asks whether to continue. Declining runs the **stand-down turn**: the transcript is replayed and one free-form closing turn runs with no tools. It writes no report. Every repository tool call extends the sandbox's own idle timer separately.
 
-**Context.** Where the provider can summarise, NightWarden asks for that rather than letting the request be refused, and the transcript marks where it happened. Anthropic states support per model on its own catalog; OpenAI offers it on its reasoning models and publishes no flag, so that is what NightWarden reads. Where it cannot, the run stops and names the two things that work: start a new session, or pick a model with a larger window. OpenRouter is deliberately on that path, because it drops the middle of a conversation, and in an agentic transcript the middle is where the evidence lives.
+**Context.** Where the provider can summarise, NightWarden asks for that rather than letting the request be refused, and the transcript marks where it happened. Anthropic states support per model on its own catalog; OpenAI offers it on its reasoning models and publishes no flag, so that is what NightWarden reads. **When it summarises is the provider's own decision** - Anthropic is sent the edit with no trigger and applies its published default, and OpenAI, whose threshold is a required field, is given the window less the reply it must leave room for, which is the highest value that can ever fire. Where a model cannot summarise, the run stops and names the two things that work: start a new session, or pick a model with a larger window. OpenRouter is deliberately on that path, because it drops the middle of a conversation, and in an agentic transcript the middle is where the evidence lives.
 
 ---
 

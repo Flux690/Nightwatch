@@ -7,7 +7,12 @@ import {
   updateProvider,
   type ProviderPatch,
 } from "./store.js";
-import { PROVIDER_OPTIONS, fetchCatalog, fetchModels } from "../llm/catalog.js";
+import {
+  PROVIDER_OPTIONS,
+  catalogFor,
+  fetchCatalog,
+  offeredModels,
+} from "../llm/catalog.js";
 import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -19,10 +24,8 @@ import type {
   ModelOption,
 } from "@nightwarden/shared";
 
-// Every name this build serves, so a provider added to PROVIDER_OPTIONS is
-// accepted here without a second list to remember.
-// Asserted to a non-empty tuple because that is the only shape z.enum takes,
-// and PROVIDER_OPTIONS is a literal this build always ships at least one of.
+/* Every name this build serves, so no second list is kept. Asserted to a
+   non-empty tuple, which is the only shape z.enum takes. */
 const PROVIDER_NAME = z.enum(
   PROVIDER_OPTIONS.map((p) => p.name) as [
     LLMProviderName,
@@ -85,37 +88,26 @@ const KeyBodySchema = z.object({
   apiKey: z.string().min(1),
 });
 
-// Captured at pick time, so starting a run never reaches the network. Derived
-// here, because what a model supports is the provider's answer.
-async function withModelFacts(
+/* The only thing worth settling at pick time: a level carried over from the
+   previous model may not exist on this one, so it re-resolves before it is stored. */
+async function withValidLevel(
   provider: LLMProviderName,
   patch: ProviderPatch,
 ): Promise<ProviderPatch> {
   if (patch.model === undefined || patch.model === null) return patch;
 
   const config = await loadConfig();
-  const models = await fetchModels(
+  const models = await catalogFor(
     provider,
     patch.baseUrl ?? config.providers[provider].baseUrl,
     (await loadApiKey(provider)) ?? "",
   );
   const chosen = models.find((m) => m.id === patch.model);
-  // An unreachable catalog leaves the facts unset rather than inventing them;
-  // the readiness gate falls back to the constant ceiling.
   if (chosen === undefined) return patch;
 
   const level =
     patch.reasoningLevel ?? config.providers[provider].reasoningLevel;
-  return {
-    ...patch,
-    maxOutputTokens: chosen.maxOutputTokens,
-    maxInputTokens: chosen.maxInputTokens,
-    compaction: chosen.compaction,
-    reasoning: chosen.reasoning,
-    // A level carried over from the previous model may not exist on this one,
-    // so it re-resolves rather than being stored as something unsendable.
-    reasoningLevel: validLevel(chosen, level),
-  };
+  return { ...patch, reasoningLevel: validLevel(chosen, level) };
 }
 
 function validLevel(model: ModelOption, level: string | null): string | null {
@@ -148,7 +140,7 @@ export async function registerConfigRoutes(
       for (const name of PROVIDER_OPTIONS.map((p) => p.name)) {
         const block = providers?.[name];
         if (block !== undefined)
-          await updateProvider(name, await withModelFacts(name, block));
+          await updateProvider(name, await withValidLevel(name, block));
       }
       const updated = await updateConfig(global);
       logger.info(
@@ -158,12 +150,6 @@ export async function registerConfigRoutes(
       return updated;
     },
   );
-
-  // Which providers this build can reach, so the picker is data rather than a
-  // list the frontend maintains. No secrets, but gated with the rest of config.
-  fastify.get("/config/providers", { preHandler: requireSession }, () => ({
-    providers: PROVIDER_OPTIONS,
-  }));
 
   // Proxied because the key lives here and must never reach the frontend.
   // Listing verifies too: models coming back prove the endpoint and the key.
@@ -197,7 +183,12 @@ export async function registerConfigRoutes(
         { provider: target, ok: catalog.ok },
         "model catalog requested",
       );
-      return catalog;
+      return catalog.ok
+        ? ({
+            ok: true,
+            models: offeredModels(catalog.models),
+          } satisfies ModelCatalog)
+        : catalog;
     },
   );
 
