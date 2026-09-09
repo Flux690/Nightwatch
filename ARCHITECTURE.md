@@ -283,7 +283,7 @@ An elicitation is offered to the model as one, because tool-calling is the only 
 
 ### Turn execution and limits
 
-`agent/turn.ts` walks a turn's tool calls sequentially. A single tool result may occupy **30,000 characters** (`MAX_TOOL_RESULT_CHARS`). Tools that can return a lot drop whole items to stay under it and say in the result what they left out.
+`agent/turn.ts` classifies a turn's tool calls first, with no I/O, then runs them in the order the model emitted them: a run of consecutive reads goes out together, and a write runs alone. Nothing is reordered, so a read asked for after a write still sees what that write did, and a result keeps the position its call was emitted in, which is what holds evidence ids steady whatever the timing does. A single tool result may occupy **30,000 characters** (`MAX_TOOL_RESULT_CHARS`). Tools that can return a lot drop whole items to stay under it and say in the result what they left out.
 
 A result still over the line is refused **whole**, and the agent is told to narrow the call. It is never truncated: half a JSON result parses cleanly as a smaller truth, and a list of three failing pods cut to two reads as two failing pods with nothing about it looking wrong.
 

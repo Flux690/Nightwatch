@@ -1,7 +1,7 @@
 import { executeTool, resolvePolicy } from "./tools/toolset.js";
 import { parseInput } from "./tools/schema.js";
 import type { OfferedToolset } from "./tools/toolset.js";
-import type { ToolDispatchContext } from "./tools/types.js";
+import type { Tool, ToolDispatchContext } from "./tools/types.js";
 import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
@@ -80,8 +80,15 @@ function unavailableMessage(
   return `${what}${suggestion}${repeat} Do not ask for it again. What you do have: ${offered.join(", ")}.`;
 }
 
-// Two passes: run every unapproved tool now, and pick the first call needing a human for
-// the loop to suspend on. Both resolve against the offered set, so a stripped tool reports unavailable.
+/* One step per tool_use, decided before anything runs. A gate contributes no
+   result: the loop suspends on it and the resume answers it. */
+type Step =
+  | { kind: "answer"; result: ToolResult }
+  | { kind: "gate" }
+  | { kind: "run"; call: ToolUse; tool: Tool };
+
+// Two passes: classify every call with no I/O, so the one-gate-per-turn rule keeps its
+// order, then run them. Both resolve against the offered set, so a stripped tool reports unavailable.
 export async function processToolUses(params: {
   toolUses: ToolUse[];
   offered: OfferedToolset;
@@ -96,7 +103,7 @@ export async function processToolUses(params: {
 }): Promise<TurnOutcome> {
   const { toolUses, offered, sessionId, execCtx, log } = params;
 
-  const toolResults: ToolResult[] = [];
+  const steps: Step[] = [];
   const refused: string[] = [];
   let gated: { tool: ToolUse; kind: GateKind } | null = null;
   const offeredNames = [
@@ -106,16 +113,19 @@ export async function processToolUses(params: {
 
   // Only one gate per turn, so every tool_use in this assistant message still
   // gets a tool_result rather than the conversation being left unanswerable.
-  const gateOrReject = (call: ToolUse, kind: GateKind): void => {
+  const gateOrReject = (call: ToolUse, kind: GateKind): Step => {
     if (gated !== null) {
-      toolResults.push({
-        toolCallId: call.toolCallId,
-        content: "Another gated action is pending. Retry after it resolves.",
-        isError: true,
-      });
-      return;
+      return {
+        kind: "answer",
+        result: {
+          toolCallId: call.toolCallId,
+          content: "Another gated action is pending. Retry after it resolves.",
+          isError: true,
+        },
+      };
     }
     gated = { tool: call, kind };
+    return { kind: "gate" };
   };
 
   for (const tool of toolUses) {
@@ -134,14 +144,17 @@ export async function processToolUses(params: {
         // nothing suspends until a valid question has arrived.
         const parsed = parseInput(elicitation.input, tool.input);
         if (!parsed.ok) {
-          toolResults.push({
-            toolCallId: tool.toolCallId,
-            content: parsed.failure.content,
-            isError: true,
+          steps.push({
+            kind: "answer",
+            result: {
+              toolCallId: tool.toolCallId,
+              content: parsed.failure.content,
+              isError: true,
+            },
           });
           continue;
         }
-        gateOrReject(tool, "clarification");
+        steps.push(gateOrReject(tool, "clarification"));
         continue;
       }
       refused.push(tool.name);
@@ -150,44 +163,46 @@ export async function processToolUses(params: {
         { tool: tool.name, exists: isToolName(tool.name), asked: asked + 1 },
         "LLM requested unavailable tool",
       );
-      toolResults.push({
-        toolCallId: tool.toolCallId,
-        content: unavailableMessage(tool.name, offeredNames, asked + 1),
-        isError: true,
+      steps.push({
+        kind: "answer",
+        result: {
+          toolCallId: tool.toolCallId,
+          content: unavailableMessage(tool.name, offeredNames, asked + 1),
+          isError: true,
+        },
       });
       continue;
     }
 
     if (resolvePolicy(entry, tool.input) === "approve") {
       // Nothing to reserve: the approve path reads the same walk.
-      gateOrReject(tool, "approval");
+      steps.push(gateOrReject(tool, "approval"));
       continue;
     }
 
+    steps.push({ kind: "run", call: tool, tool: entry });
+  }
+
+  const runOne = async (call: ToolUse, tool: Tool): Promise<ToolResult> => {
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
-        toolCallId: tool.toolCallId,
-        toolName: tool.name,
-        input: tool.input,
+        toolCallId: call.toolCallId,
+        toolName: call.name,
+        input: call.input,
         state: { phase: "running" },
       }),
     });
-    const { content, isError } = await executeTool(entry, tool.input, {
+    const { content, isError } = await executeTool(tool, call.input, {
       ...execCtx,
-      toolCallId: tool.toolCallId,
-    });
-    toolResults.push({
-      toolCallId: tool.toolCallId,
-      content,
-      ...(isError === true && { isError: true }),
+      toolCallId: call.toolCallId,
     });
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
-        toolCallId: tool.toolCallId,
-        toolName: tool.name,
-        input: tool.input,
+        toolCallId: call.toolCallId,
+        toolName: call.name,
+        input: call.input,
         // The same string the transcript fetch would show, so a reload cannot
         // render this result differently from the live card.
         state: {
@@ -197,7 +212,49 @@ export async function processToolUses(params: {
         },
       }),
     });
+    return {
+      toolCallId: call.toolCallId,
+      content,
+      ...(isError === true && { isError: true }),
+    };
+  };
+
+  const isRead = (step: Step): boolean =>
+    step.kind === "run" && step.tool.effect === "read";
+
+  /* Filled by index, so a result keeps the position its call was emitted in and
+     the evidence ids the loop stamps cannot move with the timing. */
+  const answers: Array<ToolResult | undefined> = new Array<
+    ToolResult | undefined
+  >(steps.length);
+  let i = 0;
+  while (i < steps.length) {
+    const step = steps[i]!;
+    if (step.kind === "answer") answers[i] = step.result;
+    if (step.kind !== "run") {
+      i++;
+      continue;
+    }
+    if (!isRead(step)) {
+      answers[i] = await runOne(step.call, step.tool);
+      i++;
+      continue;
+    }
+    /* A run of reads contends for nothing, so it goes out together. Emission
+       order is never crossed: a write still separates the reads around it. */
+    let end = i;
+    while (end < steps.length && isRead(steps[end]!)) end++;
+    const batch = steps.slice(i, end) as Array<Extract<Step, { kind: "run" }>>;
+    const ran = await Promise.all(
+      batch.map(async (s) => await runOne(s.call, s.tool)),
+    );
+    ran.forEach((result, offset) => {
+      answers[i + offset] = result;
+    });
+    i = end;
   }
+
+  const toolResults = answers.flatMap((r) => (r === undefined ? [] : [r]));
 
   return { toolResults, gated, refused };
 }
