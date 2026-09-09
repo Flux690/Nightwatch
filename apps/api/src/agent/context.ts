@@ -5,14 +5,14 @@ import type {
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
 import {
-  FLEET_PROTOCOL,
-  BASE_PROMPT,
+  FLEET,
+  IDENTITY,
   budgetLine,
-  HARNESS_PROTOCOL,
-  INVESTIGATION_SECTION,
+  HARNESS,
+  INVESTIGATION,
   type PromptOptions,
 } from "./prompts/system.js";
-import { REPORT_PROTOCOL } from "./prompts/report.js";
+import { REPORT } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
 import { resolveAlertTarget } from "../alerts/resolve-target.js";
 import { stripSystemReminder } from "./system-reminder.js";
@@ -33,10 +33,10 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
 /* Invariant blocks first: every session shares the opening two byte for byte,
    which is the prefix a provider can cache. Only the budget line varies. */
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
-  let prompt = BASE_PROMPT + HARNESS_PROTOCOL;
-  if (opts.fleetTools) prompt += FLEET_PROTOCOL;
+  let prompt = IDENTITY + HARNESS;
+  if (opts.fleetTools) prompt += FLEET;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
-  if (investigation) prompt += INVESTIGATION_SECTION + REPORT_PROTOCOL;
+  if (investigation) prompt += INVESTIGATION + REPORT;
   prompt += budgetLine(opts, investigation);
   return prompt;
 }

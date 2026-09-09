@@ -219,12 +219,12 @@ Both write the same record and cross-check each other. If nothing can answer, th
 
 | Block                       | Included when   | Carries                                                                                                                                                     |
 | --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BASE_PROMPT`               | always          | Who the model is, that a claim names a measured value or a line it read, and to answer at the size of what was asked                                        |
-| `HARNESS_PROTOCOL`          | always          | The approval gate and its required reason, that the offered toolset is final, to batch independent calls, and how to read a `<harness>` turn                |
-| `FLEET_PROTOCOL`            | `fleetTools`    | Target keys and server names. Withheld when nothing takes one, because pointing at an absent `<fleet-summary>` is how a metrics source once became a target |
+| `IDENTITY`                  | always          | Who the model is, that a claim names a measured value or a line it read, and to answer at the size of what was asked                                        |
+| `HARNESS`                   | always          | The approval gate and its required reason, that the offered toolset is final, to batch independent calls, and how to read a `<system-reminder>` turn        |
+| `FLEET`                     | `fleetTools`    | Target keys and server names. Withheld when nothing takes one, because pointing at an absent `<fleet-summary>` is how a metrics source once became a target |
 | `sandboxInstructions(repo)` | `repo !== null` | The checkout, what is installed in it, and that a pull request opens as a draft a human merges                                                              |
-| `INVESTIGATION_SECTION`     | investigation   | That an alert opened this session, the ordered method, and to prefer the smallest reversible fix                                                            |
-| `REPORT_PROTOCOL`           | investigation   | That a record is kept, and what a claim must cite to reach it                                                                                               |
+| `INVESTIGATION`             | investigation   | That an alert opened this session, the ordered method, and to prefer the smallest reversible fix                                                            |
+| `REPORT`                    | investigation   | That a record is kept, and what a claim must cite to reach it                                                                                               |
 | `budgetLine`                | always          | The minutes available. Last, because it is the only block carrying a value that varies                                                                      |
 
 **The base is the whole job, and an investigation adds to it.** Nothing tells the model which branch it is not on. A chat has no record tool to be told not to use, because `effectiveToolset` withholds `REPORT_TOOLS` entirely.
@@ -237,7 +237,7 @@ Everything the alert carried and nothing invented: labels, annotations, when it 
 
 ### The harness marker
 
-A provider offers two roles and neither is ours, so anything the harness says arrives in the role a person's message uses. NightWarden marks its own turns `<harness>` and **strips that marker from every source it did not write**: what the user types, what a question is answered with, what a tool returns, and what an alert carried. Stripping happens at one door, `executeTool` in `agent/tools/toolset.ts`, rather than in each tool.
+A provider offers two roles and neither is ours, so anything the harness says arrives in the role a person's message uses. NightWarden marks its own turns `<system-reminder>` and **strips that marker from every source it did not write**: what the user types, what a question is answered with, what a tool returns, and what an alert carried. Stripping happens at one door, `executeTool` in `agent/tools/toolset.ts`, rather than in each tool.
 
 The marker means something only because of the strip. Unstripped it is worse than absent: a log line on a monitored host could close the tag and open its own, so hostile text impersonates the system rather than having to argue with the model.
 

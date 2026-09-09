@@ -43,8 +43,8 @@ import type { RunnerConnection } from "../fleet/connections.js";
 import { resolveCommand } from "../fleet/transport.js";
 import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
 import { buildChatContext } from "../agent/context.js";
-import { BASE_PROMPT, INVESTIGATION_SECTION } from "../agent/prompts/system.js";
-import { REPORT_PROTOCOL } from "../agent/prompts/report.js";
+import { IDENTITY, INVESTIGATION } from "../agent/prompts/system.js";
+import { REPORT } from "../agent/prompts/report.js";
 import { connectedPlatforms } from "../agent/policy.js";
 import { randomUUID } from "node:crypto";
 import { runSession } from "../agent/loop.js";
@@ -306,13 +306,13 @@ describe("toolset assembly by fleet capabilities", () => {
       const chat = buildChatContext([], opts, false).systemPrompt;
       const investigating = buildChatContext([], opts, true).systemPrompt;
 
-      for (const section of [INVESTIGATION_SECTION, REPORT_PROTOCOL]) {
+      for (const section of [INVESTIGATION, REPORT]) {
         expect(investigating).toContain(section);
         expect(chat).not.toContain(section);
       }
       // Everything a chat is, an investigation is too: it adds, never replaces.
-      expect(investigating).toContain(BASE_PROMPT);
-      expect(chat).toContain(BASE_PROMPT);
+      expect(investigating).toContain(IDENTITY);
+      expect(chat).toContain(IDENTITY);
       expect(chat).not.toMatch(/investigat/i);
     });
   });

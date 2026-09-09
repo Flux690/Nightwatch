@@ -8,7 +8,9 @@ import type { RecordGap } from "../report.js";
 
 // Short on purpose: the tool description sits next to the decision, while this
 // competes with a long context by turn fifteen.
-export const REPORT_PROTOCOL = `
+export const REPORT = `
+
+## Keeping the record
 
 You are also keeping a record of this investigation.
 
@@ -36,10 +38,8 @@ function sentenceFor(gap: RecordGap): string {
 const RECOVERY_SENTENCE =
   "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the user should do in your recommendation. Do not repeat a write that has already run.";
 
-// Asks rather than insists: a run pushed into recording something it has not
-// tested records a guess, which the record must never hold.
-/* Each opens the message that spends one of its allowance, so the loop counts
-   what it already sent by the same words rather than a second tally. */
+// The loop counts how often it already asked by matching these opening words,
+// so each is a const rather than inlined into the message it opens.
 export const RECORD_CHECK_OPENING = "You have answered";
 export const RECORD_GAPS_OPENING = "Your investigation record is not finished.";
 
