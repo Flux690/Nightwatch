@@ -26,6 +26,20 @@ function thinkingDelta(delta: string, turn = 1): FrontendEvent {
   };
 }
 
+function retrying(sessionId = "s1"): FrontendEvent {
+  return {
+    messageId: "m1",
+    type: "RUN_RETRYING",
+    payload: {
+      sessionId,
+      attempt: 1,
+      maxAttempts: 4,
+      delaySeconds: 5,
+      summary: "Provider error (502). Retrying…",
+    },
+  };
+}
+
 // The API builds the card; these mirror what it sends.
 function itemEvent(item: TranscriptItem): FrontendEvent {
   return {
@@ -202,6 +216,40 @@ describe("applyLiveEvent — thinking", () => {
     items = applyLiveEvent(items, textDelta("Answer."), "s1");
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: "agent_text", text: "Answer." });
+  });
+});
+
+describe("applyLiveEvent — a retry restarts the turn's stream", () => {
+  it("drops the partial reasoning and text so the re-stream replaces it", () => {
+    let items: TranscriptItem[] = [];
+    items = applyLiveEvent(items, thinkingDelta("Half a thou"), "s1");
+    items = applyLiveEvent(items, textDelta("The api container was OOM"), "s1");
+    items = applyLiveEvent(items, retrying(), "s1");
+    expect(items).toHaveLength(0);
+
+    items = applyLiveEvent(items, textDelta("The api pod restarted."), "s1");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "agent_text",
+      text: "The api pod restarted.",
+    });
+  });
+
+  it("leaves a finished tool card in place, dropping only the trailing stream", () => {
+    let items: TranscriptItem[] = [];
+    items = applyLiveEvent(items, toolCallStart("tu-1"), "s1");
+    items = applyLiveEvent(items, toolCallEnd("tu-1", "ok"), "s1");
+    items = applyLiveEvent(items, textDelta("Reading the result"), "s1");
+    items = applyLiveEvent(items, retrying(), "s1");
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "tool_call", toolCallId: "tu-1" });
+  });
+
+  it("ignores a retry for a different session", () => {
+    let items = applyLiveEvent([], textDelta("keep me"), "s1");
+    items = applyLiveEvent(items, retrying("other-session"), "s1");
+    expect(items).toHaveLength(1);
   });
 });
 

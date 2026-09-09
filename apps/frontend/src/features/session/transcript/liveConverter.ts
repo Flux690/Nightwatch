@@ -90,5 +90,18 @@ export function applyLiveEvent(
     return settled.map((item, i) => (i === at ? payload.item : item));
   }
 
+  // The retry re-streams the whole turn from the start, so drop the partial
+  // reasoning and text it produced before the transient error.
+  if (env.type === "RUN_RETRYING") {
+    if (env.payload.sessionId !== sessionId) return items;
+    let end = items.length;
+    while (end > 0) {
+      const kind = items[end - 1]?.kind;
+      if (kind === "agent_text" || kind === "thinking") end--;
+      else break;
+    }
+    return end === items.length ? items : items.slice(0, end);
+  }
+
   return items;
 }

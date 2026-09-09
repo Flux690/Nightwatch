@@ -248,6 +248,7 @@ export function SessionView({
         if (sessionId !== sid) return;
         setIsRunning(true);
         setActivityNotice(summary);
+        setLiveItems((prev) => applyLiveEvent(prev, env, sid));
         return;
       }
 

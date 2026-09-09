@@ -89,9 +89,13 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Fixed
 
-- **A read the agent asks for in the same step as a change you must approve no longer runs before the change.** When a restart, an exec or another write is waiting for your approval, the run stops there: any call the agent made after it that step is answered rather than run, and the agent reissues it once you decide, so a read meant to check the change reflects the state it produced. — `0.5.12`
+- **A connection that drops while the model is still answering no longer fails the run.** A transient network fault mid-answer is waited out and retried like one that struck before the answer began: the provider's own retryable flag decides it, and a raw socket error the provider layer did not wrap is recognised too. — `0.5.13`
 
-- **The agent can no longer edit a repository file it has not actually read.** A read and the edit it informs no longer share one step: the agent reads the file, sees its contents on the following step, and edits from what it read. An edit to a file read only in the same step, or never read, is refused with a message telling it to read first. — `0.5.12`
+- **Retrying a transient error no longer doubles the streamed answer on screen.** When the run waits out a provider hiccup and re-streams the turn, the partial text and reasoning already shown are cleared first, so the answer replaces rather than appends. The saved transcript was always correct; this was the live view alone. — `0.5.13`
+
+- **A read the agent asks for in the same step as a change you must approve no longer runs before the change.** When a restart, an exec or another write is waiting for your approval, the run stops there: any call the agent made after it that step is answered rather than run, and the agent reissues it once you decide, so a read meant to check the change reflects the state it produced. — `0.5.12` (`18d829e`)
+
+- **The agent can no longer edit a repository file it has not actually read.** A read and the edit it informs no longer share one step: the agent reads the file, sees its contents on the following step, and edits from what it read. An edit to a file read only in the same step, or never read, is refused with a message telling it to read first. — `0.5.12` (`18d829e`)
 
 - **A refused citation no longer names a handle the agent was never given.** Citing a call that had not answered was refused with "e7 has not answered yet", which told the agent `e7` was legitimately its own - so it cited `e7` again next turn, when the number it actually received may have been `e8`. An evidence id is now issued with the result rather than with the request, so a call made in the same reply has no handle at all and the refusal says so plainly. — `0.5.9` (`21567b5`)
 

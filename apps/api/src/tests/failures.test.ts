@@ -48,6 +48,13 @@ describe("isTransientLLMError", () => {
     expect(isTransientLLMError(new Error("bug"))).toBe(false);
     expect(isTransientLLMError("string")).toBe(false);
   });
+
+  it("retries a raw network error the SDK did not wrap as a provider error", () => {
+    const err = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+    expect(isTransientLLMError(err)).toBe(true);
+  });
 });
 
 describe("withLLMRetries", () => {

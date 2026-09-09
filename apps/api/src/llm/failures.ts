@@ -6,14 +6,43 @@ function providerStatus(err: unknown): number | undefined | null {
   return APICallError.isInstance(err) ? err.statusCode : null;
 }
 
-// Outages, rate limits, and dropped connections are worth waiting out;
-// auth/model/request errors are not - retrying them cannot succeed.
+// The socket faults worth waiting out, the set the SDK itself marks retryable
+// when it wraps a fetch failure.
+const RETRYABLE_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+// A drop mid-stream can arrive raw rather than wrapped as an APICallError, so
+// the cause chain is walked for a network code or a fetch-failure message.
+function isRetryableNetworkError(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && RETRYABLE_NETWORK_CODES.has(code)) {
+      return true;
+    }
+    if (/fetch failed|failed to fetch/i.test(current.message)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+// Outages, rate limits and dropped connections are worth waiting out; auth,
+// model and request errors are not, since retrying them cannot succeed.
 export function isTransientLLMError(err: unknown): boolean {
-  const status = providerStatus(err);
-  if (status === null) return false;
-  return (
-    status === undefined || status === 408 || status === 429 || status >= 500
-  );
+  if (APICallError.isInstance(err)) {
+    return err.isRetryable === true || err.statusCode === undefined;
+  }
+  return isRetryableNetworkError(err);
 }
 
 interface RetryNotice {
