@@ -273,7 +273,7 @@ Of 44 tools, 36 read and 8 write. Only four suspend for approval, and the four w
 
 **A rejection is reported as a rejection.** The agent is told the user refused and that nothing changed, so it redirects rather than retrying. When the same write has already run in this investigation, the card says how many times - restarting a service a fifth time is a decision, not a mistake, so it is reported and never refused.
 
-**One gated call per turn.** A second is refused inline, because its stated reason was written against a world where the first had not run.
+**A gated call ends the turn.** It suspends the run, so nothing the model asked for after it runs; each such call is answered for reissue on the next turn, because a read after it would carry the state from before the approval and a later gated call's reason was written against a world the first had not yet changed.
 
 ### Asking a human is not a tool
 
@@ -283,7 +283,7 @@ An elicitation is offered to the model as one, because tool-calling is the only 
 
 ### Turn execution and limits
 
-`agent/turn.ts` classifies a turn's tool calls first, with no I/O, then runs them in the order the model emitted them: a run of consecutive reads goes out together, and a write runs alone. Nothing is reordered, so a read asked for after a write still sees what that write did, and a result keeps the position its call was emitted in, which is what holds evidence ids steady whatever the timing does. A single tool result may occupy **30,000 characters** (`MAX_TOOL_RESULT_CHARS`). Tools that can return a lot drop whole items to stay under it and say in the result what they left out.
+`agent/turn.ts` classifies a turn's tool calls first, with no I/O, then runs them in the order the model emitted them: a run of consecutive reads goes out together, and an auto write runs alone in its slot, so a read asked for after it still sees what it did. A gated write suspends the turn instead, so nothing the model asked for after it runs. A result keeps the position its call was emitted in, which is what holds evidence ids steady whatever the timing does. A single tool result may occupy **30,000 characters** (`MAX_TOOL_RESULT_CHARS`). Tools that can return a lot drop whole items to stay under it and say in the result what they left out.
 
 A result still over the line is refused **whole**, and the agent is told to narrow the call. It is never truncated: half a JSON result parses cleanly as a smaller truth, and a list of three failing pods cut to two reads as two failing pods with nothing about it looking wrong.
 

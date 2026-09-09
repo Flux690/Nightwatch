@@ -29,6 +29,7 @@ import { createSession } from "../session/store.js";
 import {
   appendTranscriptRows,
   getNextSeq,
+  getTranscriptRows,
 } from "../session/transcript-store.js";
 import { runSession } from "../agent/loop.js";
 import {
@@ -45,6 +46,7 @@ import type {
   DispatchedToolResult,
 } from "../agent/tools/types.js";
 import type { DiffHunk } from "../sandbox/tools/diff.js";
+import type { MessagePart } from "@nightwarden/shared";
 
 const scriptRunner = createScriptRunner();
 mockCreateProvider.mockImplementation(() => scriptRunner.create());
@@ -167,6 +169,38 @@ async function run(
   return await executeTool(tool(name), input, CTX);
 }
 
+// A read the model has already seen: the call and its clean result on the
+// transcript, which is what unlocks an edit.
+async function seedSeenRead(sessionId: string, path: string): Promise<void> {
+  const seq = await getNextSeq(sessionId);
+  const callId = `seen-${sessionId}-${seq}`;
+  await appendTranscriptRows([
+    {
+      sessionId,
+      seq,
+      kind: "assistant",
+      content: "[tool: Read]",
+      parts: [
+        {
+          type: "tool_call",
+          toolCallId: callId,
+          name: "Read",
+          input: { path },
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    },
+    {
+      sessionId,
+      seq: seq + 1,
+      kind: "user",
+      content: "read",
+      parts: [{ type: "tool_result", toolCallId: callId, output: "seen" }],
+      timestamp: new Date().toISOString(),
+    },
+  ]);
+}
+
 let cleanupDb: () => void;
 
 beforeAll(async () => {
@@ -181,6 +215,11 @@ beforeAll(async () => {
     repoOwner: "acme",
     repoName: "api",
     tokenExpiresAt: null,
+  });
+  await createSession({
+    sessionId: SESSION_ID,
+    title: "t",
+    createdAt: new Date().toISOString(),
   });
 });
 
@@ -227,6 +266,7 @@ describe("repo tools through registry dispatch", () => {
     expect(read.isError).toBeUndefined();
     expect(read.content).toContain("1\tconst a = 1;");
 
+    await seedSeenRead(SESSION_ID, "src/app.ts");
     const edit = await run("Edit", {
       path: "src/app.ts",
       old_string: "const a = 1;",
@@ -263,19 +303,52 @@ describe("repo tools through registry dispatch", () => {
     expect(result.content).toContain("Read");
   });
 
+  it("refuses an edit to a file only read in the same turn, before the result returns", async () => {
+    const sessionId = "aaaabbbb-0000-4000-8000-0000000000ed";
+    scriptRunner.setScript([
+      {
+        toolUses: [
+          { toolCallId: "r1", name: "Read", input: { path: "src/app.ts" } },
+          {
+            toolCallId: "e1",
+            name: "Edit",
+            input: {
+              path: "src/app.ts",
+              old_string: "const a = 1;",
+              new_string: "const a = 42;",
+            },
+          },
+        ],
+        text: "",
+      },
+      { toolUses: [], text: "Done." },
+    ]);
+    await seedChatSession(sessionId, "fix the repo");
+    await runSession({ sessionId, userMessage: "fix the repo" });
+
+    const parts = (await getTranscriptRows(sessionId)).flatMap((r) => r.parts);
+    const edit = parts.find(
+      (p): p is Extract<MessagePart, { type: "tool_result" }> =>
+        p.type === "tool_result" && p.toolCallId === "e1",
+    );
+    expect(edit?.isError).toBe(true);
+    expect(edit?.output).toContain("same turn");
+  });
+
   it("keeps the reads it made when the workspace is provisioned again", async () => {
-    // This session's workspace has never existed, so its readPaths can only have
-    // come from the transcript - which is the point.
+    // This session's workspace has never existed, so the seen read can only
+    // come from the transcript result below - which is the point.
     const resumed = "aaaabbbb-0000-4000-8000-0000000000ff";
     await createSession({
       sessionId: resumed,
       title: "t",
       createdAt: new Date().toISOString(),
     });
+    const seq = await getNextSeq(resumed);
     await appendTranscriptRows([
       {
         sessionId: resumed,
-        seq: await getNextSeq(resumed),
+        seq,
         kind: "assistant",
         content: "[tool: Read]",
         parts: [
@@ -284,6 +357,20 @@ describe("repo tools through registry dispatch", () => {
             toolCallId: "tu-earlier-read",
             name: "Read",
             input: { path: "package.json" },
+          },
+        ],
+        timestamp: new Date().toISOString(),
+      },
+      {
+        sessionId: resumed,
+        seq: seq + 1,
+        kind: "user",
+        content: "read",
+        parts: [
+          {
+            type: "tool_result",
+            toolCallId: "tu-earlier-read",
+            output: "seen",
           },
         ],
         timestamp: new Date().toISOString(),
@@ -300,6 +387,7 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("fails loudly on a non-unique old_string and honours replace_all", async () => {
+    await seedSeenRead(SESSION_ID, "src/app.ts");
     const ambiguous = await run("Edit", {
       path: "src/app.ts",
       old_string: '"OLD"',

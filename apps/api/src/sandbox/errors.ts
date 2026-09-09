@@ -33,12 +33,17 @@ export class GitOperationError extends Error {
   }
 }
 
-// Read-before-edit guard: mutating a file never read this session is refused.
-// The message doubles as the corrective tool error the model sees.
+// Refused until the file's read result has reached the model; the message
+// doubles as the corrective tool error the model reads.
 export class ReadRequiredError extends Error {
-  constructor(readonly path: string) {
+  constructor(
+    readonly path: string,
+    sameTurn = false,
+  ) {
     super(
-      `${path} has not been read this session. Read it with Read before modifying it.`,
+      sameTurn
+        ? `${path} was read in this same turn, so its result has not reached you yet: a tool result only arrives in your next message. A read and the change that depends on it cannot share a turn. Read ${path}, then change it in your next turn against what the read returned.`
+        : `${path} has not been read in this conversation, so its contents are not in front of you. Read ${path} with the Read tool first, then change it against what the read returned.`,
     );
     this.name = "ReadRequiredError";
   }

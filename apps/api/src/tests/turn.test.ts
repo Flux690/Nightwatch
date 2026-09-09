@@ -112,27 +112,35 @@ describe("how a turn's tool calls are executed", () => {
     ]);
   });
 
-  // The second is refused where it was asked, so every call still gets an answer.
-  it("suspends on the first gated call and refuses a second inline", async () => {
+  // Once a gated call suspends the turn nothing asked for after it runs, so a
+  // read meant to see the write's effect is answered for reissue, never stale.
+  it("suspends on the first gated call and refuses everything after it", async () => {
     const log: string[] = [];
     const offered = offering(
-      tracked("read", "read", 1, log),
-      { ...tracked("gateA", "write", 1, log), policy: "approve" },
-      { ...tracked("gateB", "write", 1, log), policy: "approve" },
+      tracked("before", "read", 1, log),
+      { ...tracked("gate", "write", 1, log), policy: "approve" },
+      tracked("after", "read", 1, log),
+      { ...tracked("gate2", "write", 1, log), policy: "approve" },
     );
 
     const { toolResults, gated } = await run(offered, [
-      "gateA",
-      "read",
-      "gateB",
+      "before",
+      "gate",
+      "after",
+      "gate2",
     ]);
 
-    expect(gated?.tool.toolCallId).toBe("tu-gateA");
-    expect(log).not.toContain("gateA:start");
-    expect(toolResults.map((r) => r.toolCallId)).toEqual([
-      "tu-read",
-      "tu-gateB",
-    ]);
-    expect(toolResults[1]?.isError).toBe(true);
+    expect(gated?.tool.toolCallId).toBe("tu-gate");
+    // The read before the gate ran; the gate and everything after it did not.
+    expect(log).toContain("before:end");
+    expect(log).not.toContain("gate:start");
+    expect(log).not.toContain("after:start");
+    expect(log).not.toContain("gate2:start");
+
+    const byId = new Map(toolResults.map((r) => [r.toolCallId, r]));
+    expect(byId.get("tu-before")?.isError).toBeUndefined();
+    expect(byId.get("tu-after")?.isError).toBe(true);
+    expect(byId.get("tu-after")?.content).toContain("next turn");
+    expect(byId.get("tu-gate2")?.isError).toBe(true);
   });
 });

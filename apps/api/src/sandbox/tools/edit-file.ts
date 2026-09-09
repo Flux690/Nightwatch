@@ -32,9 +32,9 @@ export async function editRepoFile(
 ): Promise<FileChangeResult> {
   const abs = resolveRepoPath(ws.dir, input.path);
   await assertContained(ws.dir, abs);
-  if (!ws.readPaths.has(repoKey(input.path))) {
-    throw new ReadRequiredError(input.path);
-  }
+  const { seen, pending } = await ws.readState();
+  const key = repoKey(input.path);
+  if (!seen.has(key)) throw new ReadRequiredError(input.path, pending.has(key));
   if (input.old_string.length === 0) {
     throw new Error("old_string must not be empty.");
   }

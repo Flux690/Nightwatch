@@ -70,9 +70,9 @@ export interface WorkspaceOptions {
       patch: { title: string; body: string },
     ): Promise<void>;
   };
-  // Supplied by the host, which has the transcript: without them the next edit
-  // is refused for a file the model's own context says it read.
-  readPaths?(): Promise<string[]>;
+  // Supplied by the host, which has the transcript: the seen set unlocks an
+  // edit, and the pending set names a read still waiting for its result.
+  readState?(): Promise<{ seen: string[]; pending: string[] }>;
   onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
 }
@@ -87,9 +87,9 @@ export interface Workspace {
   readonly sessionId: string;
   readonly dir: string;
   readonly branch: string;
-  // Backs the read-before-edit guard, holding canonical repo-relative names.
-  // Per session by construction, because the workspace is.
-  readonly readPaths: Set<string>;
+  // Backs the read-before-edit guard, read from the transcript per call: seen
+  // paths unlock an edit, pending ones name a read still awaiting its result.
+  readState(): Promise<{ seen: Set<string>; pending: Set<string> }>;
   readonly options: WorkspaceOptions;
   exec(
     command: string,
@@ -276,7 +276,10 @@ async function provisionEntry(
     sessionId,
     dir,
     branch: options.branch,
-    readPaths: new Set<string>((await options.readPaths?.()) ?? []),
+    async readState() {
+      const state = (await options.readState?.()) ?? { seen: [], pending: [] };
+      return { seen: new Set(state.seen), pending: new Set(state.pending) };
+    },
     options,
     async exec(command, opts) {
       const result = await execInContainer(containerId, command, opts);

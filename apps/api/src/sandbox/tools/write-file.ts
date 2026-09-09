@@ -24,14 +24,15 @@ export async function writeRepoFile(
   } catch {
     // New file: creation needs no prior read - there is nothing to have read.
   }
-  if (existing !== null && !ws.readPaths.has(repoKey(input.path))) {
-    throw new ReadRequiredError(input.path);
+  if (existing !== null) {
+    const { seen, pending } = await ws.readState();
+    const key = repoKey(input.path);
+    if (!seen.has(key))
+      throw new ReadRequiredError(input.path, pending.has(key));
   }
 
   await mkdir(dirname(abs), { recursive: true });
   await writeFile(abs, input.content, "utf8");
-  // The agent knows exactly what it wrote; a follow-up edit needs no re-read.
-  ws.readPaths.add(repoKey(input.path));
   return {
     path: input.path,
     hunks: computeDiffHunks(existing, input.content),

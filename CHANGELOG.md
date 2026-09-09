@@ -24,7 +24,7 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
-- **The reads in one turn now run together.** An investigation that asks for a metrics range, a log window and a container's state in the same step used to wait for each in turn, so the step took as long as all of them added up; it now takes about as long as the slowest one. Only reads share a step: a write still runs on its own, in the order the agent asked for it, so anything it does is visible to whatever the agent asked for next. — `0.5.11`
+- **The reads in one turn now run together.** An investigation that asks for a metrics range, a log window and a container's state in the same step used to wait for each in turn, so the step took as long as all of them added up; it now takes about as long as the slowest one. Only reads share a step: a write still runs on its own, in the order the agent asked for it, so anything it does is visible to whatever the agent asked for next. — `0.5.11` (`107aafa`)
 
 - **What a model can do is read when a run needs it, not remembered from when you saved it.** The context window, the output ceiling, the effort ladder and compaction support were copied onto the provider row the moment you picked a model, and never refreshed. Saving while models.dev was briefly unreachable left compaction silently off for good, with nothing on screen saying so and re-saving the only cure; a model that later gained a larger window kept the old one. All four now come from the catalogue at the point a run resolves, cached for an hour, so the answer is what the provider publishes today. **Your provider's own endpoint is now the source for everything it publishes** and models.dev fills the rest - Anthropic states its window, output cap, effort ladder and compaction support, OpenRouter states its window, completion cap and effort ladder, and OpenAI publishes none of it. Nothing to re-save; the four columns are gone. — `0.5.10` (`1ba33b5`)
 
@@ -88,6 +88,10 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 - An alert label can no longer close the harness tag and speak as NightWarden. Anything the harness sends the model is stripped of the marker first, so text arriving from a monitored host reaches the model as data rather than as an instruction wearing the system's voice. — `0.3.157` (`bea9083`)
 
 ### Fixed
+
+- **A read the agent asks for in the same step as a change you must approve no longer runs before the change.** When a restart, an exec or another write is waiting for your approval, the run stops there: any call the agent made after it that step is answered rather than run, and the agent reissues it once you decide, so a read meant to check the change reflects the state it produced. — `0.5.12`
+
+- **The agent can no longer edit a repository file it has not actually read.** A read and the edit it informs no longer share one step: the agent reads the file, sees its contents on the following step, and edits from what it read. An edit to a file read only in the same step, or never read, is refused with a message telling it to read first. — `0.5.12`
 
 - **A refused citation no longer names a handle the agent was never given.** Citing a call that had not answered was refused with "e7 has not answered yet", which told the agent `e7` was legitimately its own - so it cited `e7` again next turn, when the number it actually received may have been `e8`. An evidence id is now issued with the result rather than with the request, so a call made in the same reply has no handle at all and the refusal says so plainly. — `0.5.9` (`21567b5`)
 

@@ -63,37 +63,41 @@ async function branchNameFor(sessionId: string): Promise<string> {
 // not the effect it had on a workspace that no longer exists.
 const PATH_UNLOCKING_TOOLS: ReadonlySet<string> = new Set(["Read", "Write"]);
 
-// Rebuilt from the transcript, so a re-provisioned workspace does not make the
-// model reread. Only a clean answer showed it anything.
-async function readPathsFor(sessionId: string): Promise<string[]> {
+// The read state is the transcript's own: a path is seen once a clean Read or
+// Write result is on the record, and pending while its call has not answered.
+async function readStateFor(
+  sessionId: string,
+): Promise<{ seen: string[]; pending: string[] }> {
   const rows = await getTranscriptRows(sessionId);
-  // Any outcome at all means the call did not answer cleanly, `partial`
-  // included: a fan-out that half answered showed the model half a file.
-  const failed = new Set(
-    rows.flatMap((row) =>
-      row.parts.flatMap((part) =>
-        part.type === "tool_result" && part.isError === true
-          ? [part.toolCallId]
-          : [],
-      ),
-    ),
-  );
-  const paths: string[] = [];
+  const isError = new Map<string, boolean>();
   for (const row of rows) {
     for (const part of row.parts) {
-      if (part.type !== "tool_call") continue;
-      if (!PATH_UNLOCKING_TOOLS.has(part.name)) continue;
-      if (failed.has(part.toolCallId)) continue;
-      const path = part.input["path"];
-      if (typeof path !== "string") continue;
-      try {
-        paths.push(repoKey(path));
-      } catch {
-        // An unusable path never unlocked anything in the first place.
+      if (part.type === "tool_result") {
+        isError.set(part.toolCallId, part.isError === true);
       }
     }
   }
-  return paths;
+  const seen: string[] = [];
+  const pending: string[] = [];
+  for (const row of rows) {
+    for (const part of row.parts) {
+      if (part.type !== "tool_call" || !PATH_UNLOCKING_TOOLS.has(part.name)) {
+        continue;
+      }
+      const path = part.input["path"];
+      if (typeof path !== "string") continue;
+      let key: string;
+      try {
+        key = repoKey(path);
+      } catch {
+        continue;
+      }
+      const errored = isError.get(part.toolCallId);
+      if (errored === undefined) pending.push(key);
+      else if (!errored) seen.push(key);
+    }
+  }
+  return { seen, pending };
 }
 
 async function workspaceOptionsFor(
@@ -122,7 +126,7 @@ async function workspaceOptionsFor(
     network: config.sandboxNetwork,
     allowlistHosts: config.sandboxAllowlistHosts,
     proxyConfigDir: proxyDir(),
-    readPaths: async () => await readPathsFor(sessionId),
+    readState: async () => await readStateFor(sessionId),
     onStatus: (stage) => publishSandboxStatus({ sessionId, stage }),
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {

@@ -16,8 +16,8 @@ interface TurnOutcome {
   // One per non-gated tool_use, so every block is answered even when a later one
   // suspends. Each carries whether its tool failed, which the record stores.
   toolResults: ToolResult[];
-  // The single gated call to suspend on, or null if the turn had none. At most
-  // one per turn; subsequent gated calls are rejected inline.
+  // The single gated call to suspend on, or null if the turn had none. The turn
+  // suspends there, so every call asked for after it is answered for reissue.
   gated: { tool: ToolUse; kind: GateKind } | null;
   // Names this turn asked for and did not get. The loop counts them across
   // turns, because one turn cannot see that it is the fourth to ask.
@@ -80,6 +80,12 @@ function unavailableMessage(
   return `${what}${suggestion}${repeat} Do not ask for it again. What you do have: ${offered.join(", ")}.`;
 }
 
+// Answered for every call asked for after the turn's gated one: the run suspends
+// there, so each is reissued next turn once the gate resolves.
+function notRunAfterGate(callName: string, gatedName: string): string {
+  return `${callName} did not run. Earlier in this turn ${gatedName} paused the run to wait for you, so the run stopped before ${callName}. Call ${callName} again in your next turn, once ${gatedName} is resolved.`;
+}
+
 /* One step per tool_use, decided before anything runs. A gate contributes no
    result: the loop suspends on it and the resume answers it. */
 type Step =
@@ -111,24 +117,21 @@ export async function processToolUses(params: {
     ...offered.elicitations.map((e) => e.schema.name),
   ];
 
-  // Only one gate per turn, so every tool_use in this assistant message still
-  // gets a tool_result rather than the conversation being left unanswerable.
-  const gateOrReject = (call: ToolUse, kind: GateKind): Step => {
+  for (const tool of toolUses) {
+    // A gated call suspends the whole turn, so nothing asked for after it runs;
+    // each is answered here so the model can reissue it once the gate resolves.
     if (gated !== null) {
-      return {
+      steps.push({
         kind: "answer",
         result: {
-          toolCallId: call.toolCallId,
-          content: "Another gated action is pending. Retry after it resolves.",
+          toolCallId: tool.toolCallId,
+          content: notRunAfterGate(tool.name, gated.tool.name),
           isError: true,
         },
-      };
+      });
+      continue;
     }
-    gated = { tool: call, kind };
-    return { kind: "gate" };
-  };
 
-  for (const tool of toolUses) {
     // Resolve against the effective set, not the full registry, so a tool stripped
     // by fleet providers or integrations never reaches the gate.
     const entry = offered.tools.find((t) => t.schema.name === tool.name);
@@ -154,7 +157,8 @@ export async function processToolUses(params: {
           });
           continue;
         }
-        steps.push(gateOrReject(tool, "clarification"));
+        gated = { tool, kind: "clarification" };
+        steps.push({ kind: "gate" });
         continue;
       }
       refused.push(tool.name);
@@ -175,8 +179,8 @@ export async function processToolUses(params: {
     }
 
     if (resolvePolicy(entry, tool.input) === "approve") {
-      // Nothing to reserve: the approve path reads the same walk.
-      steps.push(gateOrReject(tool, "approval"));
+      gated = { tool, kind: "approval" };
+      steps.push({ kind: "gate" });
       continue;
     }
 
