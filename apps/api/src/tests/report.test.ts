@@ -17,7 +17,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 import type { ProviderMessage } from "../llm/types.js";
-import { runSession } from "../agent/loop.js";
+import { runSession } from "../agent/loop/run-session.js";
 import {
   gatedCalls,
   isCitable,
@@ -38,7 +38,7 @@ import {
   getTranscriptRows,
 } from "../session/transcript-store.js";
 import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
-import { buildSessionMeta } from "../agent/loop.js";
+import { buildSessionMeta } from "../agent/loop/run-session.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import {
   registerRunner,

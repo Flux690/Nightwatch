@@ -17,7 +17,7 @@ import {
   getSession,
   sessionExists,
 } from "./store.js";
-import { buildSessionMeta } from "../agent/loop.js";
+import { buildSessionMeta } from "../agent/loop/run-session.js";
 import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
 import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";

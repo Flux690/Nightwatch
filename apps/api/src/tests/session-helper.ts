@@ -3,7 +3,7 @@ import type { NormalizedAlert, SessionMeta } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
 import { getAuth } from "../auth/instance.js";
 import { getDb } from "../db.js";
-import { buildSessionMeta } from "../agent/loop.js";
+import { buildSessionMeta } from "../agent/loop/run-session.js";
 import { dispatcher } from "../dispatcher.js";
 import { enqueueAlerts } from "../session/alerts-store.js";
 import { createSession, openSessionForGroup } from "../session/store.js";

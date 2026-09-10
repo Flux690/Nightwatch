@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
-import type { RunSessionInput, RunOutcome } from "../agent/loop.js";
+import type { RunSessionInput, RunOutcome } from "../agent/loop/run-session.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { updateConfig } from "../config/store.js";
 import { enqueueAlerts, queueDepth } from "../session/alerts-store.js";

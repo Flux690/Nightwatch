@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { processToolUses } from "../agent/turn.js";
+import { processToolUses } from "../agent/loop/turn.js";
 import { logger } from "../logger.js";
 import type { OfferedToolset } from "../agent/tools/toolset.js";
 import type { ToolName } from "@nightwarden/shared";

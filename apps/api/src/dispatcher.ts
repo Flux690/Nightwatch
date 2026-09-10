@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { buildSessionMeta, runSession } from "./agent/loop.js";
-import type { RunSessionInput, RunOutcome } from "./agent/loop.js";
+import { buildSessionMeta, runSession } from "./agent/loop/run-session.js";
+import type { RunSessionInput, RunOutcome } from "./agent/loop/run-session.js";
 import {
   appendSessionAlert,
   oldestQueuedGroup,

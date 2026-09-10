@@ -47,7 +47,7 @@ import { IDENTITY, INVESTIGATION } from "../agent/prompts/system.js";
 import { REPORT } from "../agent/prompts/report.js";
 import { connectedPlatforms } from "../agent/policy.js";
 import { randomUUID } from "node:crypto";
-import { runSession } from "../agent/loop.js";
+import { runSession } from "../agent/loop/run-session.js";
 import { seedChatSession } from "./session-helper.js";
 import {
   deleteLokiIntegration,

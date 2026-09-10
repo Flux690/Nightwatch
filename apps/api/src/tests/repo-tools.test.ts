@@ -31,7 +31,7 @@ import {
   getNextSeq,
   getTranscriptRows,
 } from "../session/transcript-store.js";
-import { runSession } from "../agent/loop.js";
+import { runSession } from "../agent/loop/run-session.js";
 import {
   effectiveToolset,
   executeTool,
