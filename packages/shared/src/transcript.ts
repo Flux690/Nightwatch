@@ -80,6 +80,9 @@ export interface ReportCardItem {
   kind: "report_card";
   id: string;
   state: { phase: "building" | "ready" | "failed" };
+  // The report's own headline, carried so the card names what it opens. Present
+  // once a report stands; absent on a first build and on a failure.
+  headline?: string;
 }
 
 // One row of the candidate board: what was weighed, where it stands, and the

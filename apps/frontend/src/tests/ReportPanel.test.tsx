@@ -191,7 +191,9 @@ describe("ReportPanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "GetRecentChanges" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "GetRecentChanges" })[0]!,
+    );
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
@@ -212,14 +214,15 @@ describe("ReportPanel", () => {
 
     expect(screen.getByText("What held up")).toBeInTheDocument();
     expect(screen.getByText("Ruled out")).toBeInTheDocument();
-    // The heading says it, so the row beneath does not repeat "Disproven".
+    // Each finding carries its verdict as a heading: the standing one reads
+    // "Root cause", the dismissed one "Disproven".
     expect(screen.getByText("Root cause")).toBeInTheDocument();
-    expect(screen.queryByText("Disproven")).not.toBeInTheDocument();
+    expect(screen.getByText("Disproven")).toBeInTheDocument();
   });
 
-  // Where the run changed its mind is part of what happened, so a replaced
-  // claim is marked and moved down rather than taken off the page.
-  it("keeps a replaced claim on the page, marked and below the one that stands", () => {
+  // Where the run changed its mind is part of what happened, so a superseded
+  // claim moves into its own section below the standing one, never off the page.
+  it("moves a superseded claim into its own section below the standing one", () => {
     render(
       panel({
         record: {
@@ -240,7 +243,7 @@ describe("ReportPanel", () => {
     const standing = screen.getByText("The query is unindexed");
     const replaced = screen.getByText("The pool leaks");
     expect(replaced).toBeInTheDocument();
-    expect(screen.getByText("replaced")).toBeInTheDocument();
+    expect(screen.getByText("Superseded")).toBeInTheDocument();
     expect(
       (standing.compareDocumentPosition(replaced) &
         Node.DOCUMENT_POSITION_FOLLOWING) !==

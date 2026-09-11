@@ -77,12 +77,17 @@ function priorRunsOf(
 async function reportCard(sessionId: string): Promise<TranscriptItem | null> {
   const session = await getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
-  if ((await getRecord(sessionId))?.report != null) {
+  const report = (await getRecord(sessionId))?.report ?? null;
+  if (report != null) {
     // A run in flight writes this again over the same column, so without the
     // building state a follow-up reads as finished the moment it starts.
-    return (await isRunning(sessionId))
-      ? { kind: "report_card", id: "report", state: { phase: "building" } }
-      : { kind: "report_card", id: "report", state: { phase: "ready" } };
+    const phase = (await isRunning(sessionId)) ? "building" : "ready";
+    return {
+      kind: "report_card",
+      id: "report",
+      state: { phase },
+      headline: report.headline,
+    };
   }
   if ((await isRunning(sessionId)) || (await hasPendingHumanInput(sessionId)))
     return null;

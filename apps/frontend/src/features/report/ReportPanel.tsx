@@ -22,18 +22,18 @@ import { clock, elapsed, zoneName } from "@/shared/lib/time";
 import { CitationChip } from "./CitationChip.js";
 import { Evidence } from "./Evidence.js";
 
-// Colour marks the two verdicts that change what a user does next. The other
-// standing verdicts take full ink; only what the run discarded is muted.
+// Colour ranks a verdict: the root cause takes the accent, the other standing
+// verdicts full ink, and a dismissed one grey.
 const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
-  root_cause: { label: "Root cause", className: "text-ok" },
-  trigger: { label: "Trigger", className: "text-ok" },
+  root_cause: { label: "Root cause", className: "text-primary-ink" },
+  trigger: { label: "Trigger", className: "text-foreground" },
   contributing_factor: {
     label: "Contributing factor",
     className: "text-foreground",
   },
   symptom: { label: "Symptom", className: "text-foreground" },
-  disproven: { label: "Disproven", className: "text-muted-foreground" },
-  untestable: { label: "Untestable", className: "text-muted-foreground" },
+  disproven: { label: "Disproven", className: "text-ink-subtle" },
+  untestable: { label: "Untestable", className: "text-ink-subtle" },
 };
 
 const TIMELINE_ID = "report-timeline";
@@ -50,8 +50,8 @@ function BandHeading({
   );
 }
 
-/* Three tiers of space, so the page has a rhythm to read by: a rule with 48
-   above it at a band, 32 at a section, and 8 to 12 within one. */
+// Space and a heading set a section apart, not a rule; the heading carries the
+// break.
 function Band({
   heading,
   children,
@@ -60,7 +60,7 @@ function Band({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="mt-8 border-t border-border pt-4">
+    <section className="mt-12">
       <BandHeading>{heading}</BandHeading>
       {children}
     </section>
@@ -246,7 +246,9 @@ function Facts({
   span: string | null;
 }): React.JSX.Element | null {
   const leading = principalFindings(record.findings)[0] ?? null;
-  const ruledOut = record.findings.filter((f) => f.verdict === "disproven");
+  const ruledOut = record.findings.filter(
+    (f) => f.verdict === "disproven" || f.verdict === "untestable",
+  );
   const approved = decisions.filter((call) => call.decision === "approved");
 
   const clauses: React.ReactNode[] = [];
@@ -337,15 +339,13 @@ export function ReportPanel({
   if (record === null) {
     return (
       <div className="mx-auto w-full max-w-report px-8 py-6">
-        <div className="max-w-measure">
-          <AlertBand alerts={alerts} />
-          <h1 className="m-0 mt-8 text-2xl leading-snug font-semibold tracking-title">
-            Investigation
-          </h1>
-          <p className="m-0 mt-3 text-sm text-muted-foreground">
-            The agent has not recorded a finding yet.
-          </p>
-        </div>
+        <AlertBand alerts={alerts} />
+        <h1 className="m-0 mt-8 text-2xl leading-snug font-semibold tracking-title">
+          Investigation
+        </h1>
+        <p className="m-0 mt-3 text-sm text-muted-foreground">
+          The agent has not recorded a finding yet.
+        </p>
       </div>
     );
   }
@@ -356,12 +356,16 @@ export function ReportPanel({
   const submitted = record.report ?? null;
   const ranked = rankFindings(record.findings);
   const replaced = supersededIds(record.findings);
-  // Sorted below the claims that still stand, so the leading one reads first
-  // however many times the run revised its way to it.
-  const findings = ranked
-    .filter((h) => h.verdict !== "disproven")
-    .sort((a, b) => Number(replaced.has(a.id)) - Number(replaced.has(b.id)));
-  const ruledOut = ranked.filter((h) => h.verdict === "disproven");
+  const dismissed = (v: Verdict): boolean =>
+    v === "disproven" || v === "untestable";
+  // Three homes: what the run backs, what it set aside, and what it overturned.
+  const findings = ranked.filter(
+    (h) => !dismissed(h.verdict) && !replaced.has(h.id),
+  );
+  const ruledOut = ranked.filter(
+    (h) => dismissed(h.verdict) && !replaced.has(h.id),
+  );
+  const superseded = ranked.filter((h) => replaced.has(h.id));
   const rows = timelineRows(
     submitted?.timeline ?? [],
     decisions,
@@ -407,30 +411,30 @@ export function ReportPanel({
     );
   };
 
-  // One column read downward. A margin column for two short words spent a
-  // sixth of the page on them and squeezed the statement into the rest.
-  const claim = (h: Finding): React.JSX.Element => (
-    <li
-      key={h.id}
-      className="border-t border-border py-6 first:border-t-0 first:pt-0"
-    >
-      <div className="flex items-baseline gap-3">
-        <span className={cn("text-sm", VERDICT_VIEW[h.verdict].className)}>
-          {VERDICT_VIEW[h.verdict].label}
-        </span>
-        {/* Demoted, never removed: where the run changed its mind is part of
-            what happened, and a claim that vanished cannot be audited. */}
-        {replaced.has(h.id) && (
-          <span className="text-sm text-ink-subtle">replaced</span>
+  // Verdict as a coloured heading, the claim beneath it. Demoted greys both and
+  // draws no evidence: a superseded finding keeps its place, not its weight.
+  const claim = (h: Finding, demoted = false): React.JSX.Element => (
+    <li key={h.id}>
+      <h4
+        className={cn(
+          "m-0 text-base leading-snug font-semibold tracking-heading",
+          demoted ? "text-ink-subtle" : VERDICT_VIEW[h.verdict].className,
         )}
-      </div>
-      <p className="m-0 mt-2 text-base leading-snug font-medium">
+      >
+        {VERDICT_VIEW[h.verdict].label}
+      </h4>
+      <p
+        className={cn(
+          "m-0 mt-1.5 text-base leading-snug font-medium",
+          demoted && "text-muted-foreground",
+        )}
+      >
         {h.statement}
       </p>
       {h.explanation && (
         <p className="m-0 mt-2 text-sm leading-relaxed">{h.explanation}</p>
       )}
-      {evidenceUnder(h.evidenceIds)}
+      {!demoted && evidenceUnder(h.evidenceIds)}
       {sourcesUnder(h.evidenceIds)}
     </li>
   );
@@ -451,11 +455,8 @@ export function ReportPanel({
             {findings[0].statement}
           </p>
         )}
-        {/* The one block held to a reading measure: it is the longest passage
-            on the page, and the only one with enough lines for a return sweep
-            to lose your place in. */}
         {submitted !== null && (
-          <p className="m-0 mt-3 max-w-measure text-base leading-relaxed">
+          <p className="m-0 mt-3 text-base leading-relaxed">
             {submitted.summary}
           </p>
         )}
@@ -479,6 +480,13 @@ export function ReportPanel({
         span={span}
       />
 
+      {submitted !== null && submitted.impact.trim() !== "" && (
+        <section className="mt-12">
+          <BandHeading>Impact</BandHeading>
+          <p className="m-0 text-sm leading-relaxed">{submitted.impact}</p>
+        </section>
+      )}
+
       {submitted !== null && submitted.recommendation.trim() !== "" && (
         <Band heading="Recommendation">
           <div>
@@ -486,8 +494,7 @@ export function ReportPanel({
               {submitted.recommendation}
             </p>
             {/* Named once, beside what to do, and pointing at the timeline
-                rather than repeating it: two lists of the same write reads as
-                two writes. */}
+                rather than repeating it. */}
             {approved.length > 0 && (
               <p className="m-0 mt-3 text-sm text-muted-foreground">
                 <span className="text-ok">
@@ -509,10 +516,7 @@ export function ReportPanel({
       )}
 
       {rows.length > 0 && (
-        <section
-          id={TIMELINE_ID}
-          className="mt-8 scroll-mt-6 border-t border-border pt-4"
-        >
+        <section id={TIMELINE_ID} className="mt-12 scroll-mt-6">
           <BandHeading>What happened</BandHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {rows.map((row, i) => (
@@ -526,43 +530,46 @@ export function ReportPanel({
         </section>
       )}
 
-      {submitted !== null && submitted.impact.trim() !== "" && (
-        <section className="mt-8">
-          <BandHeading>Impact</BandHeading>
-          <p className="m-0 text-sm leading-relaxed">{submitted.impact}</p>
-        </section>
-      )}
-
       {findings.length > 0 && (
         <Band heading="What held up">
-          <ul className="m-0 flex list-none flex-col p-0">
-            {findings.map(claim)}
+          <ul className="m-0 flex list-none flex-col gap-8 p-0">
+            {findings.map((h) => claim(h))}
           </ul>
         </Band>
       )}
 
       {ruledOut.length > 0 && (
-        <section className="mt-8">
-          {/* One line each, and no evidence drawn: the reader who wants the
-              proof of something the run discarded is one click from it, and
-              drawing it here is where the page's length went. */}
+        <section className="mt-12">
+          {/* Statement over reason, with the sources but no drawing: the proof
+              of a dismissal is one click away in the transcript. */}
           <BandHeading>Ruled out</BandHeading>
-          <ul className="m-0 flex list-none flex-col p-0">
+          <ul className="m-0 flex list-none flex-col gap-6 p-0">
             {ruledOut.map((h) => (
-              <li
-                key={h.id}
-                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border py-2 first:border-t-0"
-              >
-                <span className="min-w-0 flex-[2] text-sm">{h.statement}</span>
+              <li key={h.id}>
+                <h4 className="m-0 text-sm font-semibold tracking-heading text-ink-subtle">
+                  {VERDICT_VIEW[h.verdict].label}
+                </h4>
+                <p className="m-0 mt-1 text-sm font-medium text-muted-foreground">
+                  {h.statement}
+                </p>
                 {h.explanation && (
-                  <span className="min-w-0 flex-1 text-sm">
+                  <p className="m-0 mt-1.5 text-sm text-muted-foreground">
                     {h.explanation}
-                  </span>
+                  </p>
                 )}
+                {sourcesUnder(h.evidenceIds)}
               </li>
             ))}
           </ul>
         </section>
+      )}
+
+      {superseded.length > 0 && (
+        <Band heading="Superseded">
+          <ul className="m-0 flex list-none flex-col gap-8 p-0">
+            {superseded.map((h) => claim(h, true))}
+          </ul>
+        </Band>
       )}
     </div>
   );

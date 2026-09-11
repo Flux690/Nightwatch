@@ -1,16 +1,16 @@
 import { cn } from "@/shared/lib/utils";
 import type { CandidateRow } from "./types.js";
 
-// A word in the tone of where the candidate stands, so colour is never the only
-// signal. Ruled-out is struck through; the rest read by their label.
+// The same ranking as the report, with a word so colour is never the only
+// signal: accent for the cause, ink for a standing role, grey for a dismissal.
 const STATE: Record<
   CandidateRow["state"],
   { label: string; className: string; struck?: boolean }
 > = {
   open: { label: "open", className: "text-wait" },
   reopened: { label: "reopened", className: "text-run" },
-  root_cause: { label: "root cause", className: "text-ok" },
-  trigger: { label: "trigger", className: "text-ok" },
+  root_cause: { label: "root cause", className: "text-primary-ink" },
+  trigger: { label: "trigger", className: "text-foreground" },
   symptom: { label: "symptom", className: "text-foreground" },
   contributing_factor: { label: "contributing", className: "text-foreground" },
   disproven: { label: "ruled out", className: "text-ink-subtle", struck: true },

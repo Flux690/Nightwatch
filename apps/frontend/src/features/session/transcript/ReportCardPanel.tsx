@@ -8,25 +8,15 @@ import { openReport } from "./openReport.js";
 /* Drawn as a surface, not a rule. A rule read as an ending when it was always
    last; docked, it is a standing object the run keeps rewriting. */
 
-const PHASE: Record<
+// The note while there is no headline to name. A ready card carries the
+// headline instead, so it names the write-up it opens.
+const NOTE: Record<
   ReportCardItem["state"]["phase"],
-  { label: string; note: string; ink: string }
+  { note: string; ink: string }
 > = {
-  building: {
-    label: "Investigation report",
-    note: "Writing it up",
-    ink: "text-muted-foreground",
-  },
-  ready: {
-    label: "Investigation report",
-    note: "Ready to read",
-    ink: "text-foreground",
-  },
-  failed: {
-    label: "Investigation report",
-    note: "Not written",
-    ink: "text-fail",
-  },
+  building: { note: "Writing it up", ink: "text-muted-foreground" },
+  ready: { note: "Ready to read", ink: "text-foreground" },
+  failed: { note: "Not written", ink: "text-fail" },
 };
 
 export function ReportCardPanel({
@@ -39,7 +29,8 @@ export function ReportCardPanel({
   onRetry?: () => void;
 }): React.JSX.Element {
   const phase = item.state.phase;
-  const { label, note, ink } = PHASE[phase];
+  const { note, ink } = NOTE[phase];
+  const headline = phase === "ready" ? item.headline : undefined;
 
   return (
     <div
@@ -52,10 +43,18 @@ export function ReportCardPanel({
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className={cn("text-xs", ink, phase === "building" && "shimmer")}>
-          {note}
-        </span>
+        <span className="text-xs text-ink-subtle">Investigation report</span>
+        {headline !== undefined ? (
+          <span className="line-clamp-2 text-sm font-medium text-foreground">
+            {headline}
+          </span>
+        ) : (
+          <span
+            className={cn("text-xs", ink, phase === "building" && "shimmer")}
+          >
+            {note}
+          </span>
+        )}
       </div>
       {/* Ready waits to be clicked: a run ending must not swap the view out
           from under whoever is mid-sentence. */}

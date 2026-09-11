@@ -301,6 +301,8 @@ An investigation moves through phases, and the harness decides which turn is whi
 
 Testing turns hold the full toolset. Whenever the set of open candidates changes - a finding settles one, a new one opens, or a supersession reopens one - the harness names the open candidates again, so the ones still to test stay in view through a long chain of reads. Before the report, and once where any candidate exists, a **falsification turn** runs: the harness lays out every candidate, its verdict, and what the model itself said would prove it false, and asks the model to break its own conclusions with the full toolset in hand. A finding recorded there can supersede an earlier one and reopen its candidate.
 
+At each stage - gathering evidence, weighing the candidates, testing its own conclusions - the `INVESTIGATION` block asks the model to open with one sentence naming what it is about to do, so the transcript carries the reasoning in the model's own voice rather than the harness's.
+
 ### What a model can do
 
 `provider_config` holds the choices: the model, the base URL, the encrypted key and the reasoning level. A model's context window, output ceiling, effort ladder and compaction support come from the catalogue, resolved when a run reaches `checkLLMReadiness`, so each run describes the model as it is published that day.
@@ -348,7 +350,7 @@ It runs in the same context as the investigation: the model has just done the wo
 
 ### The report card
 
-The door to the write-up, docked beside the chat input rather than drawn in the transcript: _building_, then _ready_, or _failed_ with a Try again. It is not a message. A message is fixed the moment it is sent and the report is not, so no position among the messages is right: written where it happened it goes stale, pushed last it sits underneath a later question. Docked, it is out of the ordering entirely, and it sits above a pending approval so the thing waiting on an answer stays nearest the input. Ready waits to be clicked, because a run ending must not move the page under whoever is reading it.
+The door to the write-up, docked beside the chat input rather than drawn in the transcript: _building_, then _ready_, or _failed_ with a Try again. A ready card carries the report's headline as its subheading, so it names the write-up it opens. It is not a message. A message is fixed the moment it is sent and the report is not, so no position among the messages is right: written where it happened it goes stale, pushed last it sits underneath a later question. Docked, it is out of the ordering entirely, and it sits above a pending approval so the thing waiting on an answer stays nearest the input. Ready waits to be clicked, because a run ending must not move the page under whoever is reading it.
 
 ---
 

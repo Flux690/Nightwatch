@@ -273,10 +273,14 @@ describe("TranscriptItemRenderer", () => {
   });
 
   describe("report_card", () => {
-    const card = (phase: "building" | "ready" | "failed"): TranscriptItem => ({
+    const card = (
+      phase: "building" | "ready" | "failed",
+      headline?: string,
+    ): TranscriptItem => ({
       kind: "report_card",
       id: "report",
       state: { phase },
+      ...(headline !== undefined && { headline }),
     });
 
     it("says the report is being written while the turn is in flight", () => {
@@ -304,6 +308,17 @@ describe("TranscriptItemRenderer", () => {
       await user.click(screen.getByRole("button", { name: /open report/i }));
       expect(opened).toHaveBeenCalled();
       window.removeEventListener("nw:open-report", opened);
+    });
+
+    // Once a report stands, its headline is the card's subheading, so the card
+    // names the write-up it opens.
+    it("names the write-up by its headline once the report stands", () => {
+      wrap(card("ready", "The connection pool on payments-api was exhausted"));
+
+      expect(
+        screen.getByText("The connection pool on payments-api was exhausted"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/ready to read/i)).not.toBeInTheDocument();
     });
 
     it("offers another attempt when the report was never written", async () => {

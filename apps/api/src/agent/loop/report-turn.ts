@@ -18,10 +18,16 @@ const MAX_REPORT_ATTEMPTS = 5;
 export function publishReportCard(
   sessionId: string,
   phase: ReportCardItem["state"]["phase"],
+  headline?: string,
 ): void {
   publishTranscriptItem({
     sessionId,
-    item: { kind: "report_card", id: "report", state: { phase } },
+    item: {
+      kind: "report_card",
+      id: "report",
+      state: { phase },
+      ...(headline !== undefined && { headline }),
+    },
   });
 }
 
@@ -127,7 +133,11 @@ export async function composeReportTurn(
     problem = reportRefusal(toolResults);
     if (problem === null) {
       log.info({ turn, attempt }, "investigation report written");
-      publishReportCard(sessionId, "ready");
+      publishReportCard(
+        sessionId,
+        "ready",
+        (await getRecord(sessionId))?.report?.headline,
+      );
       return "completed";
     }
     log.warn({ turn, attempt, problem }, "report turn refused");

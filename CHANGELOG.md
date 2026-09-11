@@ -24,7 +24,13 @@ NightWarden has not had a public release. Everything below `1.0.0` is a prelaunc
 
 ### Changed
 
-- **An investigation weighs competing explanations before it commits to one.** When an alert fires, the agent gathers evidence, then opens the candidate causes worth testing together - each with what it expects to see if it is true and what would prove it false - and tests them against the evidence rather than settling on the first plausible cause. It keeps the untested candidates in view as it works, and before it writes up it runs a pass to break its own standing conclusions. The report shows each candidate it settled, including the ones it ruled out and any it had no way to check. — `0.5.14`
+- **The investigation report reads by verdict.** Each finding leads with its verdict as a heading, coloured to rank it: the root cause in the accent, the other standing causes in full ink, and anything set aside in grey. A finding the run overturned moves to its own **Superseded** section, and a candidate it had no way to test reads under **Ruled out** beside the ones it disproved, each with the calls that settled it. Impact and the recommendation sit near the top, sections are set apart by space rather than rules, and the page holds to a narrower reading measure. — `0.5.15`
+
+- **The report card names the write-up it opens.** The card docked beside the chat carries the report's headline, so an investigation's conclusion reads from the list before the report is open. — `0.5.15`
+
+- **The agent says what it is about to do at each stage.** As an investigation moves from gathering evidence to weighing the possible causes to testing its own conclusions, it opens each stage with one sentence in its own words, so the transcript reads as a line of reasoning beside the tool calls and the candidate board. — `0.5.15`
+
+- **An investigation weighs competing explanations before it commits to one.** When an alert fires, the agent gathers evidence, then opens the candidate causes worth testing together - each with what it expects to see if it is true and what would prove it false - and tests them against the evidence rather than settling on the first plausible cause. It keeps the untested candidates in view as it works, and before it writes up it runs a pass to break its own standing conclusions. The report shows each candidate it settled, the ones it ruled out, and any it had no way to check. — `0.5.14` (`8e7598d`)
 
 - **The reads in one turn now run together.** An investigation that asks for a metrics range, a log window and a container's state in the same step used to wait for each in turn, so the step took as long as all of them added up; it now takes about as long as the slowest one. Only reads share a step: a write still runs on its own, in the order the agent asked for it, so anything it does is visible to whatever the agent asked for next. — `0.5.11` (`107aafa`)
 

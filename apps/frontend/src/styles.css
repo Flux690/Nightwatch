@@ -526,11 +526,10 @@
   /* Content measures - how wide a kind of content reads, wherever it is
      hosted. The conversation keeps its own on the Agent page and inside the
      rail, so neither host states a width on its behalf. */
-  --container-report: 920px;
+  /* Prose-dense, so it reads narrower than a page. Its own padding sets the
+     reading measure; nothing inside states a second width. */
+  --container-report: 860px;
   --container-chat: 760px;
-  /* How wide prose reads inside the report's own column, which is wider than a
-     line of text should run. */
-  --container-measure: 660px;
   /* A field whose value is a URL or a secret takes the column it sits in.
      These two are for the ones that must not: a control beside its label,
      where content cannot set the width, and a value that is simply short. */

@@ -4,6 +4,7 @@ import type {
   SessionReportResponse,
   Verdict,
 } from "@nightwarden/shared";
+import { supersededIds } from "@nightwarden/shared";
 import { targetOf } from "@/features/session/transcript/toolPresentation";
 
 // The verdict as a sentence rather than the enum, since the export is read
@@ -79,8 +80,16 @@ export function reportToMarkdown(
   }
 
   const claims = report?.record.findings ?? [];
-  const settled = claims.filter((f) => f.verdict !== "disproven");
-  const ruledOut = claims.filter((f) => f.verdict === "disproven");
+  const replaced = supersededIds(claims);
+  const dismissed = (v: Verdict): boolean =>
+    v === "disproven" || v === "untestable";
+  const held = claims.filter(
+    (f) => !dismissed(f.verdict) && !replaced.has(f.id),
+  );
+  const ruledOut = claims.filter(
+    (f) => dismissed(f.verdict) && !replaced.has(f.id),
+  );
+  const superseded = claims.filter((f) => replaced.has(f.id));
 
   // Evidence inline, because the export outlives the frontend session it came
   // from and a verdict without it is only the model's word.
@@ -106,8 +115,10 @@ export function reportToMarkdown(
         .join("\n\n"),
     ].join("\n");
 
-  if (settled.length > 0) sections.push(claimBlock("What held up", settled));
+  if (held.length > 0) sections.push(claimBlock("What held up", held));
   if (ruledOut.length > 0) sections.push(claimBlock("Ruled out", ruledOut));
+  if (superseded.length > 0)
+    sections.push(claimBlock("Superseded", superseded));
 
   // What the user released, read from the record rather than from anything
   // the model said about itself.

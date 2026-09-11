@@ -22,7 +22,7 @@ export function CitationChip({
           <Button
             variant="outline"
             size="sm"
-            className="shrink-0 rounded-full font-mono text-ink-subtle hover:border-primary-ink hover:bg-transparent hover:text-primary-ink"
+            className="shrink-0 rounded-full border-input font-mono text-ink-subtle hover:border-primary-ink hover:bg-transparent hover:text-primary-ink"
             onClick={() => revealToolCall(toolCallId)}
           />
         }
