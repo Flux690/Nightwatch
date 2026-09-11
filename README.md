@@ -53,6 +53,7 @@ NightWarden runs as one image - the API and the frontend on a single origin, wit
 
 - **Evidence behind every claim.** The report draws the exact tool result under each finding - the chart, the matching log lines, the container state, the diff - and a call that found nothing says what it searched.
 - **You approve every change.** Reads run on their own so the agent investigates without waking anyone; a restart or a command on your servers waits for you to approve it.
+- **It weighs competing explanations.** It opens the candidate causes worth testing together, tests each against the evidence, and challenges its own conclusion before it writes up - so it goes past the first plausible answer.
 - **It records what it ruled out.** The dead ends land on the report beside the cause, so the next person starts where you finished.
 - **Resolved is verified.** An investigation reads resolved once the alert that opened it clears, confirmed from your alert source's own recovery notification or its rules API.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent builds and tests a fix in an isolated sandbox, then opens a draft pull request for you to review and merge.

@@ -3,8 +3,9 @@
 
 import { z } from "zod";
 import {
-  recordHypothesis,
-  submitReport,
+  composeReport,
+  openCandidates,
+  recordFinding,
   type RecordOutcome,
 } from "../report.js";
 import { apiTool, optionalText } from "./schema.js";
@@ -14,16 +15,45 @@ import type { Tool, ToolExecuteResult } from "./types.js";
 // field, which stores a row nobody can read.
 const prose = z.string().trim().min(1);
 
-// Reasoning before conclusion: a verdict field ahead of the finding that
-// settles it makes the model commit before it explains.
-const RECORD_HYPOTHESIS_INPUT = z.object({
+const OPEN_CANDIDATES_INPUT = z.object({
+  candidates: z
+    .array(
+      z.object({
+        statement: prose.meta({
+          description:
+            "The explanation to test, stated so a tool result could settle it either way. Name the thing you mean: 'the retry loop in PR #482 exhausted the payments-api connection pool', not 'a database problem'.",
+        }),
+        ifTrue: prose.meta({
+          description:
+            "The observation you expect if this is true, written before you look. 'pool_in_use sits at its ceiling across the slowdown window.'",
+        }),
+        ifFalse: prose.meta({
+          description:
+            "The observation that would prove this false. 'pool_in_use has headroom throughout the slowdown.'",
+        }),
+        parent: optionalText.meta({
+          description:
+            "The id of the candidate this one explains, written c1, c2, when you are going a step deeper into a cause you already opened. Omit it for a candidate that stands on its own.",
+        }),
+      }),
+    )
+    .default([])
+    .meta({
+      description:
+        "The candidate explanations worth testing, opened together so you weigh them side by side rather than settling on the first. An empty list is allowed when the evidence points at a single explanation with no alternative worth testing.",
+    }),
+});
+
+// Reasoning before conclusion: the explanation sits ahead of the verdict, so the
+// model commits to what the evidence showed before it grades it.
+const RECORD_FINDING_INPUT = z.object({
   statement: prose.meta({
     description:
       "The explanation you tested, stated so that it can be proved or disproved. Name the thing you mean: a container, a file, a metric, a commit. 'Check database connectivity' says nothing; 'the cache bump in PR #482 leaks memory in payments-worker' can be tested.",
   }),
-  // Allowed to be blank: the finding is the model's reasoning, and an empty one
-  // is a thin record rather than an unreadable one.
-  finding: z.string().meta({
+  // Allowed to be blank: the explanation is the model's reasoning, and an empty
+  // one is a thin record rather than an unreadable one.
+  explanation: z.string().meta({
     description:
       "What the cited results actually showed, and why that settles it this way, in complete sentences. This is read beneath your statement by someone who was not here, so it has to explain rather than remind: quote the value, the line or the timestamp that decided it, and say what it means. Two or three sentences is usually right; a fragment is not.",
   }),
@@ -44,18 +74,23 @@ const RECORD_HYPOTHESIS_INPUT = z.object({
       "symptom",
       "contributing_factor",
       "disproven",
+      "untestable",
     ])
     .meta({
       description:
-        "'root_cause' is the underlying condition that made the failure possible. 'trigger' is the event that set it off. 'symptom' is something the real cause produced downstream. 'contributing_factor' made the failure worse or more likely without causing it. 'disproven' means you tested it and it is not so. Most published analyses identify a trigger rather than a root cause, so do not reach for 'root_cause' when 'trigger' or 'symptom' is what the evidence shows.",
+        "'root_cause' is the underlying condition that made the failure possible. 'trigger' is the event that set it off. 'symptom' is something the real cause produced downstream. 'contributing_factor' made the failure worse or more likely without causing it. 'disproven' means you tested it and it is not so. 'untestable' means you had no way to check it, which is different from disproving it. Most published analyses identify a trigger rather than a root cause, so do not reach for 'root_cause' when 'trigger' or 'symptom' is what the evidence shows.",
     }),
+  settles: optionalText.meta({
+    description:
+      "The id of the candidate this finding settles, written c1, c2, as it was given back to you when you opened it. Omit it for a finding that settles no candidate you opened.",
+  }),
   supersedes: optionalText.meta({
     description:
-      "The id of an earlier claim on this record that this one replaces, written h1, h2, h3 as it was given back to you when you recorded it. Use it only when you now believe that claim was wrong or incomplete, not merely to add to it. The claim you name is not deleted: it stays on the record beside this one, so the reader can see where you changed your mind. Omit it when this replaces nothing, which is the ordinary case.",
+      "The id of an earlier finding on this record that this one replaces, written f1, f2, as it was given back to you when you recorded it. Use it only when you now believe that finding was wrong or incomplete, not merely to add to it. The finding you name is not deleted: it stays on the record beside this one, so the reader can see where you changed your mind. Omit it when this replaces nothing, which is the ordinary case.",
   }),
 });
 
-const SUBMIT_REPORT_INPUT = z.object({
+const COMPOSE_REPORT_INPUT = z.object({
   headline: prose.meta({
     description:
       "One sentence, under about 120 characters, naming what broke and why. This is the line someone reads at three in the morning before deciding whether to get up, and often the only line they read. State the cause, not the symptom: 'the retry loop added in PR #482 exhausted the payments-api connection pool', never 'payments-api returned errors'.",
@@ -112,25 +147,36 @@ function toResult(recording: RecordOutcome): ToolExecuteResult {
 
 export const REPORT_TOOLS: Tool[] = [
   apiTool({
-    name: "RecordHypothesis",
+    name: "OpenCandidates",
     description:
-      "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis and name the one it replaces in 'supersedes', rather than trying to correct that one. RecordHypothesis records a claim by citing the tool calls whose results show that claim. RecordHypothesis reads nothing about your system, so a call to RecordHypothesis carries no evidence id, and no claim can cite a call to RecordHypothesis.",
-    input: RECORD_HYPOTHESIS_INPUT,
+      "Open the candidate explanations worth testing, each with what you expect to see if it is true and what would prove it false. Open them together so you weigh alternatives side by side rather than settling on the first plausible cause. Opening a candidate observes nothing about your system, so a call to OpenCandidates carries no evidence id and no claim can cite it.",
+    input: OPEN_CANDIDATES_INPUT,
     effect: "read",
     policy: "auto",
     citable: false,
     execute: async (input, ctx): Promise<ToolExecuteResult> =>
-      toResult(await recordHypothesis(ctx.sessionId, input)),
+      toResult(await openCandidates(ctx.sessionId, input)),
+  }),
+  apiTool({
+    name: "RecordFinding",
+    description:
+      "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. Name the candidate it settles in 'settles'. The record is append-only, so if your understanding changes later, record the new finding and name the one it replaces in 'supersedes', rather than trying to correct that one. RecordFinding records a claim by citing the tool calls whose results show that claim. RecordFinding reads nothing about your system, so a call to RecordFinding carries no evidence id, and no claim can cite a call to RecordFinding.",
+    input: RECORD_FINDING_INPUT,
+    effect: "read",
+    policy: "auto",
+    citable: false,
+    execute: async (input, ctx): Promise<ToolExecuteResult> =>
+      toResult(await recordFinding(ctx.sessionId, input)),
   }),
 ];
 
 /* Never in the toolset: offering it alongside the investigation tools would let
    a run write itself up in the middle of working. */
-export const SUBMIT_REPORT_TOOL: Tool = apiTool({
-  name: "SubmitInvestigationReport",
+export const COMPOSE_REPORT_TOOL: Tool = apiTool({
+  name: "ComposeReport",
   description:
-    "Write up the investigation you have just finished, for the user who will read it in the morning. Your findings are already on the record and are rendered beneath what you write here, so do not restate them: no verdicts, no hypotheses, no re-copied citations. Write the things the record has no room for.",
-  input: SUBMIT_REPORT_INPUT,
+    "Write up the investigation you have just finished, for the user who will read it in the morning. Your findings are already on the record and are rendered beneath what you write here, so do not restate them: no verdicts, no findings, no re-copied citations. Write the things the record has no room for.",
+  input: COMPOSE_REPORT_INPUT,
   effect: "read",
   policy: "auto",
   citable: false,
@@ -138,7 +184,7 @@ export const SUBMIT_REPORT_TOOL: Tool = apiTool({
     const { headline, affected, summary, timeline, impact, recommendation } =
       input;
     return toResult(
-      await submitReport(ctx.sessionId, {
+      await composeReport(ctx.sessionId, {
         headline,
         affected,
         summary,

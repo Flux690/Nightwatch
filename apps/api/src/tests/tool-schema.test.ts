@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { optionalText, parseInput } from "../agent/tools/schema.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
-import { SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
+import { COMPOSE_REPORT_TOOL } from "../agent/tools/report.js";
 import {
   anthropicToolSchema,
   openAIToolSchema,
@@ -15,7 +15,7 @@ import type { ToolSchema } from "../llm/types.js";
 const SCHEMAS: ToolSchema[] = [
   ...TOOL_REGISTRY.map((tool) => tool.schema),
   ...ELICITATIONS.map((elicitation) => elicitation.schema),
-  SUBMIT_REPORT_TOOL.schema,
+  COMPOSE_REPORT_TOOL.schema,
 ];
 
 /* Each provider's published list. A keyword outside its own is one that
@@ -245,11 +245,11 @@ describe("every tool schema is one a provider will accept", () => {
 
   // A generated schema takes its property order from the Zod object, so a
   // reorder there silently reorders what the model is asked for.
-  it("asks RecordHypothesis for its reasoning before its verdict", () => {
-    const record = SCHEMAS.find((s) => s.name === "RecordHypothesis");
+  it("asks RecordFinding for its reasoning before its verdict", () => {
+    const record = SCHEMAS.find((s) => s.name === "RecordFinding");
     const order = Object.keys(record?.input_schema.properties ?? {});
-    expect(order.indexOf("finding")).toBeGreaterThan(-1);
-    expect(order.indexOf("finding")).toBeLessThan(order.indexOf("verdict"));
+    expect(order.indexOf("explanation")).toBeGreaterThan(-1);
+    expect(order.indexOf("explanation")).toBeLessThan(order.indexOf("verdict"));
     expect(order.indexOf("evidenceIds")).toBeLessThan(order.indexOf("verdict"));
   });
 

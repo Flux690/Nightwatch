@@ -1,4 +1,5 @@
 import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
+import type { ToolName } from "@nightwarden/shared";
 import type { ToolDispatchContext } from "../tools/types.js";
 import {
   effectiveToolset,
@@ -12,10 +13,17 @@ import { recoveryState } from "../../verification/recovery.js";
 import {
   approvedWriteCount,
   gatedCalls,
+  openCandidateIds,
   recordGaps,
   reportIsBehind,
+  setLastStatedCandidates,
   toolCallsIn,
 } from "../report.js";
+import {
+  CANDIDATES_OPENING_MESSAGE,
+  falsificationMessage,
+  frontierMessage,
+} from "../prompts/report.js";
 import { appendErrorMessage } from "../../session/transcript-store.js";
 import {
   publishInterrupt,
@@ -23,12 +31,17 @@ import {
 } from "../../session/stream.js";
 import { toolCallCard } from "../../session/transcript.js";
 import type { PendingHumanInput } from "../../session/gate-store.js";
-import type { ChatResponse, ToolResult, ToolUse } from "../../llm/types.js";
+import type {
+  ChatResponse,
+  ToolResult,
+  ToolSchema,
+  ToolUse,
+} from "../../llm/types.js";
 import { processToolUses } from "./turn.js";
 import { turnEnding } from "./endings.js";
 import { citableAnswers } from "./guardrails.js";
 import { formatInjectedAlerts } from "./injection.js";
-import { writeReport } from "./report-turn.js";
+import { composeReportTurn } from "./report-turn.js";
 import type { RunContext, TurnResult } from "./run-state.js";
 
 // What the fleet and the connected integrations currently allow. Read together,
@@ -130,6 +143,21 @@ async function suspendOnGate(
   );
 }
 
+// Keeps the open candidates in view whenever the set changes, so the ones still
+// to test are not lost behind a long chain of reads. The set is read live.
+async function emitFrontierIfChanged(ctx: RunContext): Promise<void> {
+  const record = await getRecord(ctx.sessionId);
+  if (record === undefined) return;
+  const open = openCandidateIds(record);
+  const last = record.lastStatedCandidates;
+  const same =
+    open.length === last.length &&
+    [...open].sort().join("\n") === [...last].sort().join("\n");
+  if (same) return;
+  await setLastStatedCandidates(ctx.sessionId, open);
+  if (open.length > 0) ctx.state.sendSystemReminder(frontierMessage(record));
+}
+
 // One turn of the loop: send the conversation, read what came back, and tell the
 // driver to loop, break to the continue-request, or end with an outcome.
 export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
@@ -146,7 +174,25 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
     state.sendSystemReminder(change);
     await state.flush();
   }
-  const toolSchemas = offeredSchemas(state.offered);
+
+  // Once evidence has answered and no candidates are open, the run weighs
+  // explanations together before it looks further, forced so it cannot skip them.
+  const forceCandidates =
+    ctx.opensInvestigation &&
+    !state.candidatesOpened &&
+    state.hasAnsweredCitable;
+  let toolSchemas: ToolSchema[];
+  let forceTool: ToolName | undefined;
+  if (forceCandidates) {
+    state.sendSystemReminder(CANDIDATES_OPENING_MESSAGE);
+    await state.flush();
+    toolSchemas = offeredSchemas(state.offered).filter(
+      (s) => s.name === "OpenCandidates",
+    );
+    forceTool = "OpenCandidates";
+  } else {
+    toolSchemas = offeredSchemas(state.offered);
+  }
 
   const startedAt = Date.now();
   let response: ChatResponse;
@@ -156,6 +202,7 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
       toolSchemas,
       state.nextSeq,
       ctx.runSignal,
+      forceTool,
     );
     state.stage("assistant", response.parts);
   } catch (err) {
@@ -206,28 +253,15 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
       log.info({ turn }, "chat finished with free-form response");
       return { kind: "outcome", outcome: "completed" };
     }
-    const gaps = await recordGaps(sessionId, ctx.recordDebt.unaccounted());
+    const gaps = await recordGaps(sessionId);
     // Read, not asked: the reconciler and the resolved webhook both stamp the
     // record, so the gate never makes a network call as a run happens to end.
     const recovery = await recoveryState(sessionId);
     if (gaps.length > 0) {
       const pushback = ctx.finishGate(gaps);
       if (pushback !== null) {
-        // A gap that outlives its own pushback is a broken tool or a
-        // description the model cannot act on, not a distracted model.
-        if (pushback.repeated.length > 0) {
-          log.warn(
-            { turn, gaps: pushback.repeated },
-            "finish gate: a gap survived a pushback",
-          );
-        }
         log.info(
-          {
-            turn,
-            pushbacks: pushback.pushbacks,
-            gaps: gaps.map((g) => g.kind),
-            recovery,
-          },
+          { turn, gap: pushback.kind, count: pushback.count, recovery },
           "finish gate: record incomplete, pushing back",
         );
         state.sendSystemReminder(pushback.say);
@@ -239,20 +273,32 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
         "finish gate: request cap reached, writing up incomplete",
       );
     }
+    // The last look, when there are candidates to challenge: test what would
+    // disprove each finding that still stands before the report is composed.
+    const record = await getRecord(sessionId);
+    if (
+      !state.falsificationOffered &&
+      record !== undefined &&
+      record.candidates.length > 0
+    ) {
+      state.falsificationOffered = true;
+      state.sendSystemReminder(falsificationMessage(record));
+      await state.flush();
+      return { kind: "continue" };
+    }
     // Only a run that acted must recommend: ruling things out is a complete
     // ending, but releasing a write and going quiet leaves the user nothing.
     const gated = gatedCalls(await toolCallsIn(sessionId));
     const approvedWrites = approvedWriteCount(gated);
     /* Rewriting is lossy, so a write-up that still covers the record is kept.
        Recovery is not a reason: a cleared alert already reads as Resolved. */
-    const record = await getRecord(sessionId);
     if (record !== undefined && !reportIsBehind(record, approvedWrites)) {
       log.info({ turn }, "write-up still covers the record; keeping it");
       return { kind: "outcome", outcome: "completed" };
     }
     return {
       kind: "outcome",
-      outcome: await writeReport(
+      outcome: await composeReportTurn(
         ctx,
         approvedWrites > 0 && recovery === "unconfirmed",
         gated,
@@ -315,6 +361,9 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
   // Drained at the tool boundary, the earliest point the model can act on one,
   // as their own turn after the results.
   state.stageResults(response.toolUses, toolResults);
+  if (response.toolUses.some((t) => t.name === "OpenCandidates")) {
+    state.candidatesOpened = true;
+  }
   // Already durable: the dispatcher wrote each one when it arrived. The inbox
   // exists to tell the model, which is a separate concern from keeping it.
   const injected = ctx.drainInbox?.(sessionId) ?? [];
@@ -322,16 +371,15 @@ export async function runOneTurn(ctx: RunContext): Promise<TurnResult> {
     state.sendSystemReminder(formatInjectedAlerts(injected));
   }
 
-  const claims = ((await getRecord(sessionId))?.hypotheses ?? []).length;
+  await emitFrontierIfChanged(ctx);
+
+  const claims = ((await getRecord(sessionId))?.findings ?? []).length;
   const ask = ctx.recordDebt.check(
     claims,
     citableAnswers(response.toolUses, toolResults),
   );
   if (ask !== null) {
-    log.info(
-      { turn, unaccounted: ctx.recordDebt.unaccounted() },
-      "reads unaccounted for; asking",
-    );
+    log.info({ turn }, "reads unaccounted for; asking");
     state.sendSystemReminder(ask);
   }
   await state.flush();

@@ -353,12 +353,12 @@ describe("what the run sends a model, and what it makes of the answer", () => {
       NO_TOOLS,
       undefined,
       undefined,
-      "SubmitInvestigationReport",
+      "ComposeReport",
     );
 
     expect(model.doStreamCalls[0]?.toolChoice).toEqual({
       type: "tool",
-      toolName: "SubmitInvestigationReport",
+      toolName: "ComposeReport",
     });
   });
 

@@ -46,7 +46,7 @@ export function reportRefusal(results: readonly ToolResult[]): string | null {
   // none. The tool already told the model which field was wrong.
   const [submitted] = results;
   if (submitted === undefined) {
-    return "The report turn ended without calling SubmitInvestigationReport.";
+    return "The report turn ended without calling ComposeReport.";
   }
   return submitted.isError === true ? "The report was refused." : null;
 }

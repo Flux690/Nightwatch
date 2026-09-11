@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "../context.js";
 import type { PromptOptions } from "../prompts/system.js";
 import {
+  EMPTY_RECORD_OPENING,
+  FALSIFICATION_OPENING,
   RECORD_CHECK_OPENING,
-  RECORD_GAPS_OPENING,
+  UNTESTED_CANDIDATES_OPENING,
 } from "../prompts/report.js";
 import { highestEvidenceNumber } from "../evidence-id.js";
 import { asSystemReminder, stripSystemReminder } from "../system-reminder.js";
@@ -186,6 +188,13 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     highestEvidenceNumber(priorRows) + 1,
     seeded,
   );
+  // Recovered from the transcript so a resume continues its phases rather than
+  // reopening candidates or re-running the falsification turn.
+  state.hasAnsweredCitable = highestEvidenceNumber(priorRows) > 0;
+  state.candidatesOpened = priorRows.some((r) =>
+    r.parts.some((p) => p.type === "tool_call" && p.name === "OpenCandidates"),
+  );
+  state.falsificationOffered = spentOn(priorRows, FALSIFICATION_OPENING) > 0;
 
   // User declined a continue-request: replay the transcript and run one
   // free-form closing turn with no tools, then finish.
@@ -284,7 +293,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   /* The record belongs to the session, so its two allowances carry across a
      resume; a barren turn counts consecutive turns and starts afresh. */
-  const finishGate = finishGatePolicy(spentOn(priorRows, RECORD_GAPS_OPENING));
+  const finishGate = finishGatePolicy({
+    empty_record: spentOn(priorRows, EMPTY_RECORD_OPENING),
+    untested_candidates: spentOn(priorRows, UNTESTED_CANDIDATES_OPENING),
+  });
   const barrenTurns = barrenTurnPolicy();
   const recordDebt = recordDebtPolicy(
     opensInvestigation,

@@ -1,11 +1,14 @@
 import type {
   ApprovalStatus,
+  CandidateRow,
   ContinueCardItem,
+  InvestigationRecord,
   TranscriptRow,
   ToolCallState,
   ToolGate,
   TranscriptItem,
 } from "@nightwarden/shared";
+import { supersededIds } from "@nightwarden/shared";
 import {
   getPendingHumanInputBySessionId,
   hasPendingHumanInput,
@@ -83,8 +86,8 @@ async function reportCard(sessionId: string): Promise<TranscriptItem | null> {
   }
   if ((await isRunning(sessionId)) || (await hasPendingHumanInput(sessionId)))
     return null;
-  const hypotheses = (await getRecord(sessionId))?.hypotheses ?? [];
-  return hypotheses.length === 0
+  const findings = (await getRecord(sessionId))?.findings ?? [];
+  return findings.length === 0
     ? null
     : { kind: "report_card", id: "report", state: { phase: "failed" } };
 }
@@ -109,12 +112,38 @@ function toolCallState(
   return { phase: "complete", result };
 }
 
+// A candidate's state read live off the record: settled by a standing finding,
+// reopened when that finding was superseded, or still open.
+function candidateRows(record: InvestigationRecord): CandidateRow[] {
+  const replaced = supersededIds(record.findings);
+  return record.candidates.map((c) => {
+    const settling = record.findings.find(
+      (f) => f.settles === c.id && !replaced.has(f.id),
+    );
+    if (settling !== undefined) {
+      return {
+        statement: c.statement,
+        state: settling.verdict,
+        ...(settling.explanation.trim() !== "" && {
+          note: settling.explanation,
+        }),
+      };
+    }
+    const wasSettled = record.findings.some((f) => f.settles === c.id);
+    return { statement: c.statement, state: wasSettled ? "reopened" : "open" };
+  });
+}
+
 // Everything the frontend needs about a call is decided here, so the browser
 // never reconciles two sources against each other.
 export async function buildTranscript(
   sessionId: string,
 ): Promise<TranscriptItem[]> {
   const messages: TranscriptRow[] = await getTranscriptRows(sessionId);
+  // The board is drawn once, where OpenCandidates first ran, and shows the live
+  // state; RecordFinding and later OpenCandidates calls fold into it.
+  const record = await getRecord(sessionId);
+  let candidateCardDrawn = false;
   // Which call is waiting, and of what kind. What that call was comes from the
   // transcript rows below, which hold it already.
   const pending = (await getPendingHumanInputBySessionId(sessionId)) ?? null;
@@ -226,6 +255,24 @@ export async function buildTranscript(
           });
         }
       } else if (part.type === "tool_call") {
+        // The candidate board stands in for these: OpenCandidates draws it once,
+        // and every RecordFinding folds into it rather than printing a row.
+        if (part.name === "OpenCandidates") {
+          if (
+            !candidateCardDrawn &&
+            record !== undefined &&
+            record.candidates.length > 0
+          ) {
+            items.push({
+              kind: "candidate_card",
+              id: "candidates",
+              rows: candidateRows(record),
+            });
+            candidateCardDrawn = true;
+          }
+          continue;
+        }
+        if (part.name === "RecordFinding") continue;
         const awaiting =
           pending?.toolCallId === part.toolCallId ? pending : null;
         // "continue" cannot reach here: its id is synthetic and answers to no

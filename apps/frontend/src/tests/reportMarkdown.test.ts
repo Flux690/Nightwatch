@@ -30,20 +30,22 @@ const ON_SESSION: SessionAlert = {
 
 const RESPONSE: SessionReportResponse = {
   record: {
-    hypotheses: [
+    candidates: [],
+    lastStatedCandidates: [],
+    findings: [
       {
-        id: "h1",
+        id: "f1",
         statement: "The worker buffers each source file into memory",
         verdict: "root_cause",
-        finding: "the working set climbs with accepted job size",
+        explanation: "the working set climbs with accepted job size",
         evidenceIds: ["e-stats", "e-stats", "e-gone"],
         recordedAt: AT,
       },
       {
-        id: "h2",
+        id: "f2",
         statement: "The ffmpeg bump leaks",
         verdict: "disproven",
-        finding: "the working set was flat across that window",
+        explanation: "the working set was flat across that window",
         evidenceIds: ["e-stats"],
         recordedAt: AT,
       },
@@ -56,7 +58,7 @@ const RESPONSE: SessionReportResponse = {
       impact: "One transcode job dropped",
       recommendation: "Cap concurrency at one job per worker",
       submittedAt: AT,
-      hypothesesCoveredUpTo: "h1",
+      findingsCoveredUpTo: "f1",
       writesCoveredUpTo: 0,
     },
     updatedAt: AT,

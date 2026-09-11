@@ -1,6 +1,6 @@
 import type { GatedCall, ReportCardItem } from "@nightwarden/shared";
 import { reportRequest, reportRetry } from "../prompts/report.js";
-import { SUBMIT_REPORT_TOOL } from "../tools/report.js";
+import { COMPOSE_REPORT_TOOL } from "../tools/report.js";
 import { getRecord } from "../../session/record-store.js";
 import { appendErrorMessage } from "../../session/transcript-store.js";
 import { publishTranscriptItem } from "../../session/stream.js";
@@ -26,8 +26,8 @@ export function publishReportCard(
 }
 
 /* The final turn of an investigation: every other tool is taken away and the
-   claims ride the request, so a timeline copies call ids from nearby. */
-export async function writeReport(
+   findings ride the request, so a timeline copies call ids from nearby. */
+export async function composeReportTurn(
   ctx: RunContext,
   unrecovered: boolean,
   // Handed over rather than read again: the report turn offers one ungated
@@ -55,7 +55,7 @@ export async function writeReport(
     state.sendSystemReminder(
       problem === null
         ? reportRequest(
-            (await getRecord(sessionId))?.hypotheses ?? [],
+            (await getRecord(sessionId))?.findings ?? [],
             gated,
             unrecovered,
             /* So a follow-up revises what a previous run wrote rather than
@@ -70,12 +70,12 @@ export async function writeReport(
     try {
       written = await ctx.chat(
         state.conversation(),
-        [SUBMIT_REPORT_TOOL.schema],
+        [COMPOSE_REPORT_TOOL.schema],
         state.nextSeq,
         ctx.runSignal,
         // One tool and one job, so the turn cannot come back as prose. It has:
         // a model once wrote the report as markdown and burned an attempt.
-        SUBMIT_REPORT_TOOL.schema.name,
+        COMPOSE_REPORT_TOOL.schema.name,
       );
       state.stage("assistant", written.parts);
     } catch (err) {
@@ -113,7 +113,7 @@ export async function writeReport(
       toolUses: written.toolUses,
       // The report turn offers one tool and no way to reach a human: the record
       // is already closed, so there is nothing left to ask about.
-      offered: { tools: [SUBMIT_REPORT_TOOL], elicitations: [] },
+      offered: { tools: [COMPOSE_REPORT_TOOL], elicitations: [] },
       sessionId,
       execCtx: { sessionId, toolCallCeilingMs: ctx.toolCallCeilingMs },
       log,

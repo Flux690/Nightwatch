@@ -18,6 +18,7 @@ import type {
   AlertArrivedItem,
 } from "./types.js";
 import { ToolCall } from "./toolPresentation.js";
+import { CandidateCard } from "./CandidateCard.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
@@ -225,6 +226,8 @@ export function TranscriptItemRenderer({
           }
         />
       );
+    case "candidate_card":
+      return <CandidateCard rows={item.rows} />;
     case "report_card":
       return (
         <ReportCardPanel

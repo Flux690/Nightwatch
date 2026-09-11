@@ -137,9 +137,9 @@ describe("recovering runs a restart interrupted", () => {
   it("answers a read the crash left hanging instead of discarding the turn", async () => {
     scriptRunner.setScript([{ text: "Done.", toolUses: [] }]);
     const sessionId = await killedRun();
-    // GetRecentChanges is a read, so running it again is running it again.
+    // ListRecentGitChanges is a read, so running it again is running it again.
     await appendTranscriptRows([
-      callTurn(sessionId, 0, "tu-read", "GetRecentChanges", {}),
+      callTurn(sessionId, 0, "tu-read", "ListRecentGitChanges", {}),
     ]);
 
     await recoverDeadRuns();

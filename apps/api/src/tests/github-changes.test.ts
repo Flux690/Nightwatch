@@ -5,7 +5,7 @@ import { useTempDb } from "./temp-db.js";
 import { saveGitHubIntegration } from "../integrations/store.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
-import type { GetRecentChangesResult } from "../agent/tools/github.js";
+import type { ListRecentGitChangesResult } from "../agent/tools/github.js";
 import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 
 const FIRED_AT = "2026-07-16T12:00:00.000Z";
@@ -115,7 +115,7 @@ function commit(
   };
 }
 
-describe("GetRecentChanges through the tool dispatch", () => {
+describe("ListRecentGitChanges through the tool dispatch", () => {
   let cleanupDb: () => void;
   let tool: Tool;
   let sessionSeq = 0;
@@ -147,8 +147,9 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
   beforeEach(async () => {
     cleanupDb = await useTempDb();
-    const found = findTool("GetRecentChanges");
-    if (found === undefined) throw new Error("GetRecentChanges not registered");
+    const found = findTool("ListRecentGitChanges");
+    if (found === undefined)
+      throw new Error("ListRecentGitChanges not registered");
     tool = found;
   });
 
@@ -174,7 +175,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(dispatched.isError).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.branch).toBe("main");
     expect(result.windowStart).toBe(WINDOW_START_24H);
     expect(result.windowEnd).toBe(FIRED_AT);
@@ -209,7 +210,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.commits.length).toBeLessThan(400);
     expect(result.changesOmitted).toBe(400 - result.commits.length);
     // Bounded here rather than refused at the ceiling, so the agent still gets
@@ -226,7 +227,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const dispatched = await executeTool(tool, {}, await toolContext(null));
     const after = Date.now();
 
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     const end = Date.parse(result.windowEnd);
     expect(end).toBeGreaterThanOrEqual(before);
     expect(end).toBeLessThanOrEqual(after);
@@ -277,7 +278,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.commits.map((c) => c.sha)).toEqual(["plain-1"]);
   });
 
@@ -292,7 +293,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.pullRequests).toHaveLength(16);
     const fileRequests = mock.requests.filter((u) => u.includes("/files"));
     expect(fileRequests).toHaveLength(15);
@@ -311,7 +312,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(dispatched.isError).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.pullRequests).toEqual([]);
     expect(result.commits).toHaveLength(1);
     expect(result.note).toContain("Pull requests read access");
@@ -326,7 +327,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const dispatched = await executeTool(tool, {}, await toolContext(ALERT));
 
     expect(dispatched.isError).toBeUndefined();
-    const result = parsedContent<GetRecentChangesResult>(dispatched);
+    const result = parsedContent<ListRecentGitChangesResult>(dispatched);
     expect(result.commits).toEqual([]);
   });
 

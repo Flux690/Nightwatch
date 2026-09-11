@@ -121,7 +121,9 @@ interface SessionListRawRow {
   lastActivityAt: string;
   investigation: number;
   status: string;
-  hypotheses: string;
+  candidates: string;
+  findings: string;
+  lastStatedCandidates: string;
   report: string | null;
   recordUpdatedAt: string | null;
   lastContent: string | null;
@@ -144,7 +146,9 @@ function toFacts(
     status: r.status as InvestigationStatus,
     record:
       assembleRecord({
-        hypotheses: r.hypotheses,
+        candidates: r.candidates,
+        findings: r.findings,
+        lastStatedCandidates: r.lastStatedCandidates,
         report: r.report,
         updatedAt: r.recordUpdatedAt,
       }) ?? null,
@@ -172,7 +176,9 @@ export async function listSessionFacts(
       "s.created_at as createdAt",
       "s.investigation",
       "s.status",
-      "s.hypotheses",
+      "s.candidates",
+      "s.findings",
+      "s.last_stated_candidates as lastStatedCandidates",
       "s.report",
       "s.record_updated_at as recordUpdatedAt",
       eb

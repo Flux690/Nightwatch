@@ -160,25 +160,25 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(names).toContain("GetK8sLogs");
     });
 
-    it("the GitHub gate controls both the repo tools and GetRecentChanges", () => {
+    it("the GitHub gate controls both the repo tools and ListRecentGitChanges", () => {
       const connected = getToolSchemas(undefined, { github: true }).map(
         (s) => s.name,
       );
-      expect(connected).toContain("GetRecentChanges");
+      expect(connected).toContain("ListRecentGitChanges");
       expect(connected).toContain("OpenPullRequest");
       const disconnected = getToolSchemas(undefined, {
         github: false,
       }).map((s) => s.name);
-      expect(disconnected).not.toContain("GetRecentChanges");
+      expect(disconnected).not.toContain("ListRecentGitChanges");
       expect(disconnected).not.toContain("OpenPullRequest");
       expect(disconnected).not.toContain("Read");
     });
 
-    it("GetRecentChanges is offered with no runner platform at all", () => {
+    it("ListRecentGitChanges is offered with no runner platform at all", () => {
       const names = getToolSchemas(new Set([]), {
         github: true,
       }).map((s) => s.name);
-      expect(names).toContain("GetRecentChanges");
+      expect(names).toContain("ListRecentGitChanges");
       expect(names).not.toContain("GetDockerLogs");
       expect(names).not.toContain("GetK8sLogs");
     });
@@ -220,15 +220,15 @@ describe("toolset assembly by fleet capabilities", () => {
       const plain = effectiveToolset(new Set([]), {}, false).tools.map(
         (t) => t.schema.name,
       );
-      expect(plain).not.toContain("RecordHypothesis");
+      expect(plain).not.toContain("RecordFinding");
 
       const investigating = effectiveToolset(new Set([]), {}, true).tools.map(
         (t) => t.schema.name,
       );
-      expect(investigating).toContain("RecordHypothesis");
+      expect(investigating).toContain("RecordFinding");
       // The report turn's tool is the loop's to attach, never the
       // toolset's: offered here it would let a run write itself up mid-work.
-      expect(investigating).not.toContain("SubmitInvestigationReport");
+      expect(investigating).not.toContain("ComposeReport");
     });
 
     // The prompt named eleven tools and a run with no runner asked for every
@@ -479,8 +479,8 @@ describe("toolset assembly by fleet capabilities", () => {
           (s) => s.name,
         );
 
-      expect(namesOnTurn(0)).not.toContain("RecordHypothesis");
-      expect(namesOnTurn(1)).not.toContain("RecordHypothesis");
+      expect(namesOnTurn(0)).not.toContain("RecordFinding");
+      expect(namesOnTurn(1)).not.toContain("RecordFinding");
 
       // And across runs: a follow-up on the same chat is still a chat.
       mockCreateProvider.mockClear();
@@ -510,7 +510,7 @@ describe("toolset assembly by fleet capabilities", () => {
       const resumedNames = (
         resumed.chat.mock.calls[0]?.[0] as ToolSchema[]
       ).map((s) => s.name);
-      expect(resumedNames).not.toContain("RecordHypothesis");
+      expect(resumedNames).not.toContain("RecordFinding");
     });
   });
 

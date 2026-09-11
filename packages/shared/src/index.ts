@@ -157,6 +157,8 @@ export type {
   ToolCallItem,
   ContinueCardItem,
   ReportCardItem,
+  CandidateRow,
+  CandidateCardItem,
   AlertArrivedItem,
   CompactionItem,
   TranscriptItem,
@@ -164,7 +166,8 @@ export type {
 export { transcriptItemKey } from "./transcript.js";
 export type {
   Verdict,
-  Hypothesis,
+  Candidate,
+  Finding,
   GatedCall,
   TimelineEntry,
   TimelineLane,
@@ -174,7 +177,7 @@ export type {
   ResolvedEvidence,
   SessionReportResponse,
 } from "./reports.js";
-export { rankHypotheses, leadingHypothesis, supersededIds } from "./reports.js";
+export { rankFindings, principalFindings, supersededIds } from "./reports.js";
 export type {
   CatalogError,
   LLMProviderName,

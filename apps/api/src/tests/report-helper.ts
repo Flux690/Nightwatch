@@ -1,18 +1,18 @@
-import { appendHypothesis } from "../session/record-store.js";
-import { submitReport } from "../agent/report.js";
+import { updateRecord } from "../session/record-store.js";
+import { composeReport } from "../agent/report.js";
 
-// Satisfies the finish gate for tests exercising run mechanics: one hypothesis
-// is a complete record, so the run reaches its report turn.
+// Satisfies the finish gate for tests exercising run mechanics: one finding is a
+// complete record, so the run reaches its report turn.
 export async function seedCompleteReport(sessionId: string): Promise<void> {
-  await appendHypothesis(sessionId, (report) => ({
+  await updateRecord(sessionId, (record) => ({
     next: {
-      ...report,
-      hypotheses: [
+      ...record,
+      findings: [
         {
-          id: "h1",
+          id: "f1",
           statement: "seeded by test",
           verdict: "disproven",
-          finding: "",
+          explanation: "",
           evidenceIds: [],
           recordedAt: new Date().toISOString(),
         },
@@ -28,7 +28,7 @@ export async function seedRecommendation(
   sessionId: string,
   recommendation: string,
 ): Promise<void> {
-  await submitReport(sessionId, {
+  await composeReport(sessionId, {
     headline: "seeded by test",
     affected: "seeded by test",
     summary: "seeded by test",

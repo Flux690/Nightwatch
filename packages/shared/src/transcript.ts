@@ -2,6 +2,7 @@
 // is suspended on. The browser draws these and never derives a call's state.
 
 import type { ApprovalStatus } from "./approvals.js";
+import type { Verdict } from "./reports.js";
 
 // Named as the gate names it, so there is one vocabulary. It lives on the one
 // phase where it means anything, so a settled call cannot contradict it.
@@ -81,6 +82,24 @@ export interface ReportCardItem {
   state: { phase: "building" | "ready" | "failed" };
 }
 
+// One row of the candidate board: what was weighed, where it stands, and the
+// finding's own words when it settled.
+export interface CandidateRow {
+  statement: string;
+  // "open" while untested, "reopened" once a settling finding was superseded,
+  // otherwise the verdict of the finding that settled it.
+  state: "open" | "reopened" | Verdict;
+  note?: string;
+}
+
+// The candidate board, placed where OpenCandidates ran and refreshed as findings
+// settle or reopen them. One per session, keyed on its id like the report card.
+export interface CandidateCardItem {
+  kind: "candidate_card";
+  id: string;
+  rows: CandidateRow[];
+}
+
 // Placed where it interrupted. The report holds the detail; this says only
 // that the ground moved, so a change of course has a visible cause.
 export interface AlertArrivedItem {
@@ -106,6 +125,7 @@ export type TranscriptItem =
   | ToolCallItem
   | ContinueCardItem
   | ReportCardItem
+  | CandidateCardItem
   | AlertArrivedItem
   | CompactionItem;
 

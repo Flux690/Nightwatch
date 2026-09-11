@@ -14,6 +14,7 @@ const VERDICT_WORD: Record<Verdict, string> = {
   symptom: "Symptom",
   contributing_factor: "Contributing factor",
   disproven: "Disproven",
+  untestable: "Untestable",
 };
 
 // An exported postmortem naming a finding but not what backed it is only the
@@ -77,9 +78,9 @@ export function reportToMarkdown(
     }
   }
 
-  const claims = report?.record.hypotheses ?? [];
-  const settled = claims.filter((h) => h.verdict !== "disproven");
-  const ruledOut = claims.filter((h) => h.verdict === "disproven");
+  const claims = report?.record.findings ?? [];
+  const settled = claims.filter((f) => f.verdict !== "disproven");
+  const ruledOut = claims.filter((f) => f.verdict === "disproven");
 
   // Evidence inline, because the export outlives the frontend session it came
   // from and a verdict without it is only the model's word.
@@ -88,12 +89,12 @@ export function reportToMarkdown(
       `## ${heading}`,
       "",
       rows
-        .map((h) => {
-          const verdict = `${VERDICT_WORD[h.verdict]}.`;
-          const body = h.finding.trim();
-          const cited = citedLines(h.evidenceIds, byId);
+        .map((f) => {
+          const verdict = `${VERDICT_WORD[f.verdict]}.`;
+          const body = f.explanation.trim();
+          const cited = citedLines(f.evidenceIds, byId);
           return [
-            `### ${h.statement}`,
+            `### ${f.statement}`,
             "",
             verdict,
             ...(body === "" ? [] : ["", body]),

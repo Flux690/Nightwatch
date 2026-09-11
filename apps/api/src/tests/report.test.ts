@@ -26,12 +26,12 @@ import {
   resolveEvidence,
   toolCallsIn,
 } from "../agent/report.js";
-import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
+import { REPORT_TOOLS, COMPOSE_REPORT_TOOL } from "../agent/tools/report.js";
 import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
 import { buildSeed } from "../session/seed.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getRecord } from "../session/record-store.js";
-import { leadingHypothesis, supersededIds } from "@nightwarden/shared";
+import { principalFindings, supersededIds } from "@nightwarden/shared";
 import {
   appendTranscriptRows,
   getNextSeq,
@@ -251,7 +251,7 @@ describe("the investigation record", () => {
     await appendCall(
       sessionId,
       2,
-      { toolCallId: "tu-2", name: "GetRecentChanges", input: {} },
+      { toolCallId: "tu-2", name: "ListRecentGitChanges", input: {} },
       CHANGES,
       "2026-07-03T02:01:00.000Z",
     );
@@ -285,24 +285,24 @@ describe("the investigation record", () => {
     });
   }
 
-  // Records a tested hypothesis and returns the id the system assigned to it.
+  // Records a tested finding and returns the id the system assigned to it.
   async function record(
     sessionId: string,
     statement: string,
     verdict: string,
     evidenceIds: string[],
-    finding = "",
+    explanation = "",
     supersedes = "",
   ): Promise<string> {
-    await call("RecordHypothesis", sessionId, {
+    await call("RecordFinding", sessionId, {
       statement,
       verdict,
-      finding,
+      explanation,
       evidenceIds,
       supersedes,
     });
-    const hypotheses = (await getRecord(sessionId))!.hypotheses;
-    return hypotheses[hypotheses.length - 1]!.id;
+    const findings = (await getRecord(sessionId))!.findings;
+    return findings[findings.length - 1]!.id;
   }
 
   // Every field is required, so a case about one blank field overrides that
@@ -318,7 +318,7 @@ describe("the investigation record", () => {
       recommendation: "revert PR #482",
       ...input,
     };
-    return await executeTool(SUBMIT_REPORT_TOOL, complete, {
+    return await executeTool(COMPOSE_REPORT_TOOL, complete, {
       sessionId,
       toolCallId: "tu-submit",
       toolCallCeilingMs: 15_000,
@@ -337,12 +337,12 @@ describe("the investigation record", () => {
         ["e1"],
         "the climb starts at the merge",
       );
-      const stored = (await getRecord(sessionId))!.hypotheses[0]!;
+      const stored = (await getRecord(sessionId))!.findings[0]!;
       expect(stored).toMatchObject({
         id,
         statement: "the cache bump leaks",
         verdict: "root_cause",
-        finding: "the climb starts at the merge",
+        explanation: "the climb starts at the merge",
         evidenceIds: ["e1"],
       });
       expect(stored.recordedAt).not.toBe("");
@@ -362,17 +362,17 @@ describe("the investigation record", () => {
         await record(sessionId, `about ${verdict}`, verdict, ["e1"]);
       }
       expect(
-        (await getRecord(sessionId))!.hypotheses.map((h) => h.verdict),
+        (await getRecord(sessionId))!.findings.map((h) => h.verdict),
       ).toEqual(verdicts);
     });
 
     it("refuses a verdict that is not one of the five", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
-      const result = await call("RecordHypothesis", sessionId, {
+      const result = await call("RecordFinding", sessionId, {
         statement: "the cache bump leaks",
         verdict: "open",
-        finding: "still looking",
+        explanation: "still looking",
         evidenceIds: ["e1"],
       });
       expect(result.isError).toBe(true);
@@ -383,10 +383,10 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
       for (const verdict of ["root_cause", "disproven"]) {
-        const result = await call("RecordHypothesis", sessionId, {
+        const result = await call("RecordFinding", sessionId, {
           statement: "a hunch",
           verdict,
-          finding: "no reason given",
+          explanation: "no reason given",
           evidenceIds: [],
         });
         expect(result.isError).toBe(true);
@@ -406,10 +406,10 @@ describe("the investigation record", () => {
       await record(sessionId, "the cache bump leaks", "disproven", ["e2"]);
 
       expect(
-        (await getRecord(sessionId))!.hypotheses.map((h) => [h.id, h.verdict]),
+        (await getRecord(sessionId))!.findings.map((h) => [h.id, h.verdict]),
       ).toEqual([
-        ["h1", "root_cause"],
-        ["h2", "disproven"],
+        ["f1", "root_cause"],
+        ["f2", "disproven"],
       ]);
     });
 
@@ -430,31 +430,31 @@ describe("the investigation record", () => {
         first,
       );
 
-      const { hypotheses } = (await getRecord(sessionId))!;
-      expect(hypotheses).toHaveLength(2);
-      expect(hypotheses[1]!.supersedes).toBe("h1");
+      const { findings } = (await getRecord(sessionId))!;
+      expect(findings).toHaveLength(2);
+      expect(findings[1]!.supersedes).toBe("f1");
       // Both stand on the record; only the second can lead.
-      expect(leadingHypothesis(hypotheses)!.id).toBe("h2");
-      expect(supersededIds(hypotheses)).toEqual(new Set(["h1"]));
+      expect(principalFindings(findings)[0]!.id).toBe("f2");
+      expect(supersededIds(findings)).toEqual(new Set(["f1"]));
     });
 
     it("records the claim anyway when it names a replacement that does not exist", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
-      const result = await call("RecordHypothesis", sessionId, {
+      const result = await call("RecordFinding", sessionId, {
         statement: "the volume is undersized",
         verdict: "root_cause",
-        finding: "",
+        explanation: "",
         evidenceIds: ["e1"],
         supersedes: "h9",
       });
 
       // The claim is worth keeping even when what it replaces was named wrongly,
       // and the model is told which half of its call did not land.
-      const stored = (await getRecord(sessionId))!.hypotheses[0]!;
+      const stored = (await getRecord(sessionId))!.findings[0]!;
       expect(stored.statement).toBe("the volume is undersized");
       expect(stored.supersedes).toBeUndefined();
-      expect(String(result.content)).toContain("h9 is not a claim");
+      expect(String(result.content)).toContain("h9 is not a finding");
     });
 
     /* All of them or none: keeping the half that resolved would change the claim
@@ -462,10 +462,10 @@ describe("the investigation record", () => {
     it("refuses a claim citing one real call and one that names nothing", async () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
-      const refused = await call("RecordHypothesis", sessionId, {
+      const refused = await call("RecordFinding", sessionId, {
         statement: "the cache bump leaks",
         verdict: "root_cause",
-        finding: "",
+        explanation: "",
         evidenceIds: ["e1", "e9"],
       });
 
@@ -504,8 +504,8 @@ describe("the investigation record", () => {
         recommendation: "revert PR #482",
       });
       // The claims it was written from are untouched by the writing.
-      expect(written.hypotheses).toHaveLength(1);
-      expect(written.hypotheses[0]!.verdict).toBe("root_cause");
+      expect(written.findings).toHaveLength(1);
+      expect(written.findings[0]!.verdict).toBe("root_cause");
     });
 
     it("drops a timeline citation naming no call, and keeps the entry", async () => {
@@ -662,18 +662,18 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
 
-      const { content } = await call("RecordHypothesis", sessionId, {
+      const { content } = await call("RecordFinding", sessionId, {
         statement: "the disk filled",
         verdict: "root_cause",
-        finding: "the read showed 98 percent",
+        explanation: "the read showed 98 percent",
         // e1 is the first call the seeded transcript holds, which is tu-1.
         evidenceIds: ["e1"],
       });
-      expect(String(content)).toContain("Recorded h1");
+      expect(String(content)).toContain("Recorded f1");
 
       // Stored as the handle it was cited by, so the record speaks one
       // vocabulary and nothing has to translate on the way back out.
-      const [hypothesis] = (await getRecord(sessionId))!.hypotheses;
+      const [hypothesis] = (await getRecord(sessionId))!.findings;
       expect(hypothesis?.evidenceIds).toEqual(["e1"]);
 
       // And it resolves to real evidence rather than a dangling reference.
@@ -697,21 +697,21 @@ describe("the investigation record", () => {
         ["e1"],
         "the read showed 98 percent",
       );
-      expect((await getRecord(sessionId))!.hypotheses[0]!.evidenceIds).toEqual([
+      expect((await getRecord(sessionId))!.findings[0]!.evidenceIds).toEqual([
         "e1",
       ]);
 
       // Two recording calls are on the transcript by now and neither took a
       // number, so the range the refusal offers still ends at e2.
-      const refused = await call("RecordHypothesis", sessionId, {
+      const refused = await call("RecordFinding", sessionId, {
         statement: "the volume is undersized",
         verdict: "root_cause",
-        finding: "guessed",
+        explanation: "guessed",
         evidenceIds: ["e3"],
       });
       expect(String(refused.content)).toContain("e1 through e2");
-      expect((await getRecord(sessionId))!.hypotheses).toHaveLength(1);
-      expect(stored).toBe("h1");
+      expect((await getRecord(sessionId))!.findings).toHaveLength(1);
+      expect(stored).toBe("f1");
     });
 
     // Counted from the transcript, the only thing that can answer it, so a
@@ -785,15 +785,15 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       await seedTranscript(sessionId);
 
-      const { content } = await call("RecordHypothesis", sessionId, {
+      const { content } = await call("RecordFinding", sessionId, {
         statement: "nothing behind it",
         verdict: "symptom",
-        finding: "",
+        explanation: "",
         evidenceIds: ["e9", "tu-invented"],
       });
       const answer = String(content);
 
-      expect((await getRecord(sessionId))?.hypotheses ?? []).toHaveLength(0);
+      expect((await getRecord(sessionId))?.findings ?? []).toHaveLength(0);
       expect(answer).toContain("Not recorded");
       expect(answer).toContain("e9");
       // Told what it could have cited, in the vocabulary it was given.
@@ -841,7 +841,7 @@ describe("the investigation record", () => {
       );
       expect(ended?.content).toContain("asked only for tools");
       // It says what it did have, so the ending is actionable rather than blunt.
-      expect(ended?.content).toContain("RecordHypothesis");
+      expect(ended?.content).toContain("RecordFinding");
     });
 
     // From a real run with no runner connected: GetK8sLogs exists and was
@@ -856,7 +856,7 @@ describe("the investigation record", () => {
                 name: "GetK8sLogs",
                 input: { target: "x" },
               },
-              { toolCallId: "tu-near", name: "RecordHypotheses", input: {} },
+              { toolCallId: "tu-near", name: "RecordFindings", input: {} },
               { toolCallId: "tu-far", name: "SendSlackMessage", input: {} },
             ],
             text: "",
@@ -888,7 +888,7 @@ describe("the investigation record", () => {
       // An invented name close to a real one is pointed at it.
       const near = await answerTo("tu-near");
       expect(near).toContain("There is no tool called");
-      expect(near).toContain("Did you mean RecordHypothesis?");
+      expect(near).toContain("Did you mean RecordFinding?");
 
       /* One that resembles nothing on offer gets no suggestion. Naming an
          unrelated tool would send the model somewhere it was never going. */
@@ -899,7 +899,7 @@ describe("the investigation record", () => {
       // All three name what the turn held: a refusal that does not is a dead end.
       for (const message of [withheld, near, far]) {
         expect(message).toContain("What you do have:");
-        expect(message).toContain("RecordHypothesis");
+        expect(message).toContain("RecordFinding");
       }
     });
 
@@ -1089,8 +1089,23 @@ describe("the investigation record", () => {
       );
     }
 
-    /* Two turns, because a call is only read on the turn after the one that
-       made it. */
+    // The forced candidates turn the loop runs once the first read has answered.
+    // Zero candidates keeps a run that is not about candidates simple to script.
+    function openTurn(candidates: unknown[] = []) {
+      return {
+        toolUses: [
+          {
+            toolCallId: `tu-open-${randomUUID()}`,
+            name: "OpenCandidates",
+            input: { candidates },
+          },
+        ],
+        text: "",
+      };
+    }
+
+    /* Read, the forced candidates turn, then the finding: a call is only read on
+       the turn after the one that made it. */
     function recordTurn(verdict: string, statement: string) {
       const n = randomUUID();
       return [
@@ -1104,15 +1119,16 @@ describe("the investigation record", () => {
           ],
           text: "",
         },
+        openTurn(),
         {
           toolUses: [
             {
               toolCallId: `tu-record-${n}`,
-              name: "RecordHypothesis",
+              name: "RecordFinding",
               input: {
                 statement,
                 verdict,
-                finding: "what the read showed",
+                explanation: "what the read showed",
                 // e1 either way: the read above is the first citable call when
                 // nothing precedes it, and one of them when something does.
                 evidenceIds: ["e1"],
@@ -1129,7 +1145,7 @@ describe("the investigation record", () => {
         toolUses: [
           {
             toolCallId: "tu-submit",
-            name: "SubmitInvestigationReport",
+            name: "ComposeReport",
             input: {
               headline: "the worker exhausted its memory limit",
               affected: "the worker",
@@ -1217,14 +1233,14 @@ describe("the investigation record", () => {
       expect(outcome).toBe("completed");
 
       const requests = recordGapsMessages();
-      expect(requests).toHaveLength(5);
-      expect(requests[0]).toContain("recorded nothing");
-      // The opening turn plus one per pushback, then every report attempt - the
+      expect(requests).toHaveLength(3);
+      expect(requests[0]).toContain("record is empty");
+      // One per pushback, the finish stop, then every report attempt - the
       // scripted model never calls the tool, so the run ends with no report.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(11);
+      expect(provider.chat).toHaveBeenCalledTimes(9);
       expect(await getRecord(sessionId)).toBeUndefined();
 
       // Neither the requests nor the alert briefing NightWarden opened with is
@@ -1261,10 +1277,10 @@ describe("the investigation record", () => {
         },
       ]);
 
-      const refused = await call("RecordHypothesis", sessionId, {
+      const refused = await call("RecordFinding", sessionId, {
         statement: "leak",
         verdict: "root_cause",
-        finding: "rss climbed",
+        explanation: "rss climbed",
         evidenceIds: ["e1"],
       });
 
@@ -1293,14 +1309,14 @@ describe("the investigation record", () => {
           timestamp: new Date().toISOString(),
         },
       ]);
-      await call("RecordHypothesis", sessionId, {
+      await call("RecordFinding", sessionId, {
         statement: "leak",
         verdict: "root_cause",
-        finding: "rss climbed",
+        explanation: "rss climbed",
         evidenceIds: ["e1"],
       });
-      expect((await getRecord(sessionId))!.hypotheses).toHaveLength(1);
-      expect(await recordGaps(sessionId, 0)).toEqual([]);
+      expect((await getRecord(sessionId))!.findings).toHaveLength(1);
+      expect(await recordGaps(sessionId)).toEqual([]);
     });
 
     // The largest single output of the run, so the ceiling is where it most
@@ -1328,7 +1344,7 @@ describe("the investigation record", () => {
       expect(drawn).toContain("cut off at this model's output limit");
       expect(drawn).toContain("Your findings below are complete.");
       // The record survives the failure: it is the half worth keeping.
-      expect((await getRecord(sessionId))!.hypotheses).toHaveLength(1);
+      expect((await getRecord(sessionId))!.findings).toHaveLength(1);
       expect((await getRecord(sessionId))!.report).toBeNull();
 
       /* One report turn, not two: the same request against the same ceiling
@@ -1336,7 +1352,7 @@ describe("the investigation record", () => {
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(4);
+      expect(provider.chat).toHaveBeenCalledTimes(5);
       expect(reportRequests()).toHaveLength(1);
     });
 
@@ -1441,7 +1457,7 @@ describe("the investigation record", () => {
               toolUses: [
                 {
                   toolCallId: `bad-${randomUUID()}`,
-                  name: "SubmitInvestigationReport" as const,
+                  name: "ComposeReport" as const,
                   input: { headline: "" },
                 },
               ],
@@ -1471,7 +1487,7 @@ describe("the investigation record", () => {
       // so the stamp still names the first run's.
       expect((await getRecord(sessionId))!.report).toMatchObject({
         recommendation: "free up the disk",
-        hypothesesCoveredUpTo: "h1",
+        findingsCoveredUpTo: "f1",
       });
 
       await runSession({
@@ -1484,7 +1500,7 @@ describe("the investigation record", () => {
       // never accounted for h2.
       expect((await getRecord(sessionId))!.report).toMatchObject({
         recommendation: "add a volume",
-        hypothesesCoveredUpTo: "h2",
+        findingsCoveredUpTo: "f2",
       });
     });
 
@@ -1539,7 +1555,7 @@ describe("the investigation record", () => {
 
       function checks(index = 0): string[] {
         return harnessMessages(index).filter((m) =>
-          m.includes("since your last recorded claim"),
+          m.includes("since your last recorded finding"),
         );
       }
 
@@ -1547,6 +1563,8 @@ describe("the investigation record", () => {
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
             readTurn(),
+            // The forced candidates turn lands here, once the first read answers.
+            openTurn(),
             readTurn(),
             readTurn(),
             readTurn(),
@@ -1564,37 +1582,6 @@ describe("the investigation record", () => {
 
         expect(checks()).toHaveLength(1);
         expect(checks()[0]).toContain("answered 8 tool calls");
-      });
-
-      /* Below the check's threshold, so nothing asks mid-run - but the reads
-         still stand unaccounted for when the model says it is done. */
-      it("asks at the finish gate for reads the check never reached", async () => {
-        mockCreateProvider.mockImplementationOnce(() =>
-          createContractFakeProvider([
-            ...recordTurn("root_cause", "the worker leaks"),
-            readTurn(),
-            { toolUses: [], text: "Done." },
-            ...recordTurn("disproven", "the disk was fine"),
-            { toolUses: [], text: "Done." },
-            submitTurn(),
-          ]),
-        );
-        const sessionId = randomUUID();
-        await seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
-          alert("gate-tail"),
-        ]);
-
-        await runSession({ sessionId, alerts: [alert("gate-tail")] });
-
-        // Two reads, under the eight the check waits for, so only the gate spoke.
-        expect(checks()).toHaveLength(0);
-        const asked = recordGapsMessages().filter((m) =>
-          m.includes("Nothing on the record accounts for"),
-        );
-        expect(asked).toHaveLength(1);
-        expect(asked[0]).toContain("the 2 tool calls you answered");
-        // Answering it with a claim is what lets the run finish.
-        expect((await getRecord(sessionId))!.hypotheses).toHaveLength(2);
       });
 
       // Recording once buys no exemption: the debt is what has been read since
@@ -1619,40 +1606,6 @@ describe("the investigation record", () => {
         await runSession({ sessionId, alerts: [alert("record-check-quiet")] });
 
         expect(checks()).toHaveLength(1);
-      });
-
-      // Asking clears the question, never the debt the gate reads.
-      it("holds the debt the check asked about against the finish gate", async () => {
-        mockCreateProvider.mockImplementationOnce(() =>
-          createContractFakeProvider([
-            ...recordTurn("disproven", "the disk filled"),
-            readTurn(),
-            readTurn(),
-            readTurn(),
-            readTurn(),
-            { toolUses: [], text: "Done." },
-            ...recordTurn("symptom", "the cache stayed cold"),
-            { toolUses: [], text: "Done." },
-            submitTurn(),
-          ]),
-        );
-        const sessionId = randomUUID();
-        await seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
-          alert("check-then-gate"),
-        ]);
-
-        await runSession({ sessionId, alerts: [alert("check-then-gate")] });
-
-        // Asked once mid-run, at eight, and not again one read later.
-        expect(checks()).toHaveLength(1);
-        const asked = recordGapsMessages().filter((m) =>
-          m.includes("Nothing on the record accounts for"),
-        );
-        expect(asked).toHaveLength(1);
-        expect(asked[0]).toContain("the 8 tool calls you answered");
-        // The claim that answered the gate is what let the run write up.
-        expect((await getRecord(sessionId))!.hypotheses).toHaveLength(2);
-        expect((await getRecord(sessionId))!.report).not.toBeNull();
       });
     });
 
@@ -1717,7 +1670,7 @@ describe("the investigation record", () => {
       expect(reportRequests()[0]).toContain("the disk filled up");
 
       const written = (await getRecord(sessionId))!;
-      expect(written.hypotheses[0]!.verdict).toBe("disproven");
+      expect(written.findings[0]!.verdict).toBe("disproven");
       expect(written.report).toMatchObject({
         summary: "the worker ran out of memory",
         recommendation: "watch the disk for another day",

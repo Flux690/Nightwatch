@@ -1,20 +1,22 @@
-// The only place the record is written, and the owner of its two rules: a
-// citation is the id of the call that produced it, and nothing is unrecorded.
+// The only place the record is written, and the owner of its rules: a citation
+// is the id of the call that produced it, and nothing is unrecorded.
 
 import type {
+  Candidate,
   EvidenceKind,
+  Finding,
   GatedCall,
-  Hypothesis,
   InvestigationRecord,
   ResolvedEvidence,
   TimelineEntry,
   TranscriptRow,
   Verdict,
 } from "@nightwarden/shared";
+import { supersededIds } from "@nightwarden/shared";
 import {
   amendRecord,
-  appendHypothesis,
   getRecord,
+  updateRecord,
 } from "../session/record-store.js";
 import { getTranscriptRows } from "../session/transcript-store.js";
 import { publishReportUpdated } from "../session/stream.js";
@@ -48,8 +50,8 @@ const RENDERER = new Map<string, EvidenceKind>(
     ),
 );
 
-/* Recording a claim, writing the report and asking a person observe nothing, so
-   none of them earns an evidence id and none can back a claim. */
+/* Opening a candidate, recording a finding, writing the report and asking a
+   person observe nothing, so none earns an evidence id and none can back a claim. */
 export function isCitable(toolName: string): boolean {
   return RENDERER.has(toolName);
 }
@@ -166,12 +168,12 @@ function citationRefusal(
   return `Not recorded. ${unknown.join(", ")} ${one ? "names" : "name"} no result you have read. ${issuedRange(entries)} A handle arrives inside the result itself, so a tool you asked for in this same reply does not have one yet and its result reaches you in your next message. Record this again citing only results you have already read.`;
 }
 
-// Everything the record points at, from either author: the hypotheses' own
+// Everything the record points at, from either author: the findings' own
 // citations and the composed timeline's references.
 function citedIds(record: InvestigationRecord): Set<string> {
   const timeline = record.report?.timeline ?? [];
   return new Set([
-    ...record.hypotheses.flatMap((h) => h.evidenceIds),
+    ...record.findings.flatMap((f) => f.evidenceIds),
     ...timeline.flatMap((entry) =>
       entry.evidenceId === undefined ? [] : [entry.evidenceId],
     ),
@@ -238,85 +240,154 @@ export function reportIsBehind(
 ): boolean {
   const report = record.report;
   if (report === null) return true;
-  // Hypotheses are append-only, so the last id changing is the whole test.
+  // Findings are append-only, so the last id changing is the whole test.
   return (
-    (record.hypotheses.at(-1)?.id ?? "") !== report.hypothesesCoveredUpTo ||
+    (record.findings.at(-1)?.id ?? "") !== report.findingsCoveredUpTo ||
     approvedWrites !== report.writesCoveredUpTo
   );
+}
+
+// The candidates no non-superseded finding settles. A finding that once settled
+// one but was itself replaced reopens it, so the set is read live off the record.
+export function openCandidateIds(record: InvestigationRecord): string[] {
+  const replaced = supersededIds(record.findings);
+  const settled = new Set(
+    record.findings.flatMap((f) =>
+      f.settles !== undefined && !replaced.has(f.id) ? [f.settles] : [],
+    ),
+  );
+  return record.candidates.filter((c) => !settled.has(c.id)).map((c) => c.id);
 }
 
 // A list rather than a boolean, so the record-gaps message can name only what
 // is absent and a surviving gap can be logged as itself.
 export type RecordGap =
-  { kind: "empty_record" } | { kind: "unaccounted_calls"; calls: number };
+  | { kind: "empty_record" }
+  | { kind: "untested_candidates"; candidates: number };
 
-/* The run's own count, because the record cannot say: a claim carries no mark of
-   what it was recorded over. */
-export async function recordGaps(
-  sessionId: string,
-  unaccounted: number,
-): Promise<RecordGap[]> {
-  const hypotheses = (await getRecord(sessionId))?.hypotheses ?? [];
-  const gaps: RecordGap[] = [];
-
-  if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
-  // Only alongside a record that holds something: an empty one is already named
-  // above, and saying both would ask twice for one thing.
-  else if (unaccounted > 0)
-    gaps.push({ kind: "unaccounted_calls", calls: unaccounted });
-
-  return gaps;
+/* Read off the record: an empty one is named alone, and an open candidate is a
+   test the run owes before it can finish. */
+export async function recordGaps(sessionId: string): Promise<RecordGap[]> {
+  const record = await getRecord(sessionId);
+  const findings = record?.findings ?? [];
+  if (findings.length === 0) return [{ kind: "empty_record" }];
+  const open = record === undefined ? 0 : openCandidateIds(record).length;
+  return open > 0 ? [{ kind: "untested_candidates", candidates: open }] : [];
 }
 
-interface RecordHypothesisInput {
+interface OpenCandidatesInput {
+  candidates: Array<{
+    statement: string;
+    ifTrue: string;
+    ifFalse: string;
+    parent?: string;
+  }>;
+}
+
+// Assigns each id and appends. A parent must name a candidate that already
+// exists or one opened earlier in this same call, or it is dropped.
+export async function openCandidates(
+  sessionId: string,
+  input: OpenCandidatesInput,
+): Promise<RecordOutcome> {
+  const opened = await updateRecord(sessionId, (record) => {
+    const known = new Set(record.candidates.map((c) => c.id));
+    let n = record.candidates.length;
+    const added: Candidate[] = input.candidates.map((c) => {
+      const id = `c${++n}`;
+      known.add(id);
+      const parent =
+        c.parent !== undefined && known.has(c.parent) ? c.parent : undefined;
+      return {
+        id,
+        statement: c.statement,
+        ifTrue: c.ifTrue,
+        ifFalse: c.ifFalse,
+        ...(parent !== undefined && { parent }),
+      };
+    });
+    return {
+      next: { ...record, candidates: [...record.candidates, ...added] },
+      value: added,
+    };
+  });
+  publishReportUpdated(sessionId);
+  return {
+    recorded: true,
+    message:
+      opened.length === 0
+        ? "No candidates opened."
+        : `Opened ${opened.map((c) => c.id).join(", ")}.`,
+  };
+}
+
+// The candidate ids named in the last frontier message, so a resumed run reads
+// what it already stated rather than restating it.
+export async function setLastStatedCandidates(
+  sessionId: string,
+  ids: string[],
+): Promise<void> {
+  await amendRecord(sessionId, (record) => ({
+    ...record,
+    lastStatedCandidates: ids,
+  }));
+}
+
+interface RecordFindingInput {
   statement: string;
   verdict: Verdict;
-  finding: string;
+  explanation: string;
   evidenceIds: string[];
+  settles?: string;
   supersedes?: string;
 }
 
-// A link to a claim that exists, or nothing. Dropped rather than refused: the
-// new claim is worth recording even when what it replaces was named wrongly.
-function supersededBy(
-  record: InvestigationRecord,
+// A link to a record entry that exists, or nothing. Dropped rather than refused:
+// the new finding is worth recording even when what it names was named wrongly.
+function existing(
+  ids: Set<string>,
   named: string | undefined,
 ): string | undefined {
   if (named === undefined || named === "") return undefined;
-  return record.hypotheses.some((h) => h.id === named) ? named : undefined;
+  return ids.has(named) ? named : undefined;
 }
 
-// One act, recorded once it has been tested. Append-only: a claim the model
+// One act, recorded once it has been tested. Append-only: a finding the model
 // later disagrees with stays on the record beside the one that replaced it.
-export async function recordHypothesis(
+export async function recordFinding(
   sessionId: string,
-  input: RecordHypothesisInput,
+  input: RecordFindingInput,
 ): Promise<RecordOutcome> {
   const entries = await toolCallsIn(sessionId);
   const { kept, unknown } = knownCitations(entries, input.evidenceIds);
   /* All of them or none: recording what survives changes the claim the model
      made, on a record that says nothing about what it dropped. */
   if (unknown.length > 0 || kept.length === 0) {
-    return {
-      recorded: false,
-      message: citationRefusal(entries, unknown),
-    };
+    return { recorded: false, message: citationRefusal(entries, unknown) };
   }
   const evidenceIds = kept;
-  const { id, replaced } = await appendHypothesis(sessionId, (record) => {
-    const supersedes = supersededBy(record, input.supersedes);
-    const hypothesis: Hypothesis = {
-      id: `h${record.hypotheses.length + 1}`,
+  const { id, replaced, settled } = await updateRecord(sessionId, (record) => {
+    const supersedes = existing(
+      new Set(record.findings.map((f) => f.id)),
+      input.supersedes,
+    );
+    const settles = existing(
+      new Set(record.candidates.map((c) => c.id)),
+      input.settles,
+    );
+    const finding: Finding = {
+      id: `f${record.findings.length + 1}`,
       statement: input.statement,
       verdict: input.verdict,
-      finding: input.finding,
-      evidenceIds,
+      ...(settles !== undefined && { settles }),
       ...(supersedes !== undefined && { supersedes }),
+      explanation: input.explanation,
+      evidenceIds,
       recordedAt: new Date().toISOString(),
     };
     return {
-      next: { ...record, hypotheses: [...record.hypotheses, hypothesis] },
-      value: { id: hypothesis.id, replaced: supersedes },
+      next: { ...record, findings: [...record.findings, finding] },
+      value: { id: finding.id, replaced: supersedes, settled: settles },
     };
   });
   publishReportUpdated(sessionId);
@@ -324,15 +395,16 @@ export async function recordHypothesis(
     replaced !== undefined
       ? ` It replaces ${replaced}, which stays on the record.`
       : input.supersedes !== undefined && input.supersedes !== ""
-        ? ` ${input.supersedes} is not a claim on this record, so nothing was replaced.`
+        ? ` ${input.supersedes} is not a finding on this record, so nothing was replaced.`
         : "";
+  const settlement = settled !== undefined ? ` It settles ${settled}.` : "";
   return {
     recorded: true,
-    message: `Recorded ${id} as "${input.verdict}".${replacement}`,
+    message: `Recorded ${id} as "${input.verdict}".${settlement}${replacement}`,
   };
 }
 
-interface SubmitReportInput {
+interface ComposeReportInput {
   headline: string;
   affected: string;
   summary: string;
@@ -342,10 +414,10 @@ interface SubmitReportInput {
 }
 
 // Written whole rather than appended, because it is authored once. Citations
-// are filtered as a hypothesis's are, so no entry points at a call that never ran.
-export async function submitReport(
+// are filtered as a finding's are, so no entry points at a call that never ran.
+export async function composeReport(
   sessionId: string,
-  input: SubmitReportInput,
+  input: ComposeReportInput,
 ): Promise<RecordOutcome> {
   // Answered, not merely known: a timeline entry pointing at a call that never
   // returned shows the reader nothing when they open it.
@@ -367,7 +439,7 @@ export async function submitReport(
   });
   const approvedWrites = approvedWriteCount(gatedCalls(entries));
   // Stamped inside the transaction, from the record being written against:
-  // counted anywhere else it could name claims this report never saw.
+  // counted anywhere else it could name findings this report never saw.
   await amendRecord(sessionId, (record) => ({
     ...record,
     report: {
@@ -378,7 +450,7 @@ export async function submitReport(
       impact: input.impact,
       recommendation: input.recommendation,
       submittedAt: new Date().toISOString(),
-      hypothesesCoveredUpTo: record.hypotheses.at(-1)?.id ?? "",
+      findingsCoveredUpTo: record.findings.at(-1)?.id ?? "",
       writesCoveredUpTo: approvedWrites,
     },
   }));

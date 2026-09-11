@@ -67,7 +67,7 @@ describe("fitting items into the budget", () => {
     // Every kept item is the item, not a shortened version of it.
     for (const item of kept) expect(item.body.length).toBe(1_000);
     expect(kept).toEqual(items.slice(0, kept.length));
-    // GetRecentChanges bounds its commits by what its pull requests spent, so a
+    // ListRecentGitChanges bounds its commits by what its pull requests spent, so a
     // wrong `spent` silently hands the second list a budget already used.
     expect(spent).toBe(JSON.stringify(kept).length - 2 - (kept.length - 1));
     expect(spent).toBeLessThanOrEqual(ITEM_BUDGET_CHARS);

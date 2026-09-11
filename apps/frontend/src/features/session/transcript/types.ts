@@ -10,6 +10,8 @@ export type {
   ToolCallItem,
   ContinueCardItem,
   ReportCardItem,
+  CandidateRow,
+  CandidateCardItem,
   AlertArrivedItem,
   CompactionItem,
   TranscriptItem,

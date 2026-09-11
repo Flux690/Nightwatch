@@ -324,25 +324,49 @@ describe("TranscriptItemRenderer", () => {
       wrap({
         kind: "tool_call",
         toolCallId: "tu-report",
-        toolName: "SubmitInvestigationReport",
+        toolName: "ComposeReport",
         input: { headline: "Pool exhausted" },
         state: { phase: "complete", result: "recorded" },
       });
-      expect(
-        screen.queryByText(/SubmitInvestigationReport/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/ComposeReport/)).not.toBeInTheDocument();
       expect(screen.queryByText(/recorded/)).not.toBeInTheDocument();
     });
 
-    it("draws a recorded hypothesis, which is a step the reader can follow", () => {
+    it("draws a recorded finding, which is a step the reader can follow", () => {
       wrap({
         kind: "tool_call",
-        toolCallId: "tu-hypo",
-        toolName: "RecordHypothesis",
+        toolCallId: "tu-finding",
+        toolName: "RecordFinding",
         input: { statement: "The pool was exhausted" },
         state: { phase: "complete", result: "recorded" },
       });
-      expect(screen.getByText(/RecordHypothesis/)).toBeInTheDocument();
+      expect(screen.getByText(/RecordFinding/)).toBeInTheDocument();
+    });
+  });
+
+  describe("the candidate board", () => {
+    it("draws each candidate in the tone of where it stands", () => {
+      wrap({
+        kind: "candidate_card",
+        id: "candidates",
+        rows: [
+          {
+            statement: "The pool was exhausted",
+            state: "root_cause",
+            note: "pool_in_use pinned at 100/100",
+          },
+          { statement: "Postgres was slow", state: "disproven" },
+          { statement: "The deploy triggered it", state: "reopened" },
+        ],
+      });
+      expect(screen.getByText("Candidates")).toBeInTheDocument();
+      expect(screen.getByText("The pool was exhausted")).toBeInTheDocument();
+      expect(screen.getByText("root cause")).toBeInTheDocument();
+      expect(screen.getByText("ruled out")).toBeInTheDocument();
+      expect(screen.getByText("reopened")).toBeInTheDocument();
+      expect(
+        screen.getByText("pool_in_use pinned at 100/100"),
+      ).toBeInTheDocument();
     });
   });
 

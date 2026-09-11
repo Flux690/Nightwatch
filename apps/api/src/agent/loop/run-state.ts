@@ -51,6 +51,13 @@ export class RunState {
   // Set before the first turn and re-read each turn as integrations connect.
   offered!: OfferedToolset;
   turn = 0;
+  // A citable call has answered, so candidates can be opened against real
+  // evidence rather than before any was gathered.
+  hasAnsweredCitable = false;
+  // OpenCandidates has run, so the forced candidates turn does not fire again.
+  candidatesOpened = false;
+  // The falsification turn has run, so the run composes its report next.
+  falsificationOffered = false;
   // Per name across the whole run, so the fourth ask is answered as the fourth.
   readonly refusedNames = new Map<string, number>();
 
@@ -97,6 +104,7 @@ export class RunState {
   // call made in this reply has no handle until its answer arrives.
   stageResults(uses: readonly ToolUse[], results: readonly ToolResult[]): void {
     const stamped = resultParts(results, citableIds(uses), this.nextEvidence);
+    if (stamped.next > this.nextEvidence) this.hasAnsweredCitable = true;
     this.nextEvidence = stamped.next;
     this.stage("user", stamped.parts);
   }

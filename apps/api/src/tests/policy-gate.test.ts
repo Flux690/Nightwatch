@@ -26,7 +26,7 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../session/gate-store.js";
 import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
-import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
+import { REPORT_TOOLS, COMPOSE_REPORT_TOOL } from "../agent/tools/report.js";
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
@@ -92,7 +92,7 @@ describe("policy-gate: the reason rides every gated call", () => {
 describe("evidence: a tool that questions the system can back a claim", () => {
   it("declares every registry tool but the record's own citable", () => {
     const recording = new Set(
-      [...REPORT_TOOLS, SUBMIT_REPORT_TOOL].map((tool) => tool.schema.name),
+      [...REPORT_TOOLS, COMPOSE_REPORT_TOOL].map((tool) => tool.schema.name),
     );
     const observing = TOOL_REGISTRY.filter(
       (tool) => !recording.has(tool.schema.name),
@@ -105,7 +105,7 @@ describe("evidence: a tool that questions the system can back a claim", () => {
 
   // Recording a claim and writing it up observe nothing, so neither can support one.
   it("withholds it from the tools that write the record", () => {
-    for (const tool of [...REPORT_TOOLS, SUBMIT_REPORT_TOOL]) {
+    for (const tool of [...REPORT_TOOLS, COMPOSE_REPORT_TOOL]) {
       expect(tool.citable, tool.schema.name).toBe(false);
     }
   });

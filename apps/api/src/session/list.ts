@@ -1,11 +1,11 @@
 import type {
-  Hypothesis,
+  Finding,
   InvestigationRecord,
   SessionKind,
   SessionListPage,
   InvestigationStatus,
 } from "@nightwarden/shared";
-import { leadingHypothesis } from "@nightwarden/shared";
+import { principalFindings } from "@nightwarden/shared";
 import { queueState } from "../run-pool.js";
 import {
   countInvestigations,
@@ -22,8 +22,8 @@ const WAITING_ON: Record<
   continue: "Waiting to continue",
 };
 
-function leadingClaim(record: InvestigationRecord | null): Hypothesis | null {
-  return leadingHypothesis(record?.hypotheses ?? []);
+function leadingClaim(record: InvestigationRecord | null): Finding | null {
+  return principalFindings(record?.findings ?? [])[0] ?? null;
 }
 
 // What a finished run left the user, in descending order of use: what to do,
@@ -33,8 +33,8 @@ function whatItLeft(record: InvestigationRecord | null): string | null {
   if (written) return written;
   const leading = leadingClaim(record)?.statement;
   if (leading !== undefined) return leading;
-  const ruledOut = record?.hypotheses
-    .filter((h) => h.verdict === "disproven")
+  const ruledOut = record?.findings
+    .filter((f) => f.verdict === "disproven")
     .at(-1);
   return ruledOut === undefined ? null : `Ruled out: ${ruledOut.statement}`;
 }

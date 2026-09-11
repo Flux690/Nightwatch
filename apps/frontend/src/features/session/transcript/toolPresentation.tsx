@@ -247,8 +247,8 @@ export function ToolCall({
         : null;
 
   // The report card already announces this act, so a row for it would say the
-  // same thing twice. Recording a hypothesis is a step, and stays visible.
-  if (isTool(toolName, "SubmitInvestigationReport")) return null;
+  // same thing twice. Recording a finding is a step, and stays visible.
+  if (isTool(toolName, "ComposeReport")) return null;
 
   if (isTool(toolName, "Edit", "Write")) {
     const change = result === null ? null : parseFileChange(result);

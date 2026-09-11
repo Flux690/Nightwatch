@@ -155,7 +155,9 @@ interface SessionsTable {
   // Stamped before an approved call runs, so a crash in the gap says the write
   // may already have happened rather than replaying it.
   attempt_started_at: string | null;
-  hypotheses: Generated<string>;
+  candidates: Generated<string>;
+  findings: Generated<string>;
+  last_stated_candidates: Generated<string>;
   report: string | null;
   record_updated_at: string | null;
   created_at: string;

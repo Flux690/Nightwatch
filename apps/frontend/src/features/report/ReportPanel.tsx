@@ -3,7 +3,7 @@
 
 import type {
   GatedCall,
-  Hypothesis,
+  Finding,
   SessionAlert,
   InvestigationRecord,
   ResolvedEvidence,
@@ -11,8 +11,8 @@ import type {
   Verdict,
 } from "@nightwarden/shared";
 import {
-  leadingHypothesis,
-  rankHypotheses,
+  principalFindings,
+  rankFindings,
   supersededIds,
 } from "@nightwarden/shared";
 import { cn } from "@/shared/lib/utils";
@@ -33,6 +33,7 @@ const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
   },
   symptom: { label: "Symptom", className: "text-foreground" },
   disproven: { label: "Disproven", className: "text-muted-foreground" },
+  untestable: { label: "Untestable", className: "text-muted-foreground" },
 };
 
 const TIMELINE_ID = "report-timeline";
@@ -244,8 +245,8 @@ function Facts({
   decisions: GatedCall[];
   span: string | null;
 }): React.JSX.Element | null {
-  const leading = leadingHypothesis(record.hypotheses);
-  const ruledOut = record.hypotheses.filter((h) => h.verdict === "disproven");
+  const leading = principalFindings(record.findings)[0] ?? null;
+  const ruledOut = record.findings.filter((f) => f.verdict === "disproven");
   const approved = decisions.filter((call) => call.decision === "approved");
 
   const clauses: React.ReactNode[] = [];
@@ -259,12 +260,10 @@ function Facts({
       </>,
     );
   }
-  if (record.hypotheses.length > 0) {
+  if (record.findings.length > 0) {
     clauses.push(
       <>
-        <b className="font-medium text-foreground">
-          {record.hypotheses.length}
-        </b>{" "}
+        <b className="font-medium text-foreground">{record.findings.length}</b>{" "}
         tested, <b className="font-medium text-foreground">{ruledOut.length}</b>{" "}
         ruled out
       </>,
@@ -355,8 +354,8 @@ export function ReportPanel({
   // Null until the run reaches its report turn, which reads as "not written
   // up yet" rather than as an empty write-up.
   const submitted = record.report ?? null;
-  const ranked = rankHypotheses(record.hypotheses);
-  const replaced = supersededIds(record.hypotheses);
+  const ranked = rankFindings(record.findings);
+  const replaced = supersededIds(record.findings);
   // Sorted below the claims that still stand, so the leading one reads first
   // however many times the run revised its way to it.
   const findings = ranked
@@ -410,7 +409,7 @@ export function ReportPanel({
 
   // One column read downward. A margin column for two short words spent a
   // sixth of the page on them and squeezed the statement into the rest.
-  const claim = (h: Hypothesis): React.JSX.Element => (
+  const claim = (h: Finding): React.JSX.Element => (
     <li
       key={h.id}
       className="border-t border-border py-6 first:border-t-0 first:pt-0"
@@ -428,8 +427,8 @@ export function ReportPanel({
       <p className="m-0 mt-2 text-base leading-snug font-medium">
         {h.statement}
       </p>
-      {h.finding && (
-        <p className="m-0 mt-2 text-sm leading-relaxed">{h.finding}</p>
+      {h.explanation && (
+        <p className="m-0 mt-2 text-sm leading-relaxed">{h.explanation}</p>
       )}
       {evidenceUnder(h.evidenceIds)}
       {sourcesUnder(h.evidenceIds)}
@@ -555,8 +554,10 @@ export function ReportPanel({
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border py-2 first:border-t-0"
               >
                 <span className="min-w-0 flex-[2] text-sm">{h.statement}</span>
-                {h.finding && (
-                  <span className="min-w-0 flex-1 text-sm">{h.finding}</span>
+                {h.explanation && (
+                  <span className="min-w-0 flex-1 text-sm">
+                    {h.explanation}
+                  </span>
                 )}
               </li>
             ))}

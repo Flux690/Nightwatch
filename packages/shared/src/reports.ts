@@ -1,69 +1,93 @@
-// Two parts, two authors, two moments: the hypotheses the agent appends to as
-// it works, and the report written once at the end over a complete set of them.
+// Three parts, three authors, three moments: the candidates the agent opens as
+// it reasons, the findings it appends as it settles them, and the report at the end.
 
-// Five, because without a home for "symptom of something upstream" the model
-// must overclaim or say nothing. Recorded once tested, so there is no "open".
+// Six, so a run has a home for "I had no way to test it" apart from "I tested it
+// and it is false". Recorded once tested, so there is no "open" finding.
 export type Verdict =
-  "root_cause" | "trigger" | "symptom" | "contributing_factor" | "disproven";
+  | "root_cause"
+  | "trigger"
+  | "symptom"
+  | "contributing_factor"
+  | "disproven"
+  | "untestable";
 
-export interface Hypothesis {
-  // Assigned by the system in recording order, so a later call cannot land on an
-  // earlier row and rewrite it.
+// A hypothesis the agent commits to before testing it, carrying what it expects
+// to see if it holds and what would prove it wrong.
+export interface Candidate {
+  // c1, c2..., assigned by the system in opening order.
+  id: string;
+  statement: string;
+  // The observation expected if the candidate is true.
+  ifTrue: string;
+  // The observation that would prove it false.
+  ifFalse: string;
+  // The candidate this one explains, when it goes a step deeper into a cause.
+  parent?: string;
+}
+
+export interface Finding {
+  // f1, f2..., assigned by the system in recording order, so a later call cannot
+  // land on an earlier row and rewrite it.
   id: string;
   statement: string;
   verdict: Verdict;
-  // The id of the claim this one replaces, when it replaces one. A link rather
-  // than an edit: the replaced claim stays on the record beside it.
+  // The candidate this finding settles, when it settles one.
+  settles?: string;
+  // The id of the finding this one replaces, when it replaces one. A link rather
+  // than an edit: the replaced finding stays on the record beside it.
   supersedes?: string;
-  // Why it resolved that way. Deliberately not "reason": since the reason rides
-  // the write call, that word means one thing across the whole contract.
-  finding: string;
+  // What the cited results showed, and why they settle it this way.
+  explanation: string;
   evidenceIds: string[];
   recordedAt: string;
 }
 
-// Most confident first. `disproven` sorts last and never leads: it is what the
-// run ruled out, not what it concluded.
+// Most confident first. `disproven` and `untestable` sort last and never lead:
+// one is what the run ruled out, the other what it could not reach.
 const VERDICT_ORDER: readonly Verdict[] = [
   "root_cause",
   "trigger",
   "contributing_factor",
   "symptom",
   "disproven",
+  "untestable",
 ];
 
 /* One ordering, so the queue row and the report cannot name different leading
-   claims. Equal confidence breaks newest first, after the most work. */
-export function rankHypotheses(hypotheses: Hypothesis[]): Hypothesis[] {
-  return hypotheses
-    .map((hypothesis, recorded) => ({ hypothesis, recorded }))
+   findings. Equal confidence breaks newest first, after the most work. */
+export function rankFindings(findings: Finding[]): Finding[] {
+  return findings
+    .map((finding, recorded) => ({ finding, recorded }))
     .sort(
       (a, b) =>
-        VERDICT_ORDER.indexOf(a.hypothesis.verdict) -
-          VERDICT_ORDER.indexOf(b.hypothesis.verdict) ||
-        b.recorded - a.recorded,
+        VERDICT_ORDER.indexOf(a.finding.verdict) -
+          VERDICT_ORDER.indexOf(b.finding.verdict) || b.recorded - a.recorded,
     )
-    .map(({ hypothesis }) => hypothesis);
+    .map(({ finding }) => finding);
 }
 
-// Every claim another one replaced. They stay on the record and stay rendered;
+// Every finding another one replaced. They stay on the record and stay rendered;
 // what they lose is the ability to lead.
-export function supersededIds(hypotheses: Hypothesis[]): Set<string> {
+export function supersededIds(findings: Finding[]): Set<string> {
   return new Set(
-    hypotheses.flatMap((h) =>
-      h.supersedes === undefined ? [] : [h.supersedes],
-    ),
+    findings.flatMap((f) => (f.supersedes === undefined ? [] : [f.supersedes])),
   );
 }
 
-// What the run currently stands behind, or null when it stands behind nothing.
-export function leadingHypothesis(hypotheses: Hypothesis[]): Hypothesis | null {
-  const replaced = supersededIds(hypotheses);
-  return (
-    rankHypotheses(hypotheses).find(
-      (h) => h.verdict !== "disproven" && !replaced.has(h.id),
-    ) ?? null
+// Every standing finding at the best verdict rank present, so a multi-factor
+// cause is not narrowed to one. Empty when the run stands behind nothing.
+export function principalFindings(findings: Finding[]): Finding[] {
+  const replaced = supersededIds(findings);
+  const standing = rankFindings(findings).filter(
+    (f) =>
+      f.verdict !== "disproven" &&
+      f.verdict !== "untestable" &&
+      !replaced.has(f.id),
   );
+  const top = standing[0];
+  return top === undefined
+    ? []
+    : standing.filter((f) => f.verdict === top.verdict);
 }
 
 // `action` is absent because it is not the model's to claim: the system
@@ -89,7 +113,7 @@ export interface TimelineEntry {
   };
 }
 
-// Written in one call over complete claims, and it restates none of them: this
+// Written in one call over complete findings, and it restates none of them: this
 // is the prose they have nowhere to put.
 export interface SubmittedReport {
   // One sentence, the whole answer: headline and deck are two jobs, and one
@@ -108,16 +132,20 @@ export interface SubmittedReport {
   submittedAt: string;
   // Lets a later run ask whether the report is behind without reading a clock.
   // Stamped by the write that stores it, so it cannot overstate its coverage.
-  hypothesesCoveredUpTo: string;
+  findingsCoveredUpTo: string;
   writesCoveredUpTo: number;
 }
 
-// Everything one investigation holds, in the two parts above. Named apart from
-// the report it contains, which is one of them rather than the whole.
+// Everything one investigation holds. The candidates the run is weighing, the
+// findings that settle them, and the report written once over a complete set.
 export interface InvestigationRecord {
-  hypotheses: Hypothesis[];
-  // Null until the run reaches its composition turn, which several endings
-  // never do: the hypotheses render without it.
+  candidates: Candidate[];
+  findings: Finding[];
+  // The candidate ids named in the last frontier message, so a resumed run does
+  // not restate a frontier it already sent.
+  lastStatedCandidates: string[];
+  // Null until the run reaches its composition turn, which several endings never
+  // do: the findings render without it.
   report: SubmittedReport | null;
   updatedAt: string;
 }

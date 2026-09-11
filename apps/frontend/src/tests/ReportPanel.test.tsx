@@ -46,20 +46,22 @@ function onSession(
 }
 
 const RECORD: InvestigationRecord = {
-  hypotheses: [
+  candidates: [],
+  lastStatedCandidates: [],
+  findings: [
     {
-      id: "h1",
+      id: "f1",
       statement: "PR #482's cache bump leaks",
       verdict: "root_cause",
-      finding: "climb starts at the merge timestamp",
+      explanation: "climb starts at the merge timestamp",
       evidenceIds: ["e-stats"],
       recordedAt: RESOLVED,
     },
     {
-      id: "h2",
+      id: "f2",
       statement: "Host memory pressure",
       verdict: "disproven",
-      finding: "host free memory stayed flat",
+      explanation: "host free memory stayed flat",
       evidenceIds: ["e-changes"],
       recordedAt: RESOLVED,
     },
@@ -75,7 +77,7 @@ const RECORD: InvestigationRecord = {
     impact: "Nine minutes of failed payment writes",
     recommendation: "Revert PR #482",
     submittedAt: RESOLVED,
-    hypothesesCoveredUpTo: "h1",
+    findingsCoveredUpTo: "f1",
     writesCoveredUpTo: 0,
   },
   updatedAt: RESOLVED,
@@ -222,13 +224,13 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [
-            { ...RECORD.hypotheses[0]!, id: "h1", statement: "The pool leaks" },
+          findings: [
+            { ...RECORD.findings[0]!, id: "f1", statement: "The pool leaks" },
             {
-              ...RECORD.hypotheses[0]!,
-              id: "h2",
+              ...RECORD.findings[0]!,
+              id: "f2",
               statement: "The query is unindexed",
-              supersedes: "h1",
+              supersedes: "f1",
             },
           ],
         },
@@ -257,11 +259,11 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: verdicts.map((verdict, i) => ({
+          findings: verdicts.map((verdict, i) => ({
             id: `h${i + 1}`,
             statement: `claim ${verdict}`,
             verdict,
-            finding: "",
+            explanation: "",
             evidenceIds: [],
             recordedAt: RESOLVED,
           })),
@@ -311,12 +313,12 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [
+          findings: [
             {
-              ...RECORD.hypotheses[0]!,
+              ...RECORD.findings[0]!,
               evidenceIds: ["e-stats", "e-changes"],
             },
-            RECORD.hypotheses[1]!,
+            RECORD.findings[1]!,
           ],
         },
       }),
@@ -350,10 +352,10 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [
-            { ...RECORD.hypotheses[0]!, evidenceIds: ["e-stats"] },
+          findings: [
+            { ...RECORD.findings[0]!, evidenceIds: ["e-stats"] },
             {
-              ...RECORD.hypotheses[1]!,
+              ...RECORD.findings[1]!,
               verdict: "symptom" as const,
               evidenceIds: ["e-stats"],
             },
@@ -374,7 +376,7 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-log"] }],
+          findings: [{ ...RECORD.findings[0]!, evidenceIds: ["e-log"] }],
         },
         evidence: [
           {
@@ -418,12 +420,12 @@ describe("ReportPanel", () => {
       panel({
         record: {
           ...RECORD,
-          hypotheses: [
+          findings: [
             {
-              id: "h3",
+              id: "f3",
               statement: "The queue backed up first",
               verdict: "symptom",
-              finding: "",
+              explanation: "",
               evidenceIds: ["e-never-ran"],
               recordedAt: RESOLVED,
             },
@@ -446,7 +448,7 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-now"] }],
+          findings: [{ ...RECORD.findings[0]!, evidenceIds: ["e-now"] }],
         },
         evidence: [
           {
@@ -481,7 +483,7 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-top"] }],
+          findings: [{ ...RECORD.findings[0]!, evidenceIds: ["e-top"] }],
         },
         evidence: [
           {
@@ -523,7 +525,7 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-host"] }],
+          findings: [{ ...RECORD.findings[0]!, evidenceIds: ["e-host"] }],
         },
         evidence: [
           {
@@ -563,7 +565,7 @@ describe("ReportPanel", () => {
         record: {
           ...RECORD,
           report: null,
-          hypotheses: [{ ...RECORD.hypotheses[0]!, evidenceIds: ["e-range"] }],
+          findings: [{ ...RECORD.findings[0]!, evidenceIds: ["e-range"] }],
         },
         evidence: [
           {
@@ -649,12 +651,12 @@ describe("ReportPanel", () => {
         evidence: [],
         record: {
           ...RECORD,
-          hypotheses: [
+          findings: [
             {
-              id: "h1",
+              id: "f1",
               statement: "Host memory pressure",
               verdict: "disproven",
-              finding: "host free memory stayed flat",
+              explanation: "host free memory stayed flat",
               evidenceIds: [],
               recordedAt: RESOLVED,
             },

@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 
-import type { Hypothesis, Verdict } from "../reports.js";
-import { leadingHypothesis, rankHypotheses } from "../reports.js";
+import type { Finding, Verdict } from "../reports.js";
+import { principalFindings, rankFindings } from "../reports.js";
 
-function claim(id: string, verdict: Verdict): Hypothesis {
+function claim(id: string, verdict: Verdict): Finding {
   return {
     id,
     statement: id,
     verdict,
-    finding: "",
+    explanation: "",
     evidenceIds: [],
     recordedAt: "2026-08-19T02:14:00.000Z",
   };
@@ -17,17 +17,29 @@ function claim(id: string, verdict: Verdict): Hypothesis {
 /* The queue row and the report read this, so a second ranking anywhere is two
    answers to "what did the run conclude". */
 describe("ranking what a run concluded", () => {
-  it("leads with the last recorded of two equally confident claims", () => {
-    const claims = [claim("h1", "root_cause"), claim("h2", "root_cause")];
+  it("returns every equally confident claim, most recent first", () => {
+    const claims = [claim("f1", "root_cause"), claim("f2", "root_cause")];
 
-    expect(leadingHypothesis(claims)?.id).toBe("h2");
-    expect(rankHypotheses(claims).map((h) => h.id)).toEqual(["h2", "h1"]);
+    expect(principalFindings(claims).map((f) => f.id)).toEqual(["f2", "f1"]);
+    expect(rankFindings(claims).map((f) => f.id)).toEqual(["f2", "f1"]);
   });
 
-  it("never leads with what the run ruled out", () => {
-    const claims = [claim("h1", "symptom"), claim("h2", "disproven")];
+  it("keeps a lower-ranked standing claim out of the principal set", () => {
+    const claims = [
+      claim("f1", "root_cause"),
+      claim("f2", "contributing_factor"),
+    ];
 
-    expect(leadingHypothesis(claims)?.id).toBe("h1");
-    expect(leadingHypothesis([claim("h1", "disproven")])).toBeNull();
+    expect(principalFindings(claims).map((f) => f.id)).toEqual(["f1"]);
+  });
+
+  it("never leads with what the run ruled out or could not reach", () => {
+    expect(
+      principalFindings([claim("f1", "symptom"), claim("f2", "disproven")]).map(
+        (f) => f.id,
+      ),
+    ).toEqual(["f1"]);
+    expect(principalFindings([claim("f1", "disproven")])).toEqual([]);
+    expect(principalFindings([claim("f1", "untestable")])).toEqual([]);
   });
 });

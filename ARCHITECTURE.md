@@ -9,7 +9,7 @@ The reference for how NightWarden is built: what each process owns, what every t
 - [Vocabulary](#vocabulary) - every domain term, defined once
 - [Session lifecycle](#session-lifecycle) - status, seats, queueing, restart, failure
 - [The agent loop](#the-agent-loop) - prompt assembly, turns, the approval gate, compaction
-- [The record](#the-record) - hypotheses, evidence ids, citability, the report turn
+- [The record](#the-record) - candidates, findings, evidence ids, citability, the report turn
 - [Evidence sources](#evidence-sources) - what each integration answers, and where results stop
 - [Connecting integrations](#connecting-integrations) - what each card asks for and why
 - [Operations](#operations) - state directory, privileges, TLS, backup, upgrade
@@ -118,15 +118,21 @@ One word per concept, used identically in the code, the frontend and this docume
 
 ### The record
 
-**Record.** Everything an investigation holds, in two parts with two authors and two moments: the hypotheses the agent appends as it works, and the report it writes once at the end. A column each on the session.
+**Record.** Everything an investigation holds, in three parts with two authors and three moments: the candidates the agent weighs, the findings it appends as it settles them, and the report it writes once at the end. A column each on the session, alongside the candidates last named to the model.
 
-**Hypothesis.** A candidate explanation the agent tested, recorded once it has been tested, in one act carrying a verdict and at least one citation. There is no unsettled state and no call that rewrites a row.
+**Candidate.** An explanation the agent commits to before testing it, carrying what it expects to see if it is true and what would prove it false. Opened together with its siblings so the run weighs alternatives rather than settling on the first plausible cause. Its id is `c1`, `c2`, assigned in opening order, and it may name a parent candidate it goes a step deeper into.
 
-**Verdict.** How a hypothesis resolved: `root cause`, `trigger`, `symptom`, `contributing factor` or `disproven`. Five, all settled.
+**Finding.** An explanation the agent tested, recorded once tested, in one act carrying a verdict, at least one citation, and the candidate it settles. There is no unsettled state and no call that rewrites a row. Its id is `f1`, `f2`.
 
-**Supersession.** The link a later claim carries to the earlier one it replaces. A link, never an edit: the replaced claim stays on the record and stays rendered, demoted.
+**Verdict.** How a finding resolved: `root cause`, `trigger`, `symptom`, `contributing factor`, `disproven` or `untestable`. Six, all settled: `disproven` is what the run tested and ruled out, `untestable` what it had no way to check.
 
-**Report.** The user-facing write-up, composed in one call at the end over hypotheses that are already complete. It holds only what they have no field for, so it never restates a verdict or a citation. Null until that call happens, which several endings never reach.
+**Open candidate.** A candidate no standing finding settles, read live off the record. A finding that once settled one but was itself superseded reopens it, so the set is derived rather than stored.
+
+**Frontier.** The open candidates named to the model whenever the set changes, so the ones still to test stay in view through a long chain of reads.
+
+**Supersession.** The link a later finding carries to the earlier one it replaces. A link, never an edit: the replaced finding stays on the record and stays rendered, demoted, and the candidate it settled returns to the open set.
+
+**Report.** The user-facing write-up, composed in one call at the end over findings that are already complete. It holds only what they have no field for, so it never restates a verdict or a citation. Null until that call happens, which several endings never reach.
 
 **Recommendation.** One field of the report: what the user should do. Prose about the future, never a claim that something was done.
 
@@ -223,8 +229,8 @@ Both write the same record and cross-check each other. If nothing can answer, th
 | `HARNESS`                   | always          | The approval gate and its required reason, that the offered toolset is final, to batch independent calls, and how to read a `<system-reminder>` turn        |
 | `FLEET`                     | `fleetTools`    | Target keys and server names. Withheld when nothing takes one, because pointing at an absent `<fleet-summary>` is how a metrics source once became a target |
 | `sandboxInstructions(repo)` | `repo !== null` | The checkout, what is installed in it, and that a pull request opens as a draft a human merges                                                              |
-| `INVESTIGATION`             | investigation   | That an alert opened this session, the ordered method, and to prefer the smallest reversible fix                                                            |
-| `REPORT`                    | investigation   | That a record is kept, and what a claim must cite to reach it                                                                                               |
+| `INVESTIGATION`             | investigation   | That an alert opened this session, to gather evidence before naming a cause, to weigh candidates together, and to prefer the smallest reversible fix        |
+| `REPORT`                    | investigation   | That a record of candidates and findings is kept, how a candidate is settled, and what a finding must cite to reach it                                      |
 | `budgetLine`                | always          | The minutes available. Last, because it is the only block carrying a value that varies                                                                      |
 
 **The base is the whole job, and an investigation adds to it.** Nothing tells the model which branch it is not on. A chat has no record tool to be told not to use, because `effectiveToolset` withholds `REPORT_TOOLS` entirely.
@@ -245,7 +251,7 @@ Other tags are section labels, not voices, and stay out of this namespace: `<ale
 
 ### How a tool is declared
 
-**A tool's shape is written once, as a Zod object, and the schema the model reads is generated from it.** `apiTool` in `agent/tools/schema.ts` declares an api-side tool, binding that object to the handler so the two cannot name different shapes: the handler's parameter type is inferred from the schema rather than annotated beside it. `Tool`'s `execute` is a property rather than a method for that reason alone - method shorthand is bivariant, so it would accept a handler typed to another tool's schema. `declareTool` serves the runner-routed tools and the elicitation, which carry no handler. `executeTool` parses with the object before dispatch, so no handler validates its own arguments, and a runner-routed call is checked before it reaches a monitored host. Field descriptions ride on `.meta()`, and **property order follows the Zod object's declaration order** - reordering fields there reorders what the model is asked for, which is why `RecordHypothesis` puts its finding ahead of its verdict.
+**A tool's shape is written once, as a Zod object, and the schema the model reads is generated from it.** `apiTool` in `agent/tools/schema.ts` declares an api-side tool, binding that object to the handler so the two cannot name different shapes: the handler's parameter type is inferred from the schema rather than annotated beside it. `Tool`'s `execute` is a property rather than a method for that reason alone - method shorthand is bivariant, so it would accept a handler typed to another tool's schema. `declareTool` serves the runner-routed tools and the elicitation, which carry no handler. `executeTool` parses with the object before dispatch, so no handler validates its own arguments, and a runner-routed call is checked before it reaches a monitored host. Field descriptions ride on `.meta()`, and **property order follows the Zod object's declaration order** - reordering fields there reorders what the model is asked for, which is why `RecordFinding` puts its explanation ahead of its verdict.
 
 **Three rules govern a bound, and none of them names a provider.** Zod enforces every bound at runtime, always, whichever provider the run picked; that is the only guarantee. The description states every bound, always, because a description is written before anyone knows which provider will run - `tool-schema.test.ts` fails a field whose own description does not state its bound, and an argument past a bound is refused rather than quietly clamped. And each provider's schema carries the maximum that provider accepts.
 
@@ -258,7 +264,7 @@ Other tags are section labels, not voices, and stay out of this namespace: `<ale
 - `effect` is `read` or `write`, a property of the call.
 - `policy` is `auto` or `approve`, resolved per call by `resolvePolicy`.
 
-Of 44 tools, 36 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
+Of 45 tools, 37 read and 8 write. Only four suspend for approval, and the four writes that do not state why:
 
 | Tool                                 | Effect | Policy    | Why                                                           |
 | ------------------------------------ | ------ | --------- | ------------------------------------------------------------- |
@@ -289,6 +295,12 @@ A result still over the line is refused **whole**, and the agent is told to narr
 
 Default tool timeout is 15s (`DEFAULT_TOOL_TIMEOUT_MS`), overridden per tool where the work justifies it - repo tools run clones, installs and test suites. A caller supplies a ceiling and a tool's own limit can only narrow it. `executeTool` resolves the two into one figure and hands the call both the number and an `AbortSignal` carrying it, so a client that reaches the network is bound by the compiler rather than by convention. Nothing the API dials is unbounded: a call made outside a run carries the bound of whatever asked for it - `PROBE_TIMEOUT_MS` for a Connect probe and the recovery re-check, `CATALOG_TIMEOUT_MS` for listing models, `GITHUB_TIMEOUT_MS` for the pull-request calls a cached sandbox outlives its own tool call to make.
 
+### The investigation phases
+
+An investigation moves through phases, and the harness decides which turn is which. The opening turn gathers evidence: the prompt names the dimensions to read - the alerting signal over a window wide enough to show whether the condition held beforehand, the service's configuration and running state, its lifecycle events, recent changes, its logs, and the machine under it - and the model batches the reads it can. The first turn after a read has answered offers `OpenCandidates` alone and forces it, so the run weighs the explanations worth testing together before it commits to one. `OpenCandidates` stays in the toolset for the rest of the run.
+
+Testing turns hold the full toolset. Whenever the set of open candidates changes - a finding settles one, a new one opens, or a supersession reopens one - the harness names the open candidates again, so the ones still to test stay in view through a long chain of reads. Before the report, and once where any candidate exists, a **falsification turn** runs: the harness lays out every candidate, its verdict, and what the model itself said would prove it false, and asks the model to break its own conclusions with the full toolset in hand. A finding recorded there can supersede an earlier one and reopen its candidate.
+
 ### What a model can do
 
 `provider_config` holds the choices: the model, the base URL, the encrypted key and the reasoning level. A model's context window, output ceiling, effort ladder and compaction support come from the catalogue, resolved when a run reaches `checkLLMReadiness`, so each run describes the model as it is published that day.
@@ -311,22 +323,22 @@ Two caches sit behind that, both in the API: the snapshot for a day, each provid
 
 ### While the run works
 
-The agent records each hypothesis as it settles it, one call per claim, append-only. They exist during the run so the queue can say what the agent currently believes, so the finish gate has something to inspect, so a citation is copied while its call is still in recent context, and so a run that dies before its write-up still renders something.
+The agent opens candidates as it reasons and records a finding as it settles each one, one call per finding, append-only. They exist during the run so the queue can say what the agent currently believes, so the finish gate has something to inspect, so a citation is copied while its call is still in recent context, and so a run that dies before its write-up still renders something.
 
-`record_hypothesis` refuses a claim citing an id that was never issued, which is one message rather than several: a handle exists only once its result does, so an id naming no answered call reads the same whether the model invented it or asked for the call in this same reply. A citation cannot be partially honoured either - a claim citing three ids where one is unknown is refused whole, rather than recorded on the two that survived and reading as a claim the model never made.
+`RecordFinding` names the candidate it settles, and it refuses a finding citing an id that was never issued, which is one message rather than several: a handle exists only once its result does, so an id naming no answered call reads the same whether the model invented it or asked for the call in this same reply. A citation cannot be partially honoured either - a finding citing three ids where one is unknown is refused whole, rather than recorded on the two that survived and reading as a claim the model never made. Settling a candidate rests on a result gathered after the candidate opened, which tests it rather than restating the reading that raised it.
 
 ### The finish gate
 
 A run may not end on an incomplete record. Two gaps are checked:
 
-- **Empty record** - it recorded nothing at all.
-- **Unaccounted calls** - reads answered since the last claim that nothing on the record speaks for.
+- **Empty record** - it recorded no finding at all.
+- **Untested candidates** - candidates the run opened that no standing finding settles.
 
-Two rather than four, because a hypothesis is recorded already settled so none can be left open, and the recording tool refuses an unsupported claim so one cannot reach the record to be caught. The harness message names only the gaps that remain, so a model one claim short is not told about the four things it did do. It is capped, and the run composes anyway once the cap is reached: the status an unfinished record derives to is already honest. The cap belongs to the session rather than the run, counted from the requests already on the transcript, so resuming after an approval continues the allowance instead of opening a second one.
+The recording tool refuses an unsupported finding so one cannot reach the record to be caught, and a finding is recorded already settled so none can be left open. Each gap carries its own pushback allowance, so a run stuck on one cannot spend another's, and the harness message names only the gap that remains. Each allowance is capped, and the run composes anyway once the cap is reached: the status an unfinished record derives to is already honest. An allowance belongs to the session rather than the run, counted from the requests already on the transcript, so resuming after an approval continues it instead of opening a second one.
 
 ### The report turn
 
-The final turn of an investigation. Every investigation tool is taken away and `SubmitInvestigationReport` is put back alone, with the hypotheses repeated in the request so the timeline copies call ids from nearby rather than from forty turns back. Whether the turn wrote is read from the tool's own answer, never from the record, which on a second run already holds a write-up this turn had no part in.
+The final turn of an investigation. Every investigation tool is taken away and `ComposeReport` is put back alone, with the findings repeated in the request so the timeline copies call ids from nearby rather than from forty turns back. Whether the turn wrote is read from the tool's own answer, never from the record, which on a second run already holds a write-up this turn had no part in.
 
 It runs in the same context as the investigation: the model has just done the work, and handing it a summary instead would cost the timestamps a timeline needs.
 

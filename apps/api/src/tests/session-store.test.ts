@@ -35,7 +35,7 @@ import {
 } from "../session/transcript-store.js";
 import { listSessionPage } from "../session/list.js";
 import { highestEvidenceNumber, resultParts } from "../agent/evidence-id.js";
-import { recordHypothesis } from "../agent/report.js";
+import { recordFinding } from "../agent/report.js";
 import { hasPendingHumanInput } from "../session/gate-store.js";
 import { getRecord } from "../session/record-store.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
@@ -540,10 +540,10 @@ describe("API-local session store", () => {
       expect(await statusOf(ruledOut)).toBe("completed");
 
       const named = await investigation();
-      await recordHypothesis(named, {
+      await recordFinding(named, {
         statement: "the deploy set the cache size",
         verdict: "trigger",
-        finding: "the climb starts at the merge",
+        explanation: "the climb starts at the merge",
         evidenceIds: [await seedCitedCall(named)],
       });
       expect(await statusOf(named)).toBe("completed");
@@ -719,10 +719,10 @@ describe("API-local session store", () => {
 
     it("gives every investigation a group, whatever its record holds", async () => {
       const sessionId = await investigation();
-      await recordHypothesis(sessionId, {
+      await recordFinding(sessionId, {
         statement: "something downstream broke",
         verdict: "symptom",
-        finding: "it followed the upstream failure",
+        explanation: "it followed the upstream failure",
         evidenceIds: [await seedCitedCall(sessionId)],
       });
       const rows = (await listSessionPage(500, 0, "investigation")).rows.filter(
@@ -814,16 +814,16 @@ describe("API-local session store", () => {
     // is the most confident the run reached, not the last thing it typed.
     it("leads with the most confident claim, the newer of two equals winning", async () => {
       const sessionId = await investigation();
-      await recordHypothesis(sessionId, {
+      await recordFinding(sessionId, {
         statement: "the cache size grew at the merge",
         verdict: "symptom",
-        finding: "it climbs with the cache",
+        explanation: "it climbs with the cache",
         evidenceIds: [await cite(sessionId, "tu-1", 0)],
       });
-      await recordHypothesis(sessionId, {
+      await recordFinding(sessionId, {
         statement: "the sidecar leaks between deploys",
         verdict: "root_cause",
-        finding: "the leak survives the restart",
+        explanation: "the leak survives the restart",
         evidenceIds: [await cite(sessionId, "tu-2", 1)],
       });
       // The cause outranks the symptom even though the symptom settled first.
@@ -831,10 +831,10 @@ describe("API-local session store", () => {
         "the sidecar leaks between deploys",
       );
 
-      await recordHypothesis(sessionId, {
+      await recordFinding(sessionId, {
         statement: "the pool never returns its connections",
         verdict: "root_cause",
-        finding: "the pool is full at the crash",
+        explanation: "the pool is full at the crash",
         evidenceIds: [await cite(sessionId, "tu-3", 2)],
       });
       expect(await statusLineOf(sessionId)).toBe(

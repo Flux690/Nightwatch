@@ -55,10 +55,11 @@ const API_TOOL_NAMES = [
   "Write",
   "Bash",
   "OpenPullRequest",
-  "GetRecentChanges",
+  "ListRecentGitChanges",
   // The record
-  "RecordHypothesis",
-  "SubmitInvestigationReport",
+  "OpenCandidates",
+  "RecordFinding",
+  "ComposeReport",
   // Asking a human is not a tool, but it is offered as one: tool-calling is the
   // only channel the model has to request anything.
   "AskUserQuestion",

@@ -4,29 +4,32 @@ import { recordGapsMessage, recordCheck } from "../prompts/report.js";
 import { offeredSchemas, type OfferedToolset } from "../tools/toolset.js";
 import type { ToolResult, ToolUse } from "../../llm/types.js";
 
-// Finish-gate pushback cap: after this many the run writes up anyway rather
-// than looping; the time budget bounds it as well.
-const MAX_FINISH_PUSHBACKS = 5;
+// Per gap kind, so a run stuck on one gap cannot spend another gap's allowance.
+// The time budget bounds it as well.
+const MAX_FINISH_PUSHBACKS = 3;
 
-// Null once the cap is spent, which writes the report up incomplete.
+// Null once the kind's cap is spent, which writes the report up incomplete.
 export type FinishGate = (gaps: RecordGap[]) => {
   say: string;
-  pushbacks: number;
-  repeated: RecordGap["kind"][];
+  kind: RecordGap["kind"];
+  count: number;
 } | null;
 
-export function finishGatePolicy(spent: number): FinishGate {
-  let pushbacks = spent;
-  const seen = new Map<RecordGap["kind"], number>();
+export function finishGatePolicy(
+  spent: Record<RecordGap["kind"], number>,
+): FinishGate {
+  const counts: Record<RecordGap["kind"], number> = { ...spent };
   return (gaps) => {
-    if (pushbacks >= MAX_FINISH_PUSHBACKS) return null;
-    pushbacks++;
-    const repeated = gaps.flatMap((gap) => {
-      const times = (seen.get(gap.kind) ?? 0) + 1;
-      seen.set(gap.kind, times);
-      return times > 1 ? [gap.kind] : [];
-    });
-    return { say: recordGapsMessage(gaps), pushbacks, repeated };
+    for (const gap of gaps) {
+      if (counts[gap.kind] >= MAX_FINISH_PUSHBACKS) continue;
+      counts[gap.kind] += 1;
+      return {
+        say: recordGapsMessage([gap]),
+        kind: gap.kind,
+        count: counts[gap.kind],
+      };
+    }
+    return null;
   };
 }
 
@@ -65,8 +68,6 @@ const CALLS_BEFORE_RECORD_CHECK = 8;
 const MAX_RECORD_CHECKS = 3;
 
 export interface RecordDebt {
-  // What the finish gate asks the record to account for.
-  unaccounted: () => number;
   // Takes the record's own claim count, so a claim recorded this turn clears
   // the debt before this turn's reads are counted against it.
   check: (claims: number, answered: number) => string | null;
@@ -85,7 +86,6 @@ export function recordDebtPolicy(
   let checkedAt = 0;
   let checks = spent;
   return {
-    unaccounted: () => sinceClaim,
     check: (claims, answered) => {
       if (claims > claimsSeen) {
         claimsSeen = claims;
